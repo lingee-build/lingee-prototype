@@ -20,11 +20,7 @@ export const skillService = {
 
 export const agentService = {
   list: () => latency(store.agents, 350),
-  get: (id: string) => latency(store.agents.find((x) => x.id === id) ?? store.mallAgents.find((x) => x.id === id), 150),
-  /** 「更多智能体」：官方 / Beta / 其它企业共享的，可引用为子智能体 */
-  mall: () => latency(store.mallAgents, 300),
-  /** 可被引用为子智能体的全部候选（本地 + 更多），子智能体页签用它把编码解析成卡片 */
-  candidates: () => latency([...store.agents, ...store.mallAgents], 250),
+  get: (id: string) => latency(store.agents.find((x) => x.id === id), 150),
   remove(id: string) {
     store.agents = store.agents.filter((x) => x.id !== id)
     return latency(true)

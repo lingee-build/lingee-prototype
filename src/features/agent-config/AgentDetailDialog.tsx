@@ -7,10 +7,9 @@ import { useAgentActions } from "@/features/agent-actions/use-agent-actions"
 import { AgentConfigPanel } from "./AgentConfigPanel"
 import { AgentChangedAlert, AgentStatusTag } from "./AgentStatusTag"
 import { domainI18nKeys, pickAvatar } from "./form"
-import { SourceTag } from "./sub-agent/SubAgentTag"
 
 /**
- * 智能体详情弹窗（只读）。子智能体页签里的卡片可以继续点开看那个子智能体的详情。
+ * 智能体详情弹窗（只读）。
  * 布局：页签栏右侧是「编辑」，「基础信息」页签下方依次是
  * 头像 + 名称 + 状态 + 领域 + 编码、状态不一致提示、功能描述、模型策略、更新日志。
  */
@@ -19,8 +18,6 @@ export function AgentDetailDialog(props: { agent: Agent; onChanged?: () => void 
   const dialog = useDialog()
   const { agent } = props
   const actions = useAgentActions(() => props.onChanged?.())
-  // 「更多智能体」由发布方维护，只能引用，不提供编辑
-  const editable = agent.source !== "mall"
 
   return (
     <Dialog fit title={t("kcode.agentDev.detail.title")} className="!w-[720px] !max-w-[90vw] overflow-hidden">
@@ -30,20 +27,17 @@ export function AgentDetailDialog(props: { agent: Agent; onChanged?: () => void 
             agent={agent}
             readonly
             hideIdentity
-            onOpenAgent={(sub) => dialog.show(() => <AgentDetailDialog agent={sub} onChanged={props.onChanged} />)}
             action={
-              editable && (
-                <BrandButton
-                  variant="primary"
-                  size="normal"
-                  onClick={() => {
-                    dialog.close()
-                    actions.edit(agent)
-                  }}
-                >
-                  {t("kcode.agentDev.menu.edit")}
-                </BrandButton>
-              )
+              <BrandButton
+                variant="primary"
+                size="normal"
+                onClick={() => {
+                  dialog.close()
+                  actions.edit(agent)
+                }}
+              >
+                {t("kcode.agentDev.menu.edit")}
+              </BrandButton>
             }
             subHeader={
               <div className="flex flex-col gap-3">
@@ -56,7 +50,7 @@ export function AgentDetailDialog(props: { agent: Agent; onChanged?: () => void 
                       <span className="text-[14px] font-[600] leading-[22px] text-text-strong truncate" title={agent.name}>
                         {agent.name}
                       </span>
-                      {agent.source === "mall" ? <SourceTag agent={agent} /> : <AgentStatusTag agent={agent} />}
+                      <AgentStatusTag agent={agent} />
                       {agent.domain && (
                         <Tag type="normal" className="whitespace-nowrap shrink-0 !rounded-[6px] !text-text-weak">
                           {domainI18nKeys[agent.domain] ? t(domainI18nKeys[agent.domain]) : agent.domain}

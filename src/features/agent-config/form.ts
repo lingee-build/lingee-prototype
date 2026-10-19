@@ -14,8 +14,6 @@ export const MODEL_POLICY_DEFAULTS: { allowModelSwitch: boolean; defaultModelLev
 export type AgentForm = Pick<Agent, "name" | "desc" | "domain" | "avatar" | "role" | "skills" | "knowledge"> & {
   allowModelSwitch: boolean
   defaultModelLevel: ModelLevel
-  /** 子智能体的编码列表 */
-  subs: string[]
 }
 
 export type SetForm = (patch: Partial<AgentForm>) => void
@@ -36,7 +34,6 @@ export const formOf = (agent: Agent): AgentForm => ({
   knowledge: agent.knowledge.map((x) => ({ ...x })),
   allowModelSwitch: agent.allowModelSwitch ?? MODEL_POLICY_DEFAULTS.allowModelSwitch,
   defaultModelLevel: agent.defaultModelLevel ?? MODEL_POLICY_DEFAULTS.defaultModelLevel,
-  subs: [...(agent.subs ?? [])],
 })
 
 const AVATAR_PRESETS = ["/preset-agent-avatar-1.png", "/preset-agent-avatar-2.png", "/preset-agent-avatar-3.png"]
@@ -50,8 +47,7 @@ export function pickAvatar(seed: string) {
 const clip = (value: string) => (value.length > 24 ? `${value.slice(0, 24)}…` : value)
 
 /** 比较保存前后的表单，生成更新日志里的改动摘要（文案 key 与线上的变更记录一致） */
-export function diffChanges(before: AgentForm, after: AgentForm, t: Translate, agentName: (id: string) => string = (id) => id) {
-  const subNames = (from: AgentForm, to: AgentForm) => from.subs.filter((id) => !to.subs.includes(id)).map((id) => `「${agentName(id)}」`)
+export function diffChanges(before: AgentForm, after: AgentForm, t: Translate) {
   const field = (key: string, value: string) => t(`kcode.agentChangelog.event.fieldValue.${key}`, { value })
   const names = (list: string[]) => list.join(t("kcode.agentChangelog.nameSeparator"))
   const skillNames = (from: AgentForm, to: AgentForm) => from.skills.filter((x) => !to.skills.some((y) => y.id === x.id)).map((x) => x.name)
@@ -74,7 +70,5 @@ export function diffChanges(before: AgentForm, after: AgentForm, t: Translate, a
     skillNames(before, after).length > 0 && t("kcode.agentChangelog.event.skill.removed", { names: names(skillNames(before, after)) }),
     knowledgeNames(after, before).length > 0 && t("kcode.agentChangelog.event.knowledge.added", { names: names(knowledgeNames(after, before)) }),
     knowledgeNames(before, after).length > 0 && t("kcode.agentChangelog.event.knowledge.removed", { names: names(knowledgeNames(before, after)) }),
-    subNames(after, before).length > 0 && t("proto.subAgent.change.added", { count: subNames(after, before).length, names: names(subNames(after, before)) }),
-    subNames(before, after).length > 0 && t("proto.subAgent.change.removed", { names: names(subNames(before, after)) }),
   ].filter((x): x is string => typeof x === "string")
 }

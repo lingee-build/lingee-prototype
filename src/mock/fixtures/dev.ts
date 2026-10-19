@@ -80,14 +80,6 @@ export interface Agent {
   skills: AgentSkill[]
   knowledge: KnowledgeBinding[]
   changelog: { pending: AgentChangeRecord[]; versions: AgentVersion[] }
-  /** 子智能体：引用的其它智能体的编码（本地的或「更多智能体」里的），由主智能体按需分派 */
-  subs?: string[]
-  /** mall = 来自「更多智能体」（官方 / Beta / 其它企业共享），只能引用不能改，不在开发列表里 */
-  source?: "mall"
-  /** 发布方标签；本地智能体一律视为企业自建 */
-  tag?: "official" | "beta" | "own"
-  /** 线上版本号 */
-  online?: string
 }
 
 export type McpAppStatus = "DRAFT" | "PENDING_REVIEW" | "PUBLISHED" | "REJECTED" | "OFFLINE"
@@ -145,10 +137,9 @@ export const agents: Agent[] = [
     id: "scm-collab-assistant", projectId: "scm-skills", name: "供应链协同助手", desc: "覆盖采购、库存、发货全链路的问答与单据处理，能够跨单据追溯上下游关系。", avatar: "/preset-agent-avatar-1.png",
     status: "published", backendStatus: "published", domain: "supply-chain", preset: true, createdAt: "2026-03-02T02:00:00Z", defaultModelLevel: "expert",
     role: role("供应链协同助手", "负责解答采购、库存、发货相关问题，并协助处理单据。", ["先确认用户关心的单据类型与组织范围", "查询结果用表格呈现，超过 20 行时先给汇总", "发现上下游数量不一致时主动提示"]),
-    skills: [skillRef("sk_delivery"), skillRef("sk_stock", "reviewing")], knowledge: [catalog("kc_scm", "供应链制度", "供应链制度")], subs: ["mk-sales-fulfil"],
+    skills: [skillRef("sk_delivery"), skillRef("sk_stock", "reviewing")], knowledge: [catalog("kc_scm", "供应链制度", "供应链制度")],
     changelog: {
       pending: [
-        { createdAt: "2026-10-16T02:30:00Z", operator: "梁平贤", summary: "新增供应商风险监控子智能体。" },
         { createdAt: "2026-10-15T08:20:00Z", operator: "张乐", summary: "优化采购订单查询规则，补充组织与日期筛选。" },
       ],
       versions: [
@@ -161,7 +152,7 @@ export const agents: Agent[] = [
     id: "hr-assistant", projectId: "hr-assistant", name: "HR 智能助手", desc: "解答假期、薪资、入转调离等员工高频问题，并可代为发起请假与证明开具。", avatar: "/preset-agent-avatar-2.png",
     status: "submitted", backendStatus: "submitted", domain: "hr", createdAt: "2026-08-21T03:20:00Z", allowModelSwitch: true, defaultModelLevel: "auto",
     role: role("HR 智能助手", "面向全体员工解答人事制度问题，并代办请假、开具证明等事务。", ["回答制度问题时引用知识库原文并给出条款出处", "办理请假前校验剩余假期天数", "薪资类问题只回答本人数据"]),
-    skills: [skillRef("sk_leave", "unpublished"), skillRef("sk_salary")], subs: ["onboarding-guide", "mk-contract-risk"],
+    skills: [skillRef("sk_leave", "unpublished"), skillRef("sk_salary")],
     knowledge: [
       catalog("kc_hr_attendance", "考勤与假期", "人事制度/考勤与假期"),
       catalog("kc_hr_salary", "薪酬福利", "人事制度/薪酬福利"),
@@ -206,7 +197,7 @@ export const agents: Agent[] = [
     id: "sales-order-tracker", projectId: "workspace", name: "销售订单跟单员", desc: "跟踪订单从下单到回款的各节点，主动提醒延期风险并给出处理建议。", avatar: "/avatar-agent-3.png",
     status: "published", backendStatus: "published", domain: "sales", createdAt: "2026-06-02T01:00:00Z", allowModelSwitch: false, defaultModelLevel: "fast",
     role: role("销售订单跟单员", "跟踪销售订单的交付与回款进度。", ["每次回答先给当前节点与下一步", "发现延期风险时给出可选处理方案", "金额类数据保留两位小数"]),
-    skills: [skillRef("sk_delivery"), skillRef("sk_ar", "unpublished")], knowledge: [], subs: ["mk-sales-fulfil", "supplier-access-review", "mk-fin-analyst"],
+    skills: [skillRef("sk_delivery"), skillRef("sk_ar", "unpublished")], knowledge: [],
     changelog: {
       pending: [],
       versions: [
@@ -215,25 +206,6 @@ export const agents: Agent[] = [
       ],
     },
   },
-]
-
-const mall = (id: string, name: string, domain: string, tag: Agent["tag"], online: string, avatar: string, desc: string, roleText?: string): Agent => ({
-  id, projectId: "", name, desc, avatar, status: "published", backendStatus: "published", domain, preset: true, createdAt: "2026-01-01T00:00:00Z",
-  role: roleText ?? role(name, desc, ["先确认用户的真实诉求，信息不足时主动追问", "回答给出依据，不编造结论", "超出职责范围的请求明确说明并给出下一步建议"]),
-  skills: [], knowledge: [], changelog: { pending: [], versions: [] }, source: "mall", tag, online,
-})
-
-/** 更多智能体：金蝶官方 / Beta / 其它企业自建并共享的智能体。可以直接引用为子智能体，但不在本企业的开发列表里管理 */
-export const mallAgents: Agent[] = [
-  mall("mk-fin-analyst", "财务分析顾问", "finance", "official", "2.1.0", "/preset-agent-avatar-3.png", "金蝶官方财务分析顾问，基于总账与报表数据做趋势分析、异常定位与经营指标解读"),
-  mall("mk-contract-risk", "合同风控顾问", "legal", "beta", "1.4.0", "/preset-agent-avatar-2.png", "合同风控顾问（Beta），审查合同条款风险、比对标准模板差异并给出修改建议"),
-  mall("mk-tax", "税务政策顾问", "finance", "beta", "1.0.3", "/preset-agent-avatar-1.png", "税务政策顾问（Beta），覆盖增值税、企业所得税的政策解读与税务风险提示"),
-  mall(
-    "mk-sales-fulfil", "销售履约智能体", "sales", "official", "2.3.0", "/preset-agent-avatar-1.png",
-    "金蝶官方销售履约智能体，覆盖报价、订单创建、发货与回款跟踪的履约主链路，制单时可识别大客户并把评估交回主智能体。",
-    "# 角色定位\n金蝶官方的销售履约全流程智能体（ais-sales-order-creator），负责报价、订单创建、发货与回款跟踪。\n\n# 能力边界\n只执行履约动作：制单、改单、分批、暂缓、发货与回款跟踪；不做信用与风险判断。\n\n# 协作方式\n制单时识别到大客户，把控制权交回主智能体等待风险评估结论；人工选定方案后按方案执行履约链路。\n\n# 维护方\n由金蝶官方维护与升级，企业侧只能引用，不能修改其配置。",
-  ),
-  mall("mk-market", "市场情报分析师", "general", "own", "3.0.0", "/preset-agent-avatar-2.png", "由集团内其它企业自建并共享的市场情报分析师，汇总行业动态、竞品动作与公开财报要点，输出情报简报"),
 ]
 
 const info = (appCode: string, appName: string, description: string, extra: Record<string, unknown> = {}) => ({

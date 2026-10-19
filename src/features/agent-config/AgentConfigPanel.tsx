@@ -1,5 +1,4 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState, type CSSProperties, type ReactNode } from "react"
-import { useQuery } from "@tanstack/react-query"
 import { IconButton, SegmentedControl, showToast } from "@/ui"
 import { useT } from "@/i18n"
 import type { Agent } from "@/mock/fixtures/dev"
@@ -10,12 +9,9 @@ import { diffChanges, formOf, type AgentForm } from "./form"
 import { KnowledgeBaseTab } from "./knowledge/KnowledgeBaseTab"
 import { RoleSettingsTab } from "./RoleSettingsTab"
 import { SkillConfigTab } from "./SkillConfigTab"
-import { SubAgentTab } from "./sub-agent/SubAgentTab"
 import "./agent-config.css"
 
-const TABS = ["basic", "role", "skills", "sub", "knowledge"] as const
-/** 「子智能体」是原型新增的页签，线上字典里还没有它的 key */
-const tabLabel = (tab: string) => (tab === "sub" ? "proto.subAgent.tab" : `kcode.agentConfig.tab.${tab}`)
+const TABS = ["basic", "role", "skills", "knowledge"] as const
 type ConfigTab = (typeof TABS)[number]
 
 export interface AgentConfigHandle {
@@ -36,12 +32,10 @@ interface Props {
   onRefresh?: () => void
   onNameChange?: (name: string) => void
   onSaved?: (agent: Agent) => void
-  /** 在子智能体页签里点了某个子智能体的卡片 */
-  onOpenAgent?: (agent: Agent) => void
 }
 
 /**
- * 智能体配置面板：五个页签（基础信息 / 角色设定 / 技能配置 / 子智能体 / 知识）。
+ * 智能体配置面板：四个页签（基础信息 / 角色设定 / 技能配置 / 知识）。
  * 开发页的详情弹窗（只读）和会话右侧的配置抽屉（可编辑）共用它。结构对齐原工程的 AgentConfigPanel。
  */
 export const AgentConfigPanel = forwardRef<AgentConfigHandle, Props>(function AgentConfigPanel(props, ref) {
@@ -62,9 +56,7 @@ export const AgentConfigPanel = forwardRef<AgentConfigHandle, Props>(function Ag
   useEffect(() => props.onNameChange?.(form.name), [form.name])
 
   const set = (patch: Partial<AgentForm>) => setForm((prev) => ({ ...prev, ...patch }))
-  // 子智能体只存编码，写更新日志时要换成名称
-  const candidates = useQuery({ queryKey: ["agent-candidates"], queryFn: agentService.candidates, staleTime: 0 })
-  const changes = () => diffChanges(saved.current, form, t, (id) => candidates.data?.find((x) => x.id === id)?.name ?? id)
+  const changes = () => diffChanges(saved.current, form, t)
 
   useImperativeHandle(ref, () => ({
     dirty: () => changes().length > 0,
@@ -88,7 +80,7 @@ export const AgentConfigPanel = forwardRef<AgentConfigHandle, Props>(function Ag
         className="light-segmented shrink-0 flex items-center justify-between"
       >
         <div className="agent-config-tab-scroll flex-1">
-          <SegmentedControl value={tab} onChange={(value) => setTab(value as ConfigTab)} items={TABS.map((value) => ({ value, label: t(tabLabel(value)) }))} />
+          <SegmentedControl value={tab} onChange={(value) => setTab(value as ConfigTab)} items={TABS.map((value) => ({ value, label: t(`kcode.agentConfig.tab.${value}`) }))} />
         </div>
         <div className="ml-3 flex shrink-0 items-center gap-2">
           {props.onRefresh && <IconButton icon="refresh" variant="ghost" iconSize="small" className="h-7 w-7" title={t("session.files.refresh")} onClick={props.onRefresh} />}
@@ -110,11 +102,6 @@ export const AgentConfigPanel = forwardRef<AgentConfigHandle, Props>(function Ag
       {tab === "skills" && (
         <div className="flex-1 min-h-0">
           <SkillConfigTab form={form} set={set} readonly={readonly} projectId={props.agent.projectId} />
-        </div>
-      )}
-      {tab === "sub" && (
-        <div className="flex-1 min-h-0 pb-5">
-          <SubAgentTab form={form} set={set} readonly={readonly} hostId={props.agent.id} onOpenAgent={(agent) => props.onOpenAgent?.(agent)} />
         </div>
       )}
       {tab === "knowledge" && (
