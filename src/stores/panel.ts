@@ -1,6 +1,6 @@
 import { create } from "zustand"
 
-export type PreviewView = "review" | "fileTree" | "drawer"
+export type PreviewView = "review" | "fileTree" | "wiki" | "drawer"
 
 /** 右侧面板里打开的「产物抽屉」：技能预览 / 智能体配置 / 业务组件详情 */
 export interface DrawerTarget {

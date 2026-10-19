@@ -3,6 +3,10 @@
  * 做新功能原型时把 key 加在这里，中英文都要写；功能合进线上后，换成线上的 key 并从这里删掉。
  */
 export const localZh: Record<string, string> = {
+  "proto.agentConfig.moreActions": "更多操作",
+  "proto.agentConfig.moreChanges": "查看全部 {{count}} 条修改",
+  "proto.agentConfig.lessChanges": "收起修改",
+  "proto.agentConfig.history": "历史版本（{{count}}）",
   "proto.plan.title": "技能执行方案",
   "proto.plan.parallel": "并行获取参考价格",
   "proto.plan.readonly": "只读查询 · 并行获取参考价格",
@@ -35,6 +39,8 @@ export const localZh: Record<string, string> = {
   "proto.subAgent.noCandidate.mall": "没有可添加的更多智能体",
   "proto.subAgent.selected": "已选 {{count}} 个",
   "proto.subAgent.noneSelected": "未选择",
+  "proto.subAgent.loading": "正在加载智能体…",
+  "proto.subAgent.retry": "加载失败，点击重试",
   "proto.subAgent.added": "已添加 {{count}} 个子智能体，由主智能体按需分派",
   "proto.subAgent.tag.official": "金蝶官方",
   "proto.subAgent.tag.beta": "Beta",
@@ -48,6 +54,10 @@ export const localZh: Record<string, string> = {
 }
 
 export const localEn: Record<string, string> = {
+  "proto.agentConfig.moreActions": "More actions",
+  "proto.agentConfig.moreChanges": "View all {{count}} changes",
+  "proto.agentConfig.lessChanges": "Show fewer changes",
+  "proto.agentConfig.history": "Version history ({{count}})",
   "proto.plan.title": "Skill execution plan",
   "proto.plan.parallel": "Fetch reference prices in parallel",
   "proto.plan.readonly": "Read-only · Fetch reference prices in parallel",
@@ -80,6 +90,8 @@ export const localEn: Record<string, string> = {
   "proto.subAgent.noCandidate.mall": "No more agents to add",
   "proto.subAgent.selected": "{{count}} selected",
   "proto.subAgent.noneSelected": "None selected",
+  "proto.subAgent.loading": "Loading agents…",
+  "proto.subAgent.retry": "Could not load agents. Click to retry",
   "proto.subAgent.added": "Added {{count}} sub-agents; the main agent dispatches them as needed",
   "proto.subAgent.tag.official": "Official",
   "proto.subAgent.tag.beta": "Beta",

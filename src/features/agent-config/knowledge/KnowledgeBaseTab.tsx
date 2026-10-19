@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react"
 import { useQuery } from "@tanstack/react-query"
-import { ConfirmDialog, Empty, Icon, showToast, useDialog } from "@/ui"
+import { BrandButton, ConfirmDialog, Empty, Icon, showToast, useDialog } from "@/ui"
 import { cx } from "@/lib/cx"
 import { useT } from "@/i18n"
 import type { KnowledgeBinding } from "@/mock/fixtures/dev"
@@ -11,9 +11,6 @@ import { AddKnowledgeDialog } from "./AddKnowledgeDialog"
 import { DocCard, DocDetail, FolderCheckbox, KnowledgeFolderIcon, PERSONAL_UPLOAD_LABEL, PERSONAL_VIEW_ID, fileExtension, fmtFileSize, useKnowledgeDate } from "./shared"
 import { folderState, indexTree, isCovered } from "./tree"
 import { UploadKnowledgeDialog } from "./UploadKnowledgeDialog"
-
-const TOOLBAR_BUTTON =
-  "flex items-center gap-[5px] h-8 rounded-[8px] border border-[var(--border-weak-base)] bg-[var(--surface-raised-stronger-non-alpha)] text-[13px] font-medium text-text-base cursor-pointer hover:border-[var(--brand-button-primary-base)] hover:text-[var(--brand-button-primary-base)]"
 
 const ROW_ACTIVE = "bg-[var(--surface-base)] text-[var(--neutral-800)] font-[600]"
 const ROW_IDLE = "text-[var(--text-base)] hover:bg-[var(--surface-base)] hover:text-[var(--neutral-700)]"
@@ -196,7 +193,7 @@ export function KnowledgeBaseTab(props: TabProps) {
 
   const personalShown = personal.filter((x) => !keyword || x.name.toLowerCase().includes(keyword))
   const skeleton = [0, 1, 2].map((i) => (
-    <div key={i} className="shrink-0 border border-[var(--border-weak-base)] rounded-[11px] bg-[var(--surface-raised-stronger-non-alpha)]" style={{ padding: "15px 16px" }}>
+    <div key={i} className="shrink-0 border border-[var(--border-weak-base)] agent-config-list-card bg-[var(--surface-raised-stronger-non-alpha)]" style={{ padding: "15px 16px" }}>
       <div className="flex items-center gap-2 mb-2">
         <div className="h-[18px] w-[68px] rounded-[5px] bg-[var(--surface-base)] animate-pulse" />
         <div className="h-[14px] w-[34px] rounded-[4px] bg-[var(--surface-base)] animate-pulse" />
@@ -208,21 +205,19 @@ export function KnowledgeBaseTab(props: TabProps) {
 
   return (
     <div className="flex h-full flex-col min-h-0">
-      <div className="shrink-0 flex items-center gap-2.5 mb-2.5">
+      <div className="shrink-0 flex flex-wrap items-center gap-2.5 mb-3">
         {!readonly && (
           <>
-            <button type="button" className={TOOLBAR_BUTTON} style={{ padding: "0 13px" }} onClick={openAdd}>
-              <Icon name="plus-16" size="small" containerClass="text-current" />
+            <BrandButton variant="auxiliary" size="normal" icon="plus-16" iconSize="small" onClick={openAdd}>
               {t("kcode.agentKnowledge.add")}
-            </button>
-            <button type="button" className={TOOLBAR_BUTTON} style={{ padding: "0 13px" }} onClick={openUpload}>
-              <Icon name="submit-upload" size="small" containerClass="text-current" />
+            </BrandButton>
+            <BrandButton variant="auxiliary" size="normal" icon="submit-upload" iconSize="small" onClick={openUpload}>
               {t("kcode.agentKnowledge.upload")}
-            </button>
+            </BrandButton>
           </>
         )}
         <div
-          className={cx("flex items-center gap-[7px] h-8 rounded-[9px] border border-[var(--border-weak-base)] bg-[var(--surface-raised-stronger-non-alpha)]", readonly ? "w-full" : "ml-auto w-[230px]")}
+          className={cx("flex items-center gap-[7px] h-9 rounded-xl border border-[var(--border-weak-base)] bg-[var(--surface-raised-stronger-non-alpha)]", readonly ? "w-full" : "ml-auto min-w-[180px] flex-1")}
           style={{ padding: "0 12px" }}
         >
           <Icon name="search-16" size="small" className="shrink-0 text-text-weak" />
@@ -239,7 +234,7 @@ export function KnowledgeBaseTab(props: TabProps) {
 
       <div className="flex flex-1 gap-3.5 min-h-0">
         <div className="relative shrink-0 w-[230px]">
-          <div className="h-full rounded-[10px] border border-[var(--border-weak-base)] p-1.5 overflow-y-auto no-scrollbar">
+          <div className="h-full rounded-xl border border-[var(--border-weak-base)] p-1.5 overflow-y-auto no-scrollbar">
             {tree.isPending ? (
               [72, 56, 64, 48, 60].map((w) => (
                 <div key={w} className="flex items-center gap-2" style={{ minHeight: 38, padding: "7px 11px" }}>
@@ -298,7 +293,7 @@ export function KnowledgeBaseTab(props: TabProps) {
               personalShown.map((binding) => (
                 <div
                   key={binding.id}
-                  className="shrink-0 border border-[var(--border-weak-base)] rounded-[11px] bg-[var(--surface-raised-stronger-non-alpha)] cursor-pointer transition-all hover:border-[var(--border-weak-base)] hover:shadow-sm"
+                  className="shrink-0 border border-[var(--border-weak-base)] agent-config-list-card bg-[var(--surface-raised-stronger-non-alpha)] cursor-pointer transition-all hover:border-[var(--border-weak-base)] hover:shadow-sm"
                   style={{ padding: "15px 16px" }}
                   onClick={() => setPersonalDetail(binding)}
                 >

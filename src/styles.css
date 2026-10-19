@@ -67,3 +67,48 @@ html {
   opacity: 1;
   pointer-events: auto;
 }
+
+/* 配置页与源码一致：窄面板把次要操作收进菜单，标题和操作保持同行。 */
+.agent-config-drawer { container-type: inline-size; container-name: agent-config; }
+.agent-config-overflow-action { display: none; }
+@container agent-config (max-width: 460px) {
+  .agent-config-test-action, .agent-config-submit-action { display: none; }
+  .agent-config-overflow-action { display: inline-flex; }
+}
+
+.agent-changelog .changelog-entry {
+  position: relative;
+  margin-left: 4px;
+  padding: 0 0 20px 20px;
+  border-left: 1px solid var(--border-weak-base);
+}
+.agent-changelog .changelog-entry:last-child { padding-bottom: 0; border-left-color: transparent; }
+.agent-changelog .changelog-entry::before {
+  content: "";
+  position: absolute;
+  left: -4px;
+  top: 7px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--text-weak);
+  box-shadow: 0 0 0 3px var(--agent-config-card-bg, var(--surface-raised-stronger-non-alpha));
+}
+.agent-changelog .changelog-entry-latest::before { background: var(--brand-button-primary-base); }
+.agent-changelog .changelog-entry-pending::before { background: var(--orange-500); }
+.changelog-badge {
+  display: inline-flex;
+  padding: 1px 6px;
+  border-radius: 5px;
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--brand-button-primary-base);
+  background: var(--brand-button-ghost-base);
+}
+.changelog-badge-pending { color: var(--text-base); background: var(--surface-base); }
+
+.changelog-version-heading { list-style: none; }
+.changelog-version-heading::-webkit-details-marker { display: none; }
+.changelog-version-heading::marker { content: ""; }
+.changelog-chevron { transition: transform 150ms ease; }
+details[open] > .changelog-version-heading .changelog-chevron { transform: rotate(90deg); }

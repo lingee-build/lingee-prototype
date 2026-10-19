@@ -1,4 +1,4 @@
-import { useRef, useState } from "react"
+import { useId, useRef, useState } from "react"
 import { DropdownMenu, Icon } from "@/ui"
 import { useT } from "@/i18n"
 import type { ModelLevel } from "@/mock/fixtures/dev"
@@ -44,21 +44,23 @@ function LevelGlyph(props: { level: ModelLevel; px: number }) {
 /** 领域下拉：菜单与触发器等宽，选中项右侧打勾 */
 export function DomainSelect(props: { value: string; onChange: (value: string) => void; label: string; readonly?: boolean }) {
   const t = useT()
+  const labelId = useId()
   const trigger = useRef<HTMLButtonElement>(null)
   const [width, setWidth] = useState(0)
   const label = domainI18nKeys[props.value] ? t(domainI18nKeys[props.value]) : props.value
 
   return (
-    <div className="flex flex-col gap-3">
-      <label className="text-[14px] leading-5 text-text-weak">{props.label}</label>
+    <div data-component="domain-select" className="flex flex-col gap-3">
+      <span id={labelId} data-slot="domain-select-label" className="text-[14px] leading-5 text-text-weak">{props.label}</span>
       {props.readonly ? (
-        <div className="flex h-9 w-full items-center rounded-2xl border border-[var(--border-weak-base)] bg-[var(--input-base)] px-3">
+        <div data-slot="domain-select-value" className="flex h-9 w-full items-center rounded-xl border border-[var(--border-weak-base)] bg-[var(--input-base)] px-3">
           <span className="text-[14px] leading-5 font-normal text-text-strong">{label}</span>
         </div>
       ) : (
         <DropdownMenu placement="bottom" gutter={4} onOpenChange={(open) => open && trigger.current && setWidth(trigger.current.getBoundingClientRect().width)}>
           <DropdownMenu.Trigger
             ref={trigger}
+            aria-labelledby={labelId}
             className="flex h-9 w-full cursor-pointer items-center justify-between rounded-2xl border border-[var(--border-weak-base)] bg-[var(--input-base)] px-3 transition-colors duration-150 hover:border-[var(--border-base)] [&[data-expanded]]:border-[var(--border-selected)]"
           >
             <span className="text-[14px] leading-5 font-normal text-text-strong">{label}</span>

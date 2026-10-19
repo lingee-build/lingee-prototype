@@ -101,7 +101,7 @@ export function DocCard(props: { doc: KnowledgeEntry; dirName: string; filled?: 
   return (
     <div
       className={cx(
-        "shrink-0 border border-[var(--border-weak-base)] rounded-[11px] bg-[var(--surface-raised-stronger-non-alpha)] transition-all",
+        "shrink-0 border border-[var(--border-weak-base)] agent-config-list-card bg-[var(--surface-raised-stronger-non-alpha)] transition-all",
         failed ? "cursor-default" : "cursor-pointer hover:border-[var(--border-weak-base)] hover:shadow-sm",
       )}
       style={{ padding: "15px 16px" }}

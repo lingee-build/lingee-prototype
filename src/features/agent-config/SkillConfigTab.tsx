@@ -44,7 +44,8 @@ export function SkillConfigTab(props: TabProps & { projectId: string }) {
           <BrandButton
             variant="auxiliary"
             size="normal"
-            iconSize="xs"
+            icon="plus-16"
+            iconSize="small"
             onClick={() => dialog.show(() => <AddSkillDialog projectId={props.projectId} selected={form.skills} onConfirm={(skills) => set({ skills })} />)}
           >
             {t("kcode.agentConfig.skills.addBtn")}
@@ -56,7 +57,7 @@ export function SkillConfigTab(props: TabProps & { projectId: string }) {
       ) : (
         <div className="flex-1 min-h-0 overflow-y-auto no-scrollbar flex flex-col gap-3">
           {form.skills.map((skill) => (
-            <div key={skill.id} className="group flex items-center gap-3 rounded-xl border border-[var(--border-weak-base)] bg-[var(--input-base)] px-4 py-3">
+            <div key={skill.id} className="group flex items-center gap-3 agent-config-list-card border border-[var(--border-weak-base)] bg-[var(--input-base)] px-4 py-3">
               <div className="flex h-10 w-10 shrink-0 items-center justify-center">
                 <DynamicSkillIcon name={skill.name} size={40} />
               </div>

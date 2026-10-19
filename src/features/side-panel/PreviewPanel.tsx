@@ -33,7 +33,7 @@ export function PreviewPanel(props: { projectId: string; sessionId?: string; wor
       >
         {view && (
           <>
-            <div className="flex items-center justify-between pl-4.5 pr-6 py-3 shrink-0 border-l-[0px] border-b-[1px] border-[var(--neutral-100)]">
+            <div className={cx("flex items-center justify-between pl-4.5 pr-6 py-3 shrink-0 border-l-[0px]", panel.drawer?.kind !== "agentConfig" && "border-b border-[var(--neutral-100)]")}>
               <div className="flex items-center gap-1">
                 <Tooltip placement="bottom" value={collapseLabel} openDelay={300}>
                   <button
@@ -51,11 +51,13 @@ export function PreviewPanel(props: { projectId: string; sessionId?: string; wor
               </div>
               {view === "drawer" && panel.drawer ? (
                 <>
-                  <span className="flex-1 min-w-0 px-2 text-[14px] font-medium leading-[22px] text-text-strong truncate" title={panel.drawer.title}>
-                    {panel.drawer.title}
-                  </span>
+                  {panel.drawer.kind !== "agentConfig" && (
+                    <span className="flex-1 min-w-0 px-2 text-[14px] font-medium leading-[22px] text-text-strong truncate" title={panel.drawer.title}>
+                      {panel.drawer.title}
+                    </span>
+                  )}
                   {/* 右上角叠着页面级的图标栏（审查 / 文件树），关闭按钮往左让开 */}
-                  <Tooltip placement="bottom" value={t("common.close")} openDelay={300} className="mr-[64px]">
+                  {panel.drawer.kind !== "agentConfig" && <Tooltip placement="bottom" value={t("common.close")} openDelay={300} className="mr-[98px]">
                     <button
                       type="button"
                       className="session-preview-header-icon p-0 border-none bg-transparent cursor-pointer inline-flex items-center justify-center outline-none transition-colors"
@@ -64,7 +66,7 @@ export function PreviewPanel(props: { projectId: string; sessionId?: string; wor
                     >
                       <Icon size="small" name="close-small" />
                     </button>
-                  </Tooltip>
+                  </Tooltip>}
                 </>
               ) : (
                 <div />
@@ -95,6 +97,12 @@ export function PreviewPanel(props: { projectId: string; sessionId?: string; wor
               {view === "drawer" && panel.drawer && (
                 <div className="flex-1 min-w-0 h-full bg-background-page">
                   <DrawerView target={panel.drawer} working={!!props.working} />
+                </div>
+              )}
+              {view === "wiki" && (
+                <div className="flex-1 min-w-0 h-full bg-background-page p-5">
+                  <div className="text-[16px] font-medium text-text-strong">{t("wiki.title")}</div>
+                  <div className="mt-3 text-[12px] text-text-weak">{t("wiki.empty")}</div>
                 </div>
               )}
               {view === "fileTree" && (

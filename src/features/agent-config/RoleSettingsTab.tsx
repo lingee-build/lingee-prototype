@@ -13,7 +13,7 @@ export function RoleSettingsTab(props: TabProps) {
       <div className="relative min-h-0" style={{ maxHeight: "calc(100% - 32px)" }}>
         <div
           className={cx(
-            "rounded-2xl border border-[var(--border-weak-base)] bg-[var(--input-base)] overflow-y-auto no-scrollbar transition-colors duration-150 max-h-full h-full",
+            "agent-config-editor border border-[var(--border-weak-base)] bg-[var(--input-base)] overflow-y-auto no-scrollbar transition-colors duration-150 max-h-full h-full",
             !props.readonly && "hover:border-[var(--border-base)] focus-within:border-[var(--border-selected)]",
           )}
         >

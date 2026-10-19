@@ -146,7 +146,16 @@ export const agents: Agent[] = [
     status: "published", backendStatus: "published", domain: "supply-chain", preset: true, createdAt: "2026-03-02T02:00:00Z", defaultModelLevel: "expert",
     role: role("供应链协同助手", "负责解答采购、库存、发货相关问题，并协助处理单据。", ["先确认用户关心的单据类型与组织范围", "查询结果用表格呈现，超过 20 行时先给汇总", "发现上下游数量不一致时主动提示"]),
     skills: [skillRef("sk_delivery"), skillRef("sk_stock", "reviewing")], knowledge: [catalog("kc_scm", "供应链制度", "供应链制度")], subs: ["mk-sales-fulfil"],
-    changelog: { pending: [], versions: [] },
+    changelog: {
+      pending: [
+        { createdAt: "2026-10-16T02:30:00Z", operator: "梁平贤", summary: "新增供应商风险监控子智能体。" },
+        { createdAt: "2026-10-15T08:20:00Z", operator: "张乐", summary: "优化采购订单查询规则，补充组织与日期筛选。" },
+      ],
+      versions: [
+        { version: "1.0.0", releasedAt: "2026-09-18T01:30:00Z", operator: "梁平贤", summary: "供应链协同助手首次发布", lines: ["接入采购、库存、发货查询技能，支持上下游单据追溯。", "关联供应链制度知识库，提供业务流程问答。"] },
+        { version: "1.0.1", releasedAt: "2026-10-10T06:00:00Z", operator: "张乐", summary: "完善销售履约协同能力", lines: ["接入销售履约智能体，支持订单到回款的进度跟踪。"] },
+      ],
+    },
   },
   {
     id: "hr-assistant", projectId: "hr-assistant", name: "HR 智能助手", desc: "解答假期、薪资、入转调离等员工高频问题，并可代为发起请假与证明开具。", avatar: "/preset-agent-avatar-2.png",

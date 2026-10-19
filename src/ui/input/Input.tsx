@@ -27,8 +27,19 @@ export function Input(props: InputProps) {
   useLayoutEffect(() => {
     const el = area.current
     if (!el) return
-    el.style.height = "auto"
-    el.style.height = `${el.scrollHeight}px`
+    const resize = () => {
+      el.style.height = "0px"
+      el.style.height = `${el.scrollHeight}px`
+    }
+    resize()
+    let width = el.getBoundingClientRect().width
+    const observer = new ResizeObserver(([entry]) => {
+      if (entry.contentRect.width === width) return
+      width = entry.contentRect.width
+      resize()
+    })
+    observer.observe(el)
+    return () => observer.disconnect()
   }, [props.value, props.multiline])
 
   const shared = {

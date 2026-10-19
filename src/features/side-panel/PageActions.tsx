@@ -34,6 +34,7 @@ export function PageActions(props: { inSession: boolean }) {
         {/* 审查是会话级的，新任务页还没有可审查的内容 */}
         {props.inSession && <ActionButton icon="session-review" label={t("command.review.toggle")} view="review" />}
         <ActionButton icon="session-files" label={t("command.fileTree.toggle")} view="fileTree" />
+        <ActionButton icon="wiki" label={t("command.wiki.toggle")} view="wiki" />
       </div>
     </div>
   )

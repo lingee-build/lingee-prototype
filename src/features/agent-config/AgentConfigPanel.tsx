@@ -11,6 +11,7 @@ import { KnowledgeBaseTab } from "./knowledge/KnowledgeBaseTab"
 import { RoleSettingsTab } from "./RoleSettingsTab"
 import { SkillConfigTab } from "./SkillConfigTab"
 import { SubAgentTab } from "./sub-agent/SubAgentTab"
+import "./agent-config.css"
 
 const TABS = ["basic", "role", "skills", "sub", "knowledge"] as const
 /** 「子智能体」是原型新增的页签，线上字典里还没有它的 key */
@@ -80,14 +81,16 @@ export const AgentConfigPanel = forwardRef<AgentConfigHandle, Props>(function Ag
 
   return (
     <div
-      className="flex flex-col gap-6 h-full"
+      className="agent-config-panel flex flex-col gap-5 h-full"
       style={{ "--border-weak-base": "var(--border-agent-config)", "--input-base": "var(--input-agent-config)" } as CSSProperties}
     >
       <div
         className="light-segmented shrink-0 flex items-center justify-between"
       >
-        <SegmentedControl value={tab} onChange={(value) => setTab(value as ConfigTab)} items={TABS.map((value) => ({ value, label: t(tabLabel(value)) }))} />
-        <div className="ml-auto flex items-center gap-2">
+        <div className="agent-config-tab-scroll flex-1">
+          <SegmentedControl value={tab} onChange={(value) => setTab(value as ConfigTab)} items={TABS.map((value) => ({ value, label: t(tabLabel(value)) }))} />
+        </div>
+        <div className="ml-3 flex shrink-0 items-center gap-2">
           {props.onRefresh && <IconButton icon="refresh" variant="ghost" iconSize="small" className="h-7 w-7" title={t("session.files.refresh")} onClick={props.onRefresh} />}
           {props.action}
         </div>
@@ -99,10 +102,9 @@ export const AgentConfigPanel = forwardRef<AgentConfigHandle, Props>(function Ag
         </div>
       )}
       {tab === "basic" && (
-        <div className="flex-1 min-h-0 overflow-y-auto no-scrollbar pb-5">
-          <BasicInfoTab form={form} set={set} readonly={readonly || preset} agentId={props.agent.id} hideIdentity={props.hideIdentity} />
-          {/* 预置智能体没有本地更新日志 */}
-          {!preset && <ChangelogSection changelog={props.agent.changelog} compact={props.hideIdentity} />}
+        <div className="agent-config-sections flex-1 min-h-0 overflow-y-auto pb-5">
+          <BasicInfoTab agentId={props.agent.id} form={form} set={set} readonly={readonly} hideIdentity={props.hideIdentity} />
+          <ChangelogSection changelog={props.agent.changelog} compact={props.hideIdentity} />
         </div>
       )}
       {tab === "skills" && (
@@ -112,7 +114,7 @@ export const AgentConfigPanel = forwardRef<AgentConfigHandle, Props>(function Ag
       )}
       {tab === "sub" && (
         <div className="flex-1 min-h-0 pb-5">
-          <SubAgentTab form={form} set={set} readonly={readonly || preset} hostId={props.agent.id} onOpenAgent={(agent) => props.onOpenAgent?.(agent)} />
+          <SubAgentTab form={form} set={set} readonly={readonly} hostId={props.agent.id} onOpenAgent={(agent) => props.onOpenAgent?.(agent)} />
         </div>
       )}
       {tab === "knowledge" && (

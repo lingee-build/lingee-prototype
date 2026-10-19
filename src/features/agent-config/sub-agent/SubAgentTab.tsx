@@ -41,7 +41,7 @@ export function SubAgentTab(props: TabProps & { hostId: string; onOpenAgent: (ag
     <div className="flex flex-col gap-3 h-full min-h-0">
       {!readonly && (
         <div className="shrink-0 flex items-center gap-3">
-          <BrandButton variant="auxiliary" size="normal" iconSize="xs" onClick={openAdd}>
+          <BrandButton variant="auxiliary" size="normal" icon="plus-16" iconSize="small" onClick={openAdd}>
             {t("proto.subAgent.add")}
           </BrandButton>
           <span className="ml-auto text-[12px] text-text-weak truncate">
@@ -50,15 +50,15 @@ export function SubAgentTab(props: TabProps & { hostId: string; onOpenAgent: (ag
         </div>
       )}
       {!candidates.isPending && subs.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-[var(--border-weak-base)] px-4 py-8 text-center text-[13px] text-text-weak">
+        <div className="agent-config-list-card border border-dashed border-[var(--border-weak-base)] px-4 py-8 text-center text-[13px] text-text-weak">
           {t(readonly ? "proto.subAgent.emptyReadonly" : "proto.subAgent.empty")}
         </div>
       ) : (
-        <div className="flex-1 min-h-0 overflow-y-auto no-scrollbar flex flex-col gap-2.5">
+        <div className="flex-1 min-h-0 overflow-y-auto no-scrollbar flex flex-col gap-3">
           {subs.map((agent) => (
             <div
               key={agent.id}
-              className="group relative shrink-0 flex items-start gap-3 rounded-xl border border-[var(--border-weak-base)] bg-[var(--input-base)] px-4 py-3 cursor-pointer transition-all hover:border-[var(--primary-200)] hover:shadow-sm"
+              className="group relative shrink-0 flex items-start gap-3 agent-config-list-card border border-[var(--border-weak-base)] bg-[var(--input-base)] px-4 py-3 cursor-pointer transition-all hover:border-[var(--primary-200)] hover:shadow-sm"
               title={t("proto.subAgent.viewDetail", { name: agent.name })}
               onClick={() => props.onOpenAgent(agent)}
             >

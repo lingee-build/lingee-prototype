@@ -34,8 +34,8 @@ export function AddSubAgentDialog(props: { hostId: string; existing: string[]; o
   const toggle = (id: string) => setPicked((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]))
 
   return (
-    <Dialog fit title={t("proto.subAgent.addTitle")} className="w-[560px] overflow-hidden">
-      <div className="flex flex-col" style={{ height: "min(560px, 72vh)" }}>
+    <Dialog fit title={t("proto.subAgent.addTitle")} className="w-[600px] max-w-[calc(100vw-32px)] overflow-hidden">
+      <div className="flex flex-col" style={{ height: "min(600px, 72vh)" }}>
         <div className="shrink-0 px-6">
           <SegmentedControl
             className="w-full [&_[data-slot=segmented-control-list]]:w-full [&_[data-slot=segmented-control-item]]:flex-1"
@@ -47,6 +47,7 @@ export function AddSubAgentDialog(props: { hostId: string; existing: string[]; o
             <Icon name="search-16" size="small" className="shrink-0 text-text-weak" />
             <input
               type="text"
+              data-autofocus
               className="flex-1 min-w-0 border-0 outline-none text-[13px] bg-transparent text-text-strong placeholder:text-text-weak"
               placeholder={t("proto.subAgent.search")}
               title={t("proto.subAgent.search")}
@@ -55,15 +56,27 @@ export function AddSubAgentDialog(props: { hostId: string; existing: string[]; o
             />
           </div>
         </div>
-        <div className="flex-1 min-h-0 overflow-y-auto no-scrollbar px-6 flex flex-col gap-[9px]">
-          {!pool.isPending && rows.length === 0 && <div className="text-[12px] text-text-weak pt-0.5">{t(`proto.subAgent.noCandidate.${source}`)}</div>}
+        <div className="flex-1 min-h-0 overflow-y-auto px-6 flex flex-col gap-4">
+          {pool.isPending && <div role="status" className="text-[13px] text-text-weak py-4">{t("proto.subAgent.loading")}</div>}
+          {pool.isError && <button type="button" className="text-[13px] text-text-weak py-4 cursor-pointer" onClick={() => void pool.refetch()}>{t("proto.subAgent.retry")}</button>}
+          {!pool.isPending && !pool.isError && rows.length === 0 && <div className="text-[12px] text-text-weak pt-0.5">{t(`proto.subAgent.noCandidate.${source}`)}</div>}
           {rows.map((agent) => {
             const on = picked.includes(agent.id)
             return (
               <div
                 key={agent.id}
+                role="checkbox"
+                aria-checked={on}
+                aria-label={agent.name}
+                tabIndex={0}
+                onKeyDown={(event) => {
+                  if (event.key === " " || event.key === "Enter") {
+                    event.preventDefault()
+                    toggle(agent.id)
+                  }
+                }}
                 className={cx(
-                  "shrink-0 flex items-center gap-2.5 rounded-[10px] border px-3 py-2.5 cursor-pointer transition-colors",
+                  "shrink-0 flex items-center gap-2.5 rounded-[10px] border px-3 py-3.5 cursor-pointer transition-colors focus-visible:outline-2 focus-visible:outline-[var(--brand-button-primary-base)]",
                   on ? "border-[var(--brand-button-primary-base)] bg-[var(--brand-button-ghost-base)]" : "border-[var(--border-weak-base)]",
                 )}
                 onClick={() => toggle(agent.id)}
@@ -83,13 +96,13 @@ export function AddSubAgentDialog(props: { hostId: string; existing: string[]; o
                 <img src={publicUrl(agent.avatar || pickAvatar(agent.id))} alt="" className="size-7 shrink-0 rounded-full object-cover" />
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-[7px] min-w-0">
-                    <span className="truncate text-[13px] font-medium text-text-strong" title={agent.name}>
+                    <span className="truncate text-[14px] font-semibold text-text-strong" title={agent.name}>
                       {agent.name}
                     </span>
                     <SourceTag agent={agent} />
                     <PublishTag agent={agent} />
                   </div>
-                  <div className="mt-[3px] truncate text-[11.5px] text-text-weak" title={agent.desc}>
+                  <div className="mt-[3px] truncate text-[12px] text-text-weak" title={agent.desc}>
                     {domainName(agent.domain)} · {agent.desc}
                   </div>
                 </div>
@@ -98,7 +111,7 @@ export function AddSubAgentDialog(props: { hostId: string; existing: string[]; o
           })}
         </div>
         <div className="flex items-center justify-end shrink-0" style={{ padding: "16px 24px 20px", gap: 12 }}>
-          <span className="mr-auto text-[13px] text-text-weak">{picked.length ? t("proto.subAgent.selected", { count: picked.length }) : t("proto.subAgent.noneSelected")}</span>
+          <span aria-live="polite" className="mr-auto text-[13px] text-text-weak">{picked.length ? t("proto.subAgent.selected", { count: picked.length }) : t("proto.subAgent.noneSelected")}</span>
           <button
             type="button"
             className="h-9 rounded-[12px] text-[14px] font-semibold cursor-pointer bg-[var(--surface-raised-stronger-non-alpha)] text-text-base border border-[var(--border-base)] hover:bg-surface-base-hover"

@@ -1,74 +1,38 @@
-import { useRef, type CSSProperties } from "react"
-import { publicUrl } from "@/lib/public-url"
 import { Input, Switch } from "@/ui"
-import { cx } from "@/lib/cx"
 import { useT } from "@/i18n"
-import { pickAvatar, type TabProps } from "./form"
+import type { TabProps } from "./form"
 import { DomainSelect, ModelLevelSelect } from "./selects"
+import { AgentAvatarPicker } from "./AgentAvatarPicker"
 
-const CARD_BG = { background: "var(--agent-config-card-bg, var(--surface-raised-stronger-non-alpha))" }
-
-/**
- * 「基础信息」页签：身份卡片（头像 + 名称 + 领域 + 功能描述）和模型策略。
- * hideIdentity：详情弹窗已在页签上方展示名称与头像，这里只留功能描述。
- */
+/** 基础表单与模型策略共用配置页的卡片、标题和间距规范。 */
 export function BasicInfoTab(props: TabProps & { agentId: string; hideIdentity?: boolean }) {
   const t = useT()
-  const file = useRef<HTMLInputElement>(null)
   const { form, set, readonly } = props
 
-  const upload = (picked: File) => {
-    const reader = new FileReader()
-    reader.onload = () => set({ avatar: String(reader.result) })
-    reader.readAsDataURL(picked)
-  }
-
   return (
-    <div className="flex flex-col gap-6" style={{ "--input-base": "var(--input-agent-config)" } as CSSProperties}>
-      {props.hideIdentity ? (
-        <div className="flex flex-col gap-3">
-          <div className="text-[14px] font-medium leading-[22px] text-text-strong">{t("kcode.agentConfig.basic.desc")}</div>
-          <div className="rounded-[24px] p-4" style={CARD_BG}>
-            <div className="text-[14px] leading-[22px] text-text-weak whitespace-pre-wrap break-words">{form.desc}</div>
-          </div>
-        </div>
-      ) : (
-        <div className="flex gap-4 rounded-[24px] p-4" style={CARD_BG}>
-          <div
-            className={cx("flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl overflow-hidden", !readonly && "cursor-pointer")}
-            title={readonly ? undefined : t("kcode.agentConfig.basic.changeAvatar")}
-            onClick={readonly ? undefined : () => file.current?.click()}
-          >
-            <img src={publicUrl(form.avatar || pickAvatar(props.agentId))} alt="" className="h-full w-full object-cover" />
-          </div>
-          <input
-            ref={file}
-            type="file"
-            accept="image/*"
-            className="hidden"
-            onChange={(e) => {
-              const picked = e.currentTarget.files?.[0]
-              if (picked) upload(picked)
-              e.currentTarget.value = ""
-            }}
-          />
-          <div className="flex min-w-0 flex-1 flex-col gap-4">
-            {/* 名称保底 160px：面板过窄时领域换到下一行 */}
-            <div className="flex flex-wrap gap-4">
-              <div className="min-w-[160px] flex-1">
-                <Input
-                  label={t("kcode.agentConfig.basic.name")}
-                  required
-                  readOnly={readonly}
-                  value={form.name}
-                  onChange={(name) => set({ name })}
-                  placeholder={t("kcode.agentConfig.basic.namePlaceholder")}
-                />
+    <div className="agent-basic-info flex flex-col gap-6">
+      <section className="flex flex-col gap-3">
+        {props.hideIdentity && <h3 className="agent-config-section-title" data-compact>{t("kcode.agentConfig.basic.desc")}</h3>}
+        {props.hideIdentity ? (
+          <div className="agent-config-surface text-[14px] leading-[22px] text-text-base whitespace-pre-wrap break-words">{form.desc}</div>
+        ) : (
+          <div className="agent-config-surface agent-config-fields">
+            <div className="agent-config-identity-row">
+              <div className="agent-config-avatar-field shrink-0">
+                <AgentAvatarPicker agentId={props.agentId} value={form.avatar} disabled={readonly} onChange={(avatar) => set({ avatar })} />
               </div>
-              <div className="w-[220px] max-w-full shrink-0">
-                <DomainSelect value={form.domain} onChange={(domain) => set({ domain })} label={t("kcode.agentConfig.basic.domain")} readonly={readonly} />
+              <div className="min-w-0 flex-1">
+            <Input
+              label={t("kcode.agentConfig.basic.name")}
+              required
+              readOnly={readonly}
+              value={form.name}
+              onChange={(name) => set({ name })}
+              placeholder={t("kcode.agentConfig.basic.namePlaceholder")}
+            />
               </div>
             </div>
+            <DomainSelect value={form.domain} onChange={(domain) => set({ domain })} label={t("kcode.agentConfig.basic.domain")} readonly={readonly} />
             <Input
               label={t("kcode.agentConfig.basic.desc")}
               required
@@ -77,17 +41,17 @@ export function BasicInfoTab(props: TabProps & { agentId: string; hideIdentity?:
               value={form.desc}
               onChange={(desc) => set({ desc })}
               placeholder={t("kcode.agentConfig.basic.descPlaceholder")}
-              className="min-h-[100px] max-h-[160px] overflow-y-auto"
+              className="min-h-[88px] max-h-[160px] overflow-y-auto"
             />
           </div>
-        </div>
-      )}
+        )}
+      </section>
 
-      <div className="flex flex-col gap-3">
-        <div className={cx("font-medium text-text-strong", props.hideIdentity ? "text-[14px] leading-[22px]" : "text-[16px] leading-6")}>
+      <section className="flex flex-col gap-3">
+        <h3 className="agent-config-section-title" data-compact={props.hideIdentity || undefined}>
           {t("kcode.agentConfig.basic.modelPolicy.title")}
-        </div>
-        <div className="flex flex-col gap-4 rounded-[24px] p-4" style={CARD_BG}>
+        </h3>
+        <div className="agent-config-surface flex flex-col gap-4">
           <div className="flex items-center justify-between gap-4">
             <div className="flex min-w-0 flex-col gap-1">
               <span className="text-[14px] leading-5 text-text-strong">{t("kcode.agentConfig.basic.modelPolicy.allowSwitch")}</span>
@@ -105,7 +69,7 @@ export function BasicInfoTab(props: TabProps & { agentId: string; hideIdentity?:
             <ModelLevelSelect value={form.defaultModelLevel} onChange={(defaultModelLevel) => set({ defaultModelLevel })} readonly={readonly} />
           </div>
         </div>
-      </div>
+      </section>
     </div>
   )
 }
