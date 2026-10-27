@@ -17,4 +17,5 @@ export const accounts: Array<{ account: string; displayName: string }> = [
   { account: "yuanyufeng", displayName: "袁玉峰" },
   { account: "zoumaotao", displayName: "邹茂桃" },
   { account: "luochunan", displayName: "罗春桉" },
+  { account: "caobian", displayName: "曹边" },
 ]
