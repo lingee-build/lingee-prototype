@@ -1,4 +1,6 @@
-import { useEffect, useState } from "react"
+import { useEffect, useState, type ReactNode } from "react"
+import { useNavigate } from "react-router"
+import { EvaluationLabel } from "@/features/evaluation/EvaluationPanel"
 import { DropdownMenu, Icon, type IconName } from "@/ui"
 import { useT } from "@/i18n"
 import type { Agent } from "@/mock/fixtures/dev"
@@ -13,11 +15,12 @@ const Spinner = () => (
 )
 
 /**
- * 智能体卡片右上角的「…」菜单：编辑 / 本地测试 / 云端测试 / 提交 / 撤回 / 删除。
+ * 智能体卡片右上角的「…」菜单：编辑 / 本地测试 / 云端测试 / 评测 / 提交 / 撤回 / 删除。
  * 平时悬停卡片才出现；测试、提交这类耗时操作进行中菜单保持打开并在对应项后面转圈，结束后自动收起。
  */
 export function AgentCardActions(props: { agent: Agent; onChanged: () => void }) {
   const t = useT()
+  const navigate = useNavigate()
   const { agent } = props
   const [open, setOpen] = useState(false)
   const actions = useAgentActions(props.onChanged)
@@ -27,7 +30,7 @@ export function AgentCardActions(props: { agent: Agent; onChanged: () => void })
     if (!busy) setOpen(false)
   }, [busy])
 
-  const item = (icon: IconName, label: string, onSelect: () => void, loading?: AgentBusy, keepOpen?: boolean) => (
+  const item = (icon: IconName, label: ReactNode, onSelect: () => void, loading?: AgentBusy, keepOpen?: boolean) => (
     <DropdownMenu.Item
       disabled={!!busy}
       className="flex items-center cursor-pointer gap-1"
@@ -59,6 +62,7 @@ export function AgentCardActions(props: { agent: Agent; onChanged: () => void })
             {item("edit-doc-16", t("kcode.agentDev.menu.edit"), () => actions.edit(agent))}
             {!agent.preset && item("test-flask", t("kcode.agentConfig.localTest"), () => void actions.localTest(agent), "localTest", true)}
             {!agent.preset && item("cloud-test", t("kcode.agentConfig.test"), () => actions.cloudTest(agent), "test", true)}
+            {item("checklist", <EvaluationLabel />, () => navigate(`/dev/agent/${encodeURIComponent(agent.id)}/evaluation`))}
             {canSubmit(agent) && item("submit-upload", t("kcode.agentConfig.submit"), () => actions.submit(agent), "submit")}
             {canWithdraw(agent) && item("undo", t("kcode.agentDev.action.withdraw"), () => actions.withdraw(agent), "withdraw")}
             {canRemove(agent) && (

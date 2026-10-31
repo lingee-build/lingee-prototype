@@ -40,6 +40,7 @@ export const router = createBrowserRouter([
         children: [
           { index: true, Component: HomeRedirect },
           { path: "p/:projectId/session/:sessionId?", lazy: () => import("@/pages/session/SessionPage") },
+          { path: "dev/:mode/:objectId/evaluation", lazy: () => import("@/pages/dev/EvaluationPage") },
           { path: "dev/:mode", lazy: () => import("@/pages/dev/DevPage") },
           { path: "settings/:section?", lazy: () => import("@/pages/settings/SettingsPage") },
           { path: "*", element: <Navigate to="/" replace /> },

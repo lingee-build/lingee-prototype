@@ -1,3 +1,4 @@
+import { Dialog as Radix } from "radix-ui"
 import { Dialog } from "./Dialog"
 import { useDialogStore } from "./dialog-store"
 
@@ -22,26 +23,28 @@ export interface ConfirmDialogProps {
   tone?: "warning" | "info"
   onConfirm: () => void
   onCancel?: () => void
+  onClose?: () => void
 }
 
 /** 通用确认弹窗：删除 / 编辑 / 撤回等二次确认都走它 */
 export function ConfirmDialog(props: ConfirmDialogProps) {
-  const close = useDialogStore((s) => s.close)
+  const globalClose = useDialogStore((s) => s.close)
+  const close = props.onClose ?? globalClose
   return (
-    <Dialog fit className="w-[400px] !self-center !rounded-[24px] overflow-hidden shadow-[0px_6px_16px_0px_rgba(0,0,0,0.12)]">
+    <Dialog fit customHeader className="w-[400px] !self-center !rounded-[24px] overflow-hidden shadow-[0px_6px_16px_0px_rgba(0,0,0,0.12)]">
       <div className="flex flex-col px-5 pt-5 pb-6">
         <div className="flex items-center gap-2">
           <div className="flex size-6 items-center justify-center">
             <WarningCircleIcon className={props.tone === "info" ? "size-5 text-[var(--primary-600)]" : "size-5 text-[#FF6D37]"} />
           </div>
-          <span className="text-16-medium text-text-strong">{props.title}</span>
+          <Radix.Title asChild><span className="text-16-medium text-text-strong">{props.title}</span></Radix.Title>
         </div>
-        <p
+        <Radix.Description asChild><p
           className="ml-8 mt-2 text-14-regular text-text-base leading-[22px] break-all"
           style={{ whiteSpace: "pre-line", overflowWrap: "break-word" }}
         >
           {props.description}
-        </p>
+        </p></Radix.Description>
         <div className="mt-5 flex items-center justify-end gap-3">
           {props.cancelText && (
             <button
@@ -72,5 +75,17 @@ export function ConfirmDialog(props: ConfirmDialogProps) {
         </div>
       </div>
     </Dialog>
+  )
+}
+
+/** 局部受控确认，保留底层配置面板及其未保存状态 */
+export function ControlledConfirmDialog(props: ConfirmDialogProps & { open: boolean; onClose: () => void }) {
+  return (
+    <Radix.Root open={props.open} modal onOpenChange={open => { if (!open) props.onClose() }}>
+      <Radix.Portal>
+        <Radix.Overlay data-component="dialog-overlay" />
+        <ConfirmDialog {...props} />
+      </Radix.Portal>
+    </Radix.Root>
   )
 }

@@ -1,3 +1,4 @@
+import { evaluationRepairTarget } from "@/services/evaluation-repair"
 import { db } from "./db"
 import { sleep, uid } from "./latency"
 import { pickScenario } from "./scenarios"
@@ -33,7 +34,7 @@ export async function runAssistantStream(sessionId: string, prompt: string, emit
   const run: Run = { controller: new AbortController() }
   runs.set(sessionId, run)
   const aborted = () => run.controller.signal.aborted
-  const scenario = pickScenario({ prompt, projectId: db.sessions.find((x) => x.id === sessionId)?.projectId ?? "" })
+  const scenario = pickScenario({ prompt, repairTarget: evaluationRepairTarget(sessionId), projectId: db.sessions.find((x) => x.id === sessionId)?.projectId ?? "" })
 
   const pause = (ms: number) => sleep(ms, run.controller.signal)
   const pacing = scenario.pacing
@@ -87,8 +88,8 @@ export async function runAssistantStream(sessionId: string, prompt: string, emit
 
   await pause(500)
   for (const template of scenario.steps) {
-    const step = { ...template, ...template.resolve?.() }
     if (aborted()) break
+    const step = { ...template, ...template.resolve?.() }
     if (step.todo !== undefined) setTodo(step.todo)
     if (step.reasoning) {
       const part: Part = { id: uid("prt"), type: "reasoning", text: "", display: step.reasoningDisplay, time: { start: Date.now() } }

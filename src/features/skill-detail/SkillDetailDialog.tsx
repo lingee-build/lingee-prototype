@@ -1,3 +1,5 @@
+import { useNavigate } from "react-router"
+import { EvaluationLabel } from "@/features/evaluation/EvaluationPanel"
 import { useMemo, useState, type CSSProperties } from "react"
 import { BrandButton, CapsuleTag, Dialog, Icon, Markdown, SegmentedControl, Tag, Tooltip, useDialog } from "@/ui"
 import { cx } from "@/lib/cx"
@@ -34,6 +36,7 @@ const Divider = () => <div className="w-[0.5px] h-[50px] bg-[var(--neutral-100)]
 export function SkillDetailDialog(props: { skill: Skill; initialTab?: DetailTab; onEdit: () => void; onFix: (prompt: string) => void }) {
   const t = useT()
   const dialog = useDialog()
+  const navigate = useNavigate()
   const { skill } = props
   const detail = useMemo(() => skillDetailOf(skill), [skill])
   const [tab, setTab] = useState<DetailTab>(props.initialTab ?? "overview")
@@ -50,9 +53,9 @@ export function SkillDetailDialog(props: { skill: Skill; initialTab?: DetailTab;
   const rejectionReason = skill.reason ? t("ui.tile.rejectionReason", { reason: skill.reason }) : ""
 
   return (
-    <Dialog title={t("kcode.skillDev.detail.title")} fit className="w-[640px] !rounded-[24px] overflow-hidden shadow-[0px_6px_12px_rgba(0,0,0,0.08)]">
-      <div className="relative flex flex-col max-h-[80vh]">
-        <div className="flex flex-col h-full min-h-0">
+    <Dialog title={t("kcode.skillDev.detail.title")} fit className="w-[640px] !max-w-[94vw] !rounded-[24px] overflow-hidden shadow-[0px_6px_12px_rgba(0,0,0,0.08)]">
+      <div className="relative flex flex-col max-h-[80vh] min-h-0">
+        <div className="flex flex-col h-full min-h-0 overflow-hidden">
           {skill.changed && submitted && (
             <div
               className={cx(
@@ -141,8 +144,13 @@ export function SkillDetailDialog(props: { skill: Skill; initialTab?: DetailTab;
           >
             <SegmentedControl
               value={tab}
-              onChange={(value) => setTab(value as DetailTab)}
-              items={(["overview", "preview", "check"] as const).map((value) => ({ value, label: t(`kcode.skillPreview.tab.${value}`) }))}
+              onChange={(value) => {
+                if (value === "evaluation") {
+                  dialog.close()
+                  navigate(`/dev/skill/${encodeURIComponent(skill.id)}/evaluation`)
+                } else setTab(value as DetailTab)
+              }}
+              items={[...(["overview", "preview", "check"] as const).map((value) => ({ value, label: t(`kcode.skillPreview.tab.${value}`) })), {value:"evaluation", label:<EvaluationLabel />}]}
             />
           </div>
 

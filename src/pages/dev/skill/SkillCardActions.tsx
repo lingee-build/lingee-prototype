@@ -1,4 +1,6 @@
 import { useState } from "react"
+import { useNavigate } from "react-router"
+import { EvaluationLabel } from "@/features/evaluation/EvaluationPanel"
 import { DropdownMenu, Icon } from "@/ui"
 import { useT } from "@/i18n"
 import type { Skill } from "@/mock/fixtures/dev"
@@ -16,9 +18,10 @@ export interface SkillActionHandlers {
 
 const ITEM = "flex items-center cursor-pointer gap-1"
 
-/** 技能卡片右上角的「…」菜单：编辑 / 本地测试 / 云端测试 / 检查 / 提交 /（审核中才有）撤回 / 删除 */
+/** 技能卡片右上角的「…」菜单：编辑 / 本地测试 / 云端测试 / 评测 / 检查 / 提交 /（审核中才有）撤回 / 删除 */
 export function SkillCardActions(props: { skill: Skill; handlers: SkillActionHandlers }) {
   const t = useT()
+  const navigate = useNavigate()
   const [open, setOpen] = useState(false)
   const { skill, handlers } = props
   return (
@@ -41,6 +44,10 @@ export function SkillCardActions(props: { skill: Skill; handlers: SkillActionHan
               <DropdownMenu.Item onSelect={() => handlers.onCloudTest(skill)} className={ITEM}>
                 <Icon name="cloud-test" size="small" />
                 <span>{t("kcode.skillPreview.action.test")}</span>
+              </DropdownMenu.Item>
+              <DropdownMenu.Item onSelect={() => navigate(`/dev/skill/${encodeURIComponent(skill.id)}/evaluation`)} className={ITEM}>
+                <Icon name="checklist" size="small" />
+                <EvaluationLabel />
               </DropdownMenu.Item>
               <DropdownMenu.Item onSelect={() => handlers.onCheck(skill)} className={ITEM}>
                 <Icon name="shield-check" size="small" />

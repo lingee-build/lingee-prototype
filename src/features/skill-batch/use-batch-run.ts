@@ -1,3 +1,4 @@
+import { showToast } from "@/ui"
 import { useRef, useState } from "react"
 import type { Skill } from "@/mock/fixtures/dev"
 import { CHECK_ORDER, emptyCheckItems, presetCheckResults, type CheckItemKey, type CheckResult } from "@/mock/fixtures/skill-check"
@@ -107,18 +108,19 @@ export function useBatchRun(options: { mode: BatchMode; route: BatchRoute; skill
     setPhase("summary")
   }
 
-  const runDelete = async (onDone: (deleted: Skill[]) => void) => {
+  const runDelete = async (onDone: (deleted: Skill[]) => void | Promise<void>) => {
     const targets = items.filter((x) => x.selected)
     setPhase("uploading")
     setProgress(0)
-    for (const [index, target] of targets.entries()) {
-      patch(target.skill.id, { status: "running" })
-      await sleep(350)
-      patch(target.skill.id, { status: "pass" })
-      setProgress(Math.round(((index + 1) / targets.length) * 100))
+    try {
+      await onDone(targets.map(x => x.skill))
+      targets.forEach(target => patch(target.skill.id, { status: "pass" }))
+      setProgress(100)
+      setPhase("summary")
+    } catch (error) {
+      setPhase("deleteConfirm")
+      showToast({ variant: "error", title: "删除失败", description: error instanceof Error ? error.message : "请恢复存储后重试" })
     }
-    onDone(targets.map((x) => x.skill))
-    setPhase("summary")
   }
 
   return {

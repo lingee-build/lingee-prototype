@@ -14,7 +14,7 @@ export interface BatchDialogProps {
   skipSelect?: boolean
   /** 提交 / 安装成功的技能 */
   onSubmitted?: (skills: Skill[], route: BatchRoute) => void
-  onDeleted?: (skills: Skill[]) => void
+  onDeleted?: (skills: Skill[]) => void | Promise<void>
   /** 检查不通过时点「去修复」 */
   onGoFix?: (skills: Skill[]) => void
 }

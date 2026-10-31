@@ -1,3 +1,9 @@
+import { useEvaluation } from "@/services/evaluation"
+import { useEvaluationRepairs } from "@/services/evaluation-repair"
+import { useNavigate } from "react-router"
+import { RenderCard } from "@/ui"
+import { EvaluationSession } from "@/features/evaluation/EvaluationSession"
+import { useEvaluationConversations } from "@/services/evaluation-conversations"
 import { procurementPrompt } from "@/services/procurement"
 import { guardUpgrade, legacySessions, useUpgradeStore } from "@/features/artifact-upgrade/UpgradeGate"
 import { useEffect, useState } from "react"
@@ -28,6 +34,10 @@ const SESSION_WIDTH = 600
  * - 有 sessionId：对话时间线 + 底部输入框
  */
 export function Component() {
+  const navigate = useNavigate()
+  const repairLinks = useEvaluationRepairs(s => s.links)
+  const deletedObjects = useEvaluation(s => s.deletedObjects)
+  const evaluationSessions = useEvaluationConversations(s => s.items)
   const t = useT()
   const { projectId = "", sessionId } = useParams()
   const [search] = useSearchParams()
@@ -46,6 +56,16 @@ export function Component() {
     const ids = [...(legacySessions[sessionId ?? ""] ?? []), editing.agent ?? "", editing.kdskill ?? ""]
     guardUpgrade(ids, () => {})
   }, [sessionId, editing.agent, editing.kdskill, upgraded])
+  useEffect(() => {
+    if (!sessionId) return
+    const item = useEvaluationRepairs.getState().items[sessionId]
+    if (item && !item.messages.length && !usePrompt.getState().draft.text) setDraft(item.draft, sessionId)
+  }, [sessionId, setDraft])
+  useEffect(() => {
+    if (!sessionId || !session || !messages[sessionId]) return
+    const item = useEvaluationRepairs.getState().items[sessionId]
+    if (item) useEvaluationRepairs.setState(s => ({ items: { ...s.items, [sessionId]: { ...item, session, messages: messages[sessionId] } } }))
+  }, [sessionId, session, messages])
   const loaded = sessionId ? messages[sessionId] : undefined
 
   useEffect(() => {
@@ -70,8 +90,13 @@ export function Component() {
   }, [sessionId, projectId, editing.kdskill, editing.agent, editing.mcpapp])
 
   if (!ready) return <div className="size-full bg-background-page" />
-  if (!projects.some((x) => x.id === projectId) || (sessionId && !session)) return <Navigate to="/" replace />
+  if (sessionId && !session) return <p role="status" className="p-8">会话已删除或不存在。</p>
+  if (!projects.some((x) => x.id === projectId)) return <Navigate to="/" replace />
 
+
+  const evaluationObject = (sessionId && evaluationSessions[sessionId]?.objectId) || search.get("evaluation")
+  if (evaluationObject && deletedObjects?.[evaluationObject]) return <p role="status" className="p-8">被测对象及其评测数据已删除。</p>
+  if (evaluationObject) return <EvaluationSession key={sessionId || evaluationObject} projectId={projectId} sessionId={sessionId} objectId={evaluationObject} />
 
   return (
     <div className="relative size-full min-h-0 flex-1 overflow-hidden flex flex-col bg-background-page">
@@ -81,7 +106,7 @@ export function Component() {
           className={cx(
             "@container relative shrink-0 flex flex-col min-h-0 h-full z-[1] overflow-hidden transition-[width] duration-[240ms] ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none",
             "flex-none",
-            previewOpen ? "min-w-0" : "min-w-[680px]",
+            previewOpen || (sessionId && repairLinks[sessionId]) ? "min-w-0" : "min-w-[680px]",
             !sessionId && "pt-[calc(30vh_-_56px)]",
             sessionCollapsed && "pointer-events-none",
           )}
@@ -91,7 +116,11 @@ export function Component() {
           <div className={cx("min-h-0 relative", sessionId ? "flex-1 overflow-hidden" : "w-full shrink-0 overflow-visible")}>
             {session ? (
               loaded ? (
-                <MessageTimeline session={session} messages={loaded} />
+                <MessageTimeline session={session} messages={loaded} footer={
+                  repairLinks[session.id] && session.status === "idle" && loaded.at(-1)?.role === "assistant" && loaded.at(-1)?.time.completed ? (
+                    <RenderCard kind="evaluation-run" config={{ title: "返回运行记录", desc: "查看评测结果或重新运行" }} onCardClick={() => navigate(repairLinks[session.id])} />
+                  ) : undefined
+                } />
               ) : (
                 <div className="size-full flex items-center justify-center" role="status" aria-label={t("session.messages.loading")}>
                   <div className="session-loading-logo" />

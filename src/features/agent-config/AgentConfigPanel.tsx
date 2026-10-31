@@ -1,5 +1,8 @@
+import { ControlledConfirmDialog } from "@/ui/dialog/ConfirmDialog"
+import { useNavigate } from "react-router"
+import { EvaluationLabel } from "@/features/evaluation/EvaluationPanel"
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState, type CSSProperties, type ReactNode } from "react"
-import { IconButton, SegmentedControl, showToast } from "@/ui"
+import { IconButton, SegmentedControl, showToast, useDialog } from "@/ui"
 import { useT } from "@/i18n"
 import type { Agent } from "@/mock/fixtures/dev"
 import { agentService } from "@/services"
@@ -40,6 +43,13 @@ interface Props {
  */
 export const AgentConfigPanel = forwardRef<AgentConfigHandle, Props>(function AgentConfigPanel(props, ref) {
   const t = useT()
+  const navigate = useNavigate()
+  const dialog = useDialog()
+  const [confirmEvaluation, setConfirmEvaluation] = useState(false)
+  const openEvaluation = () => {
+    dialog.close()
+    navigate(`/dev/agent/${encodeURIComponent(props.agent.id)}/evaluation`)
+  }
   const [tab, setTab] = useState<ConfigTab>("basic")
   const [form, setForm] = useState<AgentForm>(() => formOf(props.agent))
   // 上一次落盘的内容：用来判断有没有未保存的改动、生成改动摘要
@@ -80,13 +90,21 @@ export const AgentConfigPanel = forwardRef<AgentConfigHandle, Props>(function Ag
         className="light-segmented shrink-0 flex items-center justify-between"
       >
         <div className="agent-config-tab-scroll flex-1">
-          <SegmentedControl value={tab} onChange={(value) => setTab(value as ConfigTab)} items={TABS.map((value) => ({ value, label: t(`kcode.agentConfig.tab.${value}`) }))} />
+          <SegmentedControl value={tab} onChange={(value) => {
+            if (value === "evaluation") {
+              if (!readonly && changes().length) setConfirmEvaluation(true)
+              else openEvaluation()
+            } else setTab(value as ConfigTab)
+          }} items={[...TABS.map((value) => ({ value, label: t(`kcode.agentConfig.tab.${value}`) })), {value:"evaluation", label:<EvaluationLabel />}]} />
         </div>
         <div className="ml-3 flex shrink-0 items-center gap-2">
           {props.onRefresh && <IconButton icon="refresh" variant="ghost" iconSize="small" className="h-7 w-7" title={t("session.files.refresh")} onClick={props.onRefresh} />}
           {props.action}
         </div>
       </div>
+      <ControlledConfirmDialog open={confirmEvaluation} onClose={() => setConfirmEvaluation(false)}
+        title="放弃修改并进入评测？" description="智能体配置有未保存的修改，继续将丢弃这些修改"
+        cancelText="继续编辑" confirmText="放弃并进入评测" variant="danger" onConfirm={openEvaluation} />
       {props.subHeader && tab === "basic" && <div className="shrink-0">{props.subHeader}</div>}
       {tab === "role" && (
         <div className="flex-1 min-h-0 pb-5">

@@ -9,3 +9,24 @@ export const db = {
   sessions: structuredClone(fixtures.sessions) as Session[],
   messages: structuredClone(fixtures.messages) as Message[],
 }
+
+// Restore evaluation authoring sessions into the shared session list and timeline.
+try {
+  const saved = JSON.parse(localStorage.getItem("lingee.evaluation-conversations.v1") || "null")
+  for (const item of Object.values(saved?.state?.items || {}) as { session: Session; messages: Message[] }[]) {
+    if (item.session?.id && Array.isArray(item.messages)) {
+      db.sessions.push(item.session)
+      db.messages.push(...item.messages)
+    }
+  }
+} catch { /* Ignore unavailable or malformed browser storage. */ }
+
+try {
+  const saved = JSON.parse(localStorage.getItem("lingee.evaluation-repairs.v1") || "null")
+  for (const item of Object.values(saved?.state?.items || {}) as { session: Session; messages: Message[] }[]) {
+    if (item.session?.id && Array.isArray(item.messages)) {
+      db.sessions.push({ ...item.session, status: "idle" })
+      db.messages.push(...item.messages)
+    }
+  }
+} catch { /* Ignore unavailable or malformed browser storage. */ }

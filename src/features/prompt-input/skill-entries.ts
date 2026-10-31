@@ -12,6 +12,7 @@ export const SKILL_TABS: Array<{ name: string; labelKey: string; iconName: IconN
 
 /** 技能触发名 → 胶囊上展示的名字（触发名本身不变） */
 const SKILL_DISPLAY_NAME_MAP: Record<string, string> = {
+  "evaluation-case-designer": "评测用例设计",
   "app-build": "cosmic-app-builder",
   "kd-frontend-development": "cosmic-kwc-builder",
   "standalone-build": "general-app-builder",

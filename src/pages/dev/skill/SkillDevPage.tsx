@@ -54,10 +54,10 @@ export function SkillDevPage() {
             skills.forEach((skill) => patch(skill.id, route === "personal" ? { personalInstalled: true, changed: false } : { enterpriseStatus: "submitted", changed: false }))
             exitBatch()
           }}
-          onDeleted={(skills) => {
+          onDeleted={async (skills) => {
             const ids = skills.map((x) => x.id)
+            await skillService.remove(ids)
             data.update((items) => items.filter((x) => !ids.includes(x.id)))
-            void skillService.remove(ids)
             exitBatch()
           }}
           onGoFix={(skills) =>

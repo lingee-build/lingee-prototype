@@ -1,3 +1,5 @@
+import { useEvaluationRepairs } from "./evaluation-repair"
+import { useEvaluationConversations } from "./evaluation-conversations"
 import { db } from "@/mock/db"
 import { latency, uid } from "@/mock/latency"
 import { abortStream, resumeStream, runAssistantStream } from "@/mock/stream-engine"
@@ -17,16 +19,26 @@ export const sessionService = {
   update(id: string, patch: Partial<Pick<Session, "title" | "projectId" | "unread">>) {
     const session = db.sessions.find((x) => x.id === id)
     if (session) Object.assign(session, patch)
+    const repair = useEvaluationRepairs.getState().items[id]
+    if (repair && session) useEvaluationRepairs.setState(s => ({ items: { ...s.items, [id]: { ...repair, session: structuredClone(session) } } }))
+    const evalChat = useEvaluationConversations.getState().items[id]
+    if (evalChat && session) useEvaluationConversations.getState().put({ ...evalChat, session: structuredClone(session) })
     return latency(session, 60)
   },
 
   archive(id: string) {
     const session = db.sessions.find((x) => x.id === id)
     if (session) session.time.archived = Date.now()
+    const repair = useEvaluationRepairs.getState().items[id]
+    if (repair && session) useEvaluationRepairs.setState(s => ({ items: { ...s.items, [id]: { ...repair, session: structuredClone(session) } } }))
+    const evalChat = useEvaluationConversations.getState().items[id]
+    if (evalChat && session) useEvaluationConversations.getState().put({ ...evalChat, session: structuredClone(session) })
     return latency(true, 60)
   },
 
   remove(id: string) {
+    useEvaluationRepairs.setState(s => ({ items: Object.fromEntries(Object.entries(s.items).filter(([key]) => key !== id)), links: Object.fromEntries(Object.entries(s.links).filter(([key]) => key !== id)) }))
+    useEvaluationConversations.getState().remove(id)
     db.sessions = db.sessions.filter((x) => x.id !== id)
     db.messages = db.messages.filter((x) => x.sessionId !== id)
     return latency(true, 60)

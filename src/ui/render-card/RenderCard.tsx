@@ -21,6 +21,7 @@ const DESC_KEYS: Record<string, string> = {
 /** kind → 图标：不同产物用不同图标，认不出的兜底 general */
 const KIND_ICON_MAP: Record<string, string> = {
   kdskill: renderCardIcons.skillDev,
+  "evaluation-cases": renderCardIcons.general,
   "ai-partner": renderCardIcons.agentDev,
   "kdapp-prototype": renderCardIcons.prototype,
   kdapp: renderCardIcons.appDev,
@@ -70,6 +71,9 @@ export function RenderCard(props: {
 
   return (
     <div
+      role={(kind === "evaluation-cases" || kind === "evaluation-run") ? "button" : undefined}
+      tabIndex={(kind === "evaluation-cases" || kind === "evaluation-run") ? 0 : undefined}
+      onKeyDown={event => { if ((kind === "evaluation-cases" || kind === "evaluation-run") && !props.disabled && ["Enter", " "].includes(event.key)) { event.preventDefault(); props.onCardClick?.(kind, config) } }}
       data-component="render-card"
       data-preview={isPreview ? "" : undefined}
       data-disabled={props.disabled ? "" : undefined}

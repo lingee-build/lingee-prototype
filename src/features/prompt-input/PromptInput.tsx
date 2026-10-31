@@ -21,7 +21,7 @@ export interface PromptInputProps {
   /** 有值表示在已有会话中（外框变细、下拉向上展开） */
   sessionId?: string
   working: boolean
-  onSubmit: (text: string) => void
+  onSubmit: (text: string, files?: File[]) => void | Promise<void>
   onAbort: () => void
   onCreateProject: () => void
   onSkillChange?: (skill: string | undefined) => void
@@ -105,12 +105,12 @@ export function PromptInput(props: PromptInputProps) {
       setEnhancing(false)
     }, 700)
   }
-  const submit = () => {
+  const submit = async () => {
     if (enhancing) return
     if (props.working) return props.onAbort()
     const text = [editor.current?.value() ?? "", ...attachments.map((item) => `@${item.file.webkitRelativePath || item.file.name}`)].filter(Boolean).join("\n")
     if (!text) return
-    props.onSubmit(text)
+    try { await props.onSubmit(text, attachments.map(item => item.file)) } catch { return }
     clearAttachments()
     setOriginal(undefined)
     editor.current?.clear()
