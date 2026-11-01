@@ -316,12 +316,12 @@ export function EvaluationPanel({ objectId, name, onEnvironmentChange, onDetailC
                   <div className="eval-selection-bar"><label className="eval-check">
                     <input
                       type="checkbox"
-                      ref={node => { if (node) node.indeterminate = visibleCases.some(c => selected.includes(c.id)) && !visibleCases.every(c => selected.includes(c.id)) }}
-                      disabled={!visibleCases.length}
-                      checked={!!visibleCases.length && visibleCases.every((c) => selected.includes(c.id))}
-                      onChange={(e) => setSelected(current => e.target.checked ? [...new Set([...current, ...visibleCases.map(c => c.id)])] : current.filter(id => !visibleCases.some(c => c.id === id)))}
+                      ref={node => { if (node) node.indeterminate = selectedCases.length > 0 && selectedCases.length < cases.length }}
+                      disabled={!cases.length}
+                      checked={!!cases.length && selectedCases.length === cases.length}
+                      onChange={(e) => setSelected(e.target.checked ? cases.map(c => c.id) : [])}
                     />
-                    全选本页
+                    {tr("selectAll")}
                   </label>
                   <Button disabled={!selectedCases.length} onClick={() => removeCases(selectedCases.map(c => c.id))}>删除</Button>
                   {!!selectedCases.length && <><span aria-live="polite">共选 {selectedCases.length} 条{selectionDetails ? `（${selectionDetails}）` : ""}</span><Button onClick={() => setSelected([])}>取消选择</Button></>}
