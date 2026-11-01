@@ -291,8 +291,8 @@ test("points aggregate rounds and judging without treating missing records as ze
   expect(pointsText(runPoints(run))).toBe("消耗点数：1.00")
   expect(buildReportDocument(run)).toContain("消耗点数：1.00")
   const legacy = { ...run.results[0], overallJudgingPoints: undefined, roundResults: run.results[0].roundResults!.map(t => ({ ...t, points: undefined })) }
-  expect(pointsText(casePoints(legacy))).toBe("消耗点数：未完整记录")
-  expect(pointsText(runPoints({ ...run, results: [run.results[0], legacy] }))).toBe("消耗点数：1.00（部分点数，未完整记录）")
+  expect(pointsText(casePoints(legacy))).toBe("消耗点数：暂未获取")
+  expect(pointsText(runPoints({ ...run, results: [run.results[0], legacy] }))).toBe("已获取消耗点数：1.00 · 统计不完整")
 })
 
 test("停止保留前轮失败，后续未开始轮次标记未执行，修复入口可用", async () => {
@@ -506,26 +506,26 @@ test("point queries preserve results and failed refresh keeps last successful qu
   await refreshRunPoints("credits", id, "unavailable")
   const failed = useEvaluation.getState().runs.credits[0]
   expect(failed.pointsQuery!.queriedAt).toBe(queriedAt)
-  expect(pointsText(runPoints(failed))).toContain("已查询点数，暂不可获取")
+  expect(pointsText(runPoints(failed))).toContain("统计不完整")
   expect(failed.results[0].verdict).toBe(original.results[0].verdict)
   expect(failed.results[0].checkResults).toEqual(original.results[0].checkResults)
   expect(failed.status).toBe(original.status)
   expect(useEvaluation.getState().runs.credits).toHaveLength(1)
-  expect(downloaded).toContain("点数查询时间")
+  expect(downloaded).toContain("点数更新时间")
   expect(downloaded).not.toContain("暂不可获取")
   await refreshRunPoints("credits", id, "pending")
-  expect(pointsText(runPoints(useEvaluation.getState().runs.credits[0]))).toContain("部分点数，统计中")
+  expect(pointsText(runPoints(useEvaluation.getState().runs.credits[0]))).toContain("统计中")
   await refreshRunPoints("credits", id, "exhausted")
-  expect(pointsText(runPoints(useEvaluation.getState().runs.credits[0]))).toContain("稍后刷新")
+  expect(pointsText(runPoints(useEvaluation.getState().runs.credits[0]))).toContain("统计不完整")
 })
 
 test("point status distinguishes complete zero, missing and failed query", async () => {
   const { pointsText } = await import("../src/services/evaluation-points")
   const zero = { execution: 0, judging: 0, recorded: true, missing: false }
   expect(pointsText(zero)).toBe("消耗点数：0.00")
-  expect(pointsText({ ...zero, recorded: false, status: "loading" })).toBe("消耗点数：正在查询")
-  expect(pointsText({ ...zero, recorded: false, status: "unavailable" })).toBe("消耗点数：暂不可获取")
-  expect(pointsText({ ...zero, missing: true, status: "pending" })).toContain("部分点数，统计中")
+  expect(pointsText({ ...zero, recorded: false, status: "loading" })).toBe("消耗点数：统计中")
+  expect(pointsText({ ...zero, recorded: false, status: "unavailable" })).toBe("消耗点数：暂未获取")
+  expect(pointsText({ ...zero, missing: true, status: "pending" })).toContain("统计中")
 })
 
 test("point query transient loading is recoverable from storage and legacy state", async () => {
@@ -617,7 +617,7 @@ test("partial round usage retains independent overall snapshot through failure a
   await refreshRunPoints(key, id)
   expect(overallPoints(useEvaluation.getState().runs[key][0].results[0])).toBe(0.16)
   const result = saved.results[0]
-  expect(overallPointsText({ ...result, overallPointsSnapshot: { complete: false } })).toBe("未完整记录")
+  expect(overallPointsText({ ...result, overallPointsSnapshot: { complete: false } })).toBe("消耗点数：暂未获取")
   expect(overallPointsText({ ...result, overallPointsSnapshot: { amount: 0, complete: true } })).toBe("消耗点数：0.00")
   // 旧的部分快照不从当前实时值补写，须成功刷新后恢复明细。
   expect(overallPoints({ ...result, overallPointsSnapshot: undefined })).toBeUndefined()
@@ -629,27 +629,27 @@ test("first query failure never claims a successful snapshot, later failure reta
   const key = "first-query-source"
   const id = startRun(key, "Skill", [{ ...sample, demo: true }])!
   now += 4000; advanceRuns()
-  expect(pointsSourceText(useEvaluation.getState().runs[key][0])).toBe("尚未成功查询，显示本地累计记录")
+  expect(pointsSourceText(useEvaluation.getState().runs[key][0])).toBe("")
   const first = refreshRunPoints(key, id, "unavailable")
   expect(pointsSourceText(useEvaluation.getState().runs[key][0])).not.toContain("已查询点数快照")
   await first
   await useEvaluation.persist.rehydrate()
   const failed = useEvaluation.getState().runs[key][0]
-  expect(pointsSourceText(failed)).toBe("尚未成功查询，显示本地累计记录")
+  expect(pointsSourceText(failed)).toBe("")
   expect(pointsText(runPoints(failed))).not.toContain("已查询点数")
   expect(failed.pointsQuery!.queriedAt).toBeUndefined()
-  expect(buildReportDocument(failed)).toContain("尚未成功查询，显示本地累计记录")
+  expect(buildReportDocument(failed)).toContain("统计不完整")
   await refreshRunPoints(key, id)
   const saved = useEvaluation.getState().runs[key][0].pointsQuery!
-  expect(pointsSourceText(useEvaluation.getState().runs[key][0])).toBe("已查询点数快照")
+  expect(pointsSourceText(useEvaluation.getState().runs[key][0])).toContain("更新于")
   const second = refreshRunPoints(key, id, "unavailable")
-  expect(pointsSourceText(useEvaluation.getState().runs[key][0])).toBe("已查询点数快照")
+  expect(pointsSourceText(useEvaluation.getState().runs[key][0])).toContain("更新于")
   await second
-  expect(pointsSourceText(useEvaluation.getState().runs[key][0])).toBe("已查询点数快照")
+  expect(pointsSourceText(useEvaluation.getState().runs[key][0])).toContain("更新于")
   expect(useEvaluation.getState().runs[key][0].pointsQuery!.amount).toEqual(saved.amount)
   expect(useEvaluation.getState().runs[key][0].pointsQuery!.queriedAt).toBe(saved.queriedAt)
   const unknown = { ...failed, pointsQuery: undefined, results: [] }
-  expect(pointsSourceText(unknown)).toBe("尚未成功查询")
+  expect(pointsSourceText(unknown)).toBe("")
 })
 
 test("repair context updates original ID even with duplicate names and misleading prompt", async () => {
@@ -820,4 +820,51 @@ test("三轮用例中断不新建整体判定，保留失败且后续轮次未�
   const after = useEvaluation.getState().runs["skill:stop-overall"][0].results[0]
   expect(after.checkResults?.[0].verdict).toBe("unknown")
   expect(after.overallJudgingPoints).toBe(0)
+})
+
+test("rerun scopes share repair failures and only detect deletions inside selected scope", async () => {
+  const { latestRunCases, failedRunResults } = await import("../src/services/evaluation")
+  const { repairPrompt, registerEvaluationRepair, useEvaluationRepairs } = await import("../src/services/evaluation-repair")
+  const key = "skill:sk_delivery"
+  const source = ["passed", "failed", "unknown"].map((verdict, i) => ({ ...sample, id: `scope-${i}`, name: verdict, demo: true }))
+  saveCases(key, source)
+  const id = startRun(key, "测试", source)!
+  const run = structuredClone(useEvaluation.getState().runs[key][0])
+  run.status = "completed"
+  run.results.forEach((r, i) => { r.status = "passed"; r.verdict = ["passed", "failed", "unknown"][i] as "passed" | "failed" | "unknown" })
+  const failures = failedRunResults(run).map(c => c.id)
+  expect(failures).toEqual(["scope-1"])
+  expect(repairPrompt(key, run)).toContain('"用例编号": "scope-1"')
+  expect(repairPrompt(key, run)).not.toContain('"用例编号": "scope-2"')
+  saveCases(key, source.slice(1).map(c => ({ ...c, input: "latest" })))
+  expect(latestRunCases(key, run).missing.map(c => c.id)).toEqual(["scope-0"])
+  expect(latestRunCases(key, run, failures).missing).toEqual([])
+  expect(latestRunCases(key, run, failures).cases[0].input).toBe("latest")
+  expect(latestRunCases(key, run, ["scope-2"]).cases.map(c => c.id)).toEqual(["scope-2"])
+  saveCases(key, [])
+  expect(latestRunCases(key, run, failures).cases).toEqual([])
+  expect(latestRunCases(key, run, failures).missing).toHaveLength(1)
+  const session = { id: "single-return", projectId: "project", title: "修复", status: "idle" as const, time: { created: now, updated: now } }
+  registerEvaluationRepair(session, "修复", { objectType: "skill", objectId: "sk_delivery", runId: id, resultId: "scope-1" })
+  expect(useEvaluationRepairs.getState().links[session.id]).toEndWith(`?run=${id}&focusCase=scope-1`)
+})
+
+test("自动点数更新有上限，重新进入恢复查询且不创建运行", async () => {
+  const { updateAutomaticPoints, resumeRunPoints } = await import("../src/services/evaluation-points")
+  const id = startRun("auto-points", "Skill", [{ ...sample, demo: true }])!
+  await Promise.all([updateAutomaticPoints(now), updateAutomaticPoints(now)])
+  expect(useEvaluation.getState().runs['auto-points'][0].pointsQuery?.status).toBe("pending")
+  now += 4000; advanceRuns()
+  // 模拟缺失的历史点数，不能凭空补成零。
+  useEvaluation.setState(s => ({ runs: { ...s.runs, 'auto-points': s.runs['auto-points'].map(r => ({ ...r, results: r.results.map(c => ({ ...c, overallJudgingPoints: undefined })) })) } }))
+  for (let i = 0; i < 3; i++) { now += 6000; await updateAutomaticPoints(now) }
+  const run = structuredClone(useEvaluation.getState().runs['auto-points'][0])
+  expect(run.pointsQuery?.status).toBe("missing")
+  now += 6000; await updateAutomaticPoints(now)
+  expect(useEvaluation.getState().runs['auto-points'][0].pointsQuery?.queriedAt).toBe(run.pointsQuery?.queriedAt)
+  resumeRunPoints('auto-points', id)
+  await updateAutomaticPoints(now)
+  expect(useEvaluation.getState().runs['auto-points'][0].pointsQuery?.queriedAt).toBe(now)
+  expect(useEvaluation.getState().runs['auto-points']).toHaveLength(1)
+  expect(useEvaluation.getState().runs['auto-points'][0].results[0].response).toBe(run.results[0].response)
 })

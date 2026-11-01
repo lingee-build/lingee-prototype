@@ -1,6 +1,6 @@
 import { DatePicker } from "@/ui/date-picker/DatePicker"
 import { completeEvaluationSample } from "@/services/evaluation-samples"
-import { casePoints, runPoints, pointsText, pointsSourceText, refreshRunPoints } from "@/services/evaluation-points"
+import { casePoints, runPoints, pointsText, pointsSourceText, refreshRunPoints, resumeRunPoints, updateAutomaticPoints } from "@/services/evaluation-points"
 import { useEditSession } from "@/features/dev-page/use-edit-session"
 import { devStore } from "@/mock/dev-store"
 import { evaluationRepairObject, repairPrompt, repairDisabledReason, registerEvaluationRepair } from "@/services/evaluation-repair"
@@ -19,6 +19,7 @@ import { useT, useLocaleStore } from "@/i18n"
 import {
   turnsOf,
   latestRunCases,
+  failedRunResults,
   currentEvaluationEnvironment,
   environmentLabel,
   type EvalEnvironment,
@@ -58,7 +59,7 @@ export function EvaluationPanel({ objectId, name, onEnvironmentChange, onDetailC
     setOpeningRepair(true)
     try {
       const session = await editSession({ title: `修复评测问题 · ${name}`, draft, projectId: target.projectId, requireProject: true, target: target.editTarget })
-      if (session) registerEvaluationRepair(session, draft, { objectType: target.objectType, objectId: target.objectId, runId: run.id })
+      if (session) registerEvaluationRepair(session, draft, { objectType: target.objectType, objectId: target.objectId, runId: run.id, resultId })
       else setNotice("评测对象所属项目不存在或不可用，请恢复所属项目后重试")
     } catch { setNotice(`无法打开${objectId.startsWith("agent:") ? "智能体" : "技能"}开发会话，请重试`) }
     finally { setOpeningRepair(false) }
@@ -76,7 +77,7 @@ export function EvaluationPanel({ objectId, name, onEnvironmentChange, onDetailC
   const section = runId || resultId || reportRequested || searchParams.get("tab") === "runs" ? "runs" : "cases"
   function openView(view: { section: "cases" | "runs"; runId?: string; resultId?: string; report?: boolean }) {
     const next = new URLSearchParams(searchParams)
-    for (const key of ["tab", "run", "case", "view"]) next.delete(key)
+    for (const key of ["tab", "run", "case", "view", "focusCase"]) next.delete(key)
     if (view.section === "runs") next.set("tab", "runs")
     if (view.runId) {
       next.set("run", view.runId)
@@ -147,6 +148,20 @@ export function EvaluationPanel({ objectId, name, onEnvironmentChange, onDetailC
     return () => clearTimeout(timer)
   }, [notice])
   const current = runs.find((r) => r.id === runId)
+  const focusCase = searchParams.get("focusCase")
+  useEffect(() => {
+    if (!focusCase || !current || resultId || reportRequested) return
+    const row = document.getElementById(`eval-case-result-${focusCase}`)
+    if (row) {
+      setLocatedCase({ id: focusCase })
+      row.scrollIntoView({ block: "center", behavior: "instant" })
+      row.focus({ preventScroll: true })
+    }
+  }, [focusCase, current?.id, resultId, reportRequested])
+  useEffect(() => {
+    for (const run of useEvaluation.getState().runs[objectId] || []) resumeRunPoints(objectId, run.id)
+    void updateAutomaticPoints()
+  }, [objectId, runId])
   const report = reportRequested && !!current && !isActiveRun(current)
   useEffect(() => { onEnvironmentChange?.(section === "runs" && current ? current.environment : currentEvaluationEnvironment) }, [section, current?.id, current?.environment, onEnvironmentChange])
   const detailOpen = section === "cases" ? !!viewCase || !!(editorOpen && draft) : !!current
@@ -181,10 +196,11 @@ export function EvaluationPanel({ objectId, name, onEnvironmentChange, onDetailC
       openView({ section: "runs", runId: id })
     }
   }
-  function rerun(run: EvalRun) {
-    const latest = latestRunCases(objectId, run)
+  function rerun(run: EvalRun, ids = run.results.map(c => c.id)) {
+    if (!ids.length || busy) return
+    const latest = latestRunCases(objectId, run, ids)
     if (!latest.cases.length) {
-      dialog.show(() => <ConfirmDialog title="无法重新运行" description="本次运行的用例已全部删除，请返回用例列表选择用例" confirmText="返回用例列表" cancelText="取消" onConfirm={() => openView({ section: "cases" })} />)
+      dialog.show(() => <ConfirmDialog title="无法重新运行" description="所选范围内的用例已全部删除，请返回用例列表选择用例" confirmText="返回用例列表" cancelText="取消" onConfirm={() => openView({ section: "cases" })} />)
       return
     }
     const execute = () => begin(latest.cases)
@@ -377,7 +393,7 @@ export function EvaluationPanel({ objectId, name, onEnvironmentChange, onDetailC
               {visibleRuns.map((run) => (
                 <div className="eval-row" key={run.id}>
                   <div className="eval-grow">
-                    <span className="eval-list-name">{date(run.started)}</span>
+                    <button className="eval-title eval-list-name" onClick={() => openView({ section: "runs", runId: run.id })}>{date(run.started)}</button>
                     <p className="eval-muted">
                       {run.results.length} {tr("caseUnit")} · {run.results.filter((c) => verdictLabel(c) === "通过").length} {tr("passed")} · {pointsText(runPoints(run))}
                     </p>
@@ -408,7 +424,6 @@ export function EvaluationPanel({ objectId, name, onEnvironmentChange, onDetailC
                   onClick={() => openView({ section: "runs", runId: resultId || reportRequested ? current.id : undefined })}
                 />
                 <div className="eval-actions">
-                  <Button disabled={current.pointsQuery?.status === "loading"} onClick={() => void refreshRunPoints(objectId, current.id)}>{current.pointsQuery?.status === "loading" ? "正在查询点数…" : "刷新点数"}</Button>
                   <Tooltip value={repairReason} inactive={!repairReason}>
                     <Button className="eval-repair-action" aria-disabled={!!repairReason} onClick={() => { if (!repairReason) void repair(current, result?.id) }}>{result ? "去修复" : "修复问题"}</Button>
                   </Tooltip>
@@ -421,9 +436,15 @@ export function EvaluationPanel({ objectId, name, onEnvironmentChange, onDetailC
                       >
                         {tr("report")}
                       </Button>}
-                      <BrandButton variant="primary" disabled={busy} onClick={() => rerun(current)} title="使用本次所选用例的最新内容运行">
-                        重新运行
-                      </BrandButton>
+                      {!result && !report && <DropdownMenu placement="bottom-end">
+                        <DropdownMenu.Trigger asChild>
+                          <BrandButton variant="primary" disabled={busy} title={busy ? "当前对象有活动评测，请等待结束" : "选择范围，使用最新已保存内容运行"}>重新运行 <Icon name="chevron-down" size="small" /></BrandButton>
+                        </DropdownMenu.Trigger>
+                        <DropdownMenu.Portal><DropdownMenu.Content>
+                          <DropdownMenu.Item onSelect={() => rerun(current)}>本次全部用例（{current.results.length}）</DropdownMenu.Item>
+                          <DropdownMenu.Item disabled={!failedRunResults(current).length} onSelect={() => rerun(current, failedRunResults(current).map(c => c.id))}>不通过用例（{failedRunResults(current).length}）</DropdownMenu.Item>
+                        </DropdownMenu.Content></DropdownMenu.Portal>
+                      </DropdownMenu>}
                     </>
                   )}
                 </div>
@@ -437,10 +458,9 @@ export function EvaluationPanel({ objectId, name, onEnvironmentChange, onDetailC
                 {current.status === "judging" && <p role="status">业务执行已结束，正在完成标准判定；判定结束前不能重跑或下载最终报告。</p>}
                 {current.status === "stopping" && <p role="status">正在停止执行与判定任务，保留已有证据；确认停止前不能重跑。</p>}
                 {current.stopReason && <p role="status">{current.status === "cancelled" ? "已确认运行停止。" : current.stopReason}</p>}
-                <p className="eval-muted">对象内容标识或摘要：{current.objectContentSummary || "未记录"}</p>
+                <details className="eval-muted"><summary>运行信息</summary><p>评测时的{current.objectType === "agent" ? "智能体" : "技能"}版本：{current.objectContentSummary || "未记录"}</p><p>运行编号：{current.id}</p></details>
                 <p className="eval-muted">{current.objectType === "agent" ? "智能体" : current.objectType === "skill" ? "技能" : "评测对象"} · {current.name} · {environmentLabel(current.environment)}</p>
-                <p className="eval-muted">{pointsText(runPoints(current), true)} · {pointsSourceText(current)}</p>
-                {(current.pointsQuery?.status === "missing" || !current.pointsQuery && runPoints(current).missing) && <p className="eval-muted">部分点数记录或计费标识缺失，无法确认完整消耗；不以 0 替代。</p>}
+                <p className="eval-muted">{pointsText(runPoints(current), true)}{pointsSourceText(current) && ` · ${pointsSourceText(current)}`}</p>
                 <div className="eval-counts">
                   {["通过", "不通过", "无法判定"].map((s) => (
                     <span key={s}>
@@ -475,7 +495,7 @@ export function EvaluationPanel({ objectId, name, onEnvironmentChange, onDetailC
                 )}
               </div>}
               {report && !isActiveRun(current) && <ReportPreview html={buildReportDocument(current, t)} />}
-              {!report && <div className="eval-prototype-tools" aria-label="点数状态演示"><span>原型辅助</span>{([ ["pending", "统计中"], ["unavailable", "查询失败"], ["exhausted", "查询重试结束"] ] as const).map(([mode, label]) => <Button className="eval-prototype-action" disabled={current.pointsQuery?.status === "loading"} onClick={() => void refreshRunPoints(objectId, current.id, mode)}>模拟{label}（仅原型）</Button>)}</div>}
+              {!report && <details className="eval-prototype-tools" aria-label="点数状态演示"><summary>原型演示工具</summary>{([ ["pending", "统计中"], ["unavailable", "查询失败"], ["exhausted", "查询重试结束"] ] as const).map(([mode, label]) => <Button key={mode} className="eval-prototype-action" disabled={current.pointsQuery?.status === "loading"} onClick={() => void refreshRunPoints(objectId, current.id, mode)}>模拟{label}（仅原型）</Button>)}</details>}
               {!report && isActiveRun(current) && <div className="eval-prototype-tools" aria-label="运行状态演示">
                 <span>原型辅助</span>
                 {["running", "judging"].includes(current.status) && <Button className="eval-prototype-action" onClick={() => requestCancelRun(objectId, current.id, true)}>模拟停止无响应（仅原型）</Button>}
@@ -499,6 +519,7 @@ export function EvaluationPanel({ objectId, name, onEnvironmentChange, onDetailC
                     >
                       {tr("view")}
                     </Button>}
+                    {!isActiveRun(current) && verdictLabel(c) !== "通过" && <Button disabled={busy} onClick={() => rerun(current, [c.id])} title={busy ? "当前对象有活动评测，请等待结束" : `仅重新运行：${c.name}`}>重新运行</Button>}
                   </div>
                 ))}
               {!report && result && (

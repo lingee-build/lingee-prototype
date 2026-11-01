@@ -98,7 +98,7 @@ test("P2 报告使用历史判定快照并显式展示缺失的对象内容", ()
   delete value.objectContentSummary
   html = buildReportDocument(value)
   expect(html).toContain("历史运行未记录详细判定口径")
-  expect(html).toContain("<dt>对象内容标识或摘要</dt><dd>未记录</dd>")
+  expect(html).toContain("<dt>评测时的对象版本</dt><dd>未记录</dd>")
   expect(html).not.toContain("整体标准检查最后一轮最终回复")
 })
 

@@ -156,10 +156,13 @@ export function saveCases(key: string, cases: EvalCase[]) {
   useEvaluation.setState({ error: false })
   return true
 }
-export function latestRunCases(key: string, run: EvalRun) {
+export function failedRunResults(run: EvalRun) {
+  return run.results.filter(c => verdictLabel(c) === "不通过")
+}
+export function latestRunCases(key: string, run: EvalRun, resultIds = run.results.map(c => c.id)) {
   const latest = useEvaluation.getState().cases[key] || []
-  const ids = new Set(run.results.map(c => c.id))
-  return { cases: latest.filter(c => ids.has(c.id)), missing: run.results.filter(c => !latest.some(item => item.id === c.id)) }
+  const ids = new Set(resultIds)
+  return { cases: latest.filter(c => ids.has(c.id)), missing: run.results.filter(c => ids.has(c.id) && !latest.some(item => item.id === c.id)) }
 }
 export function startRun(key: string, name: string, cases: EvalCase[], environment: EvalEnvironment = currentEvaluationEnvironment) {
   if (evaluationObjectUnavailable(key) || environment !== "sandbox" || !cases.length || useEvaluation.getState().runs[key]?.some(isActiveRun)) return undefined

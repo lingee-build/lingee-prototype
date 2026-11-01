@@ -3,9 +3,9 @@ import { translate, useLocaleStore } from "@/i18n"
 import { create } from "zustand"
 import { createJSONStorage, persist } from "zustand/middleware"
 import { devStore } from "@/mock/dev-store"
-import { environmentLabel, evaluationObjectUnavailable, verdictLabel, type EvalRun } from "./evaluation"
+import { environmentLabel, failedRunResults, evaluationObjectUnavailable, verdictLabel, type EvalRun } from "./evaluation"
 
-export type EvaluationRepairTarget = { objectType: "skill" | "agent"; objectId: string; runId: string }
+export type EvaluationRepairTarget = { objectType: "skill" | "agent"; objectId: string; runId: string; resultId?: string }
 type StoredRepairTarget = EvaluationRepairTarget | { skillId: string; runId: string }
 
 export const useEvaluationRepairs = create<{ links: Record<string, string>; items: Record<string, { session: Session; messages: Message[]; draft: string; target?: StoredRepairTarget }> }>()(persist(() => ({ links: {}, items: {} }), { name: "lingee.evaluation-repairs.v1", storage: createJSONStorage(() => ({ getItem: key => localStorage.getItem(key), setItem: (key, value) => localStorage.setItem(key, value), removeItem: key => localStorage.removeItem(key) })) }))
@@ -22,7 +22,7 @@ export function evaluationRepairObject(key: string) {
 export function registerEvaluationRepair(session: Session, draft: string, target: EvaluationRepairTarget) {
   useEvaluationRepairs.setState(s => ({
     items: { ...s.items, [session.id]: { session, messages: [], draft, target } },
-    links: { ...s.links, [session.id]: `/dev/${target.objectType}/${encodeURIComponent(target.objectId)}/evaluation?run=${encodeURIComponent(target.runId)}` },
+    links: { ...s.links, [session.id]: `/dev/${target.objectType}/${encodeURIComponent(target.objectId)}/evaluation?run=${encodeURIComponent(target.runId)}${target.resultId ? `&focusCase=${encodeURIComponent(target.resultId)}` : ""}` },
   }))
 }
 
@@ -51,7 +51,7 @@ export function repairPrompt(objectId: string, run: EvalRun, resultId?: string) 
   const label = kind === "agent" ? "智能体" : "技能"
   const creator = kind === "agent" ? "ai-partner-creator" : "kingdee-skill-creator"
   const scope = kind === "agent" ? "不默认改写所挂载技能或知识源；涉及这些对象的问题应在分析中说明。" : ""
-  const results = run.results.filter(r => verdictLabel(r) === "不通过" && (!resultId || r.id === resultId))
+  const results = failedRunResults(run).filter(r => !resultId || r.id === resultId)
   if (!results.length) return ""
   // 只序列化业务证据，不把附件二进制或整份报告灌入输入框。
   const attachments = (items: { id: string; name: string }[] = []) => items.map(a => ({ id: a.id, name: a.name }))
@@ -80,5 +80,5 @@ export function repairDisabledReason(objectId: string, run: EvalRun, editable: b
     if (verdictLabel(result) === "通过") return "此用例已通过，无需修复"
     return "暂无明确的不通过依据，请先检查执行结果"
   }
-  return run.results.some(r => verdictLabel(r) === "不通过") ? "" : "本次运行没有可修复的不通过用例"
+  return failedRunResults(run).length > 0 ? "" : "本次运行没有可修复的不通过用例"
 }
