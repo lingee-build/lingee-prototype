@@ -29,12 +29,24 @@ export function ReportPreview({ html }: { html: string }) {
       }
       const observer = new ResizeObserver(resize)
       observer.observe(document.body)
+      const syncControls = () => {
+        document.querySelectorAll<HTMLButtonElement>("[data-cases],[data-rounds]").forEach(button => {
+          const all = button.hasAttribute("data-cases")
+          const items = Array.from((all ? document : button.closest(".case"))?.querySelectorAll<HTMLDetailsElement>(all ? "details.case" : "details.round") || [])
+          const expanded = items.length > 0 && items.every(item => item.open)
+          button.textContent = expanded ? "全部折叠" : "全部展开"
+          button.disabled = items.length === 0
+        })
+      }
       const navigate = (event: MouseEvent) => {
         const button = (event.target as Element | null)?.closest?.("[data-cases],[data-rounds]") as HTMLElement | null
         if (button) {
           const all = button.hasAttribute("data-cases")
           const scope = all ? document : button.closest(".case")
-          scope?.querySelectorAll<HTMLDetailsElement>(all ? "details.case" : "details.round").forEach(item => { item.open = (button.dataset.cases || button.dataset.rounds) === "open" })
+          const items = Array.from(scope?.querySelectorAll<HTMLDetailsElement>(all ? "details.case" : "details.round") || [])
+          const open = !items.every(item => item.open)
+          items.forEach(item => { item.open = open })
+          syncControls()
           resize()
         }
         const link = (event.target as Element | null)?.closest?.('a[href^="#"]')
@@ -61,12 +73,15 @@ export function ReportPreview({ html }: { html: string }) {
         })
       }
       window.addEventListener("scroll", trackSection, true)
+      document.addEventListener("toggle", syncControls, true)
+      syncControls()
       document.addEventListener("click", navigate)
       resize()
       disconnectDocument = () => {
         window.removeEventListener("scroll", trackSection, true)
         cancelAnimationFrame(tick)
         observer.disconnect()
+        document.removeEventListener("toggle", syncControls, true)
         document.removeEventListener("click", navigate)
       }
     }
