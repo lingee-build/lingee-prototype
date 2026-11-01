@@ -173,6 +173,9 @@ export function EvaluationPanel({ objectId, name, onEnvironmentChange, onDetailC
     : ""
   const repairReason = openingRepair ? "正在打开开发会话" : current ? repairDisabledReason(objectId, current, !!evaluationRepairObject(objectId), result?.id) : ""
   const selectedCases = cases.filter((c) => selected.includes(c.id))
+  const selectedOutsideSearch = selectedCases.filter(c => !filteredCases.some(item => item.id === c.id)).length
+  const selectedOnOtherPages = selectedCases.filter(c => filteredCases.some(item => item.id === c.id) && !visibleCases.some(item => item.id === c.id)).length
+  const selectionDetails = [selectedOutsideSearch && `搜索结果外 ${selectedOutsideSearch} 条`, selectedOnOtherPages && `其他页 ${selectedOnOtherPages} 条`].filter(Boolean).join("，")
   const savedDraft = draft ? cases.find((c) => c.id === draft.id) : undefined
   const draftChanged = !!draft && (savedDraft ? JSON.stringify(draft) !== JSON.stringify(savedDraft) : !!(draft.checks?.length || draft.name.trim() || turnsOf(draft).some(t => t.input.trim() || t.checks?.length || t.expected.trim() || t.attachments.length || t.rules.length) || draft.attachments?.length))
   const unsaved = editorOpen && draftChanged
@@ -212,7 +215,7 @@ export function EvaluationPanel({ objectId, name, onEnvironmentChange, onDetailC
     dialog.show(() => <ConfirmDialog title={ids.length > 1 ? `删除所选 ${ids.length} 条用例？` : "删除这条用例？"}
       description="删除后无法恢复，已有运行记录和报告保留" cancelText="取消" confirmText="删除" variant="danger"
       onConfirm={() => {
-        if (!saveCases(objectId, (useEvaluation.getState().cases[objectId] || []).filter(item => !ids.includes(item.id)))) { setNotice("删除保存失败，请重试"); return }
+        if (!saveCases(objectId, (useEvaluation.getState().cases[objectId] || []).filter(item => !ids.includes(item.id)))) { setNotice("删除失败，请重试"); return }
         setSelected(current => current.filter(id => !ids.includes(id)))
         setNotice(`已删除 ${ids.length} 条用例`, true)
       }} />)
@@ -289,7 +292,7 @@ export function EvaluationPanel({ objectId, name, onEnvironmentChange, onDetailC
             <div className="eval-case-list">
               <div className="eval-toolbar eval-case-toolbar">
                   <input className="eval-case-search" type="search" aria-label="搜索用例名称" placeholder="搜索用例名称" value={caseSearch}
-                    onChange={e => { setCaseSearch(e.target.value); setCasePage(1); setSelected([]) }} />
+                    onChange={e => { setCaseSearch(e.target.value); setCasePage(1) }} />
                 <div className="eval-actions eval-case-toolbar-actions">
                   <DropdownMenu placement="bottom-start">
                     <DropdownMenu.Trigger asChild>
@@ -324,7 +327,7 @@ export function EvaluationPanel({ objectId, name, onEnvironmentChange, onDetailC
                     全选本页
                   </label>
                   <Button disabled={!selectedCases.length} onClick={() => removeCases(selectedCases.map(c => c.id))}>删除</Button>
-                  {!!selectedCases.length && <><span aria-live="polite">共选 {selectedCases.length} 条{selectedCases.some(c => !visibleCases.some(v => v.id === c.id)) ? `（其他页 ${selectedCases.filter(c => !visibleCases.some(v => v.id === c.id)).length} 条）` : ""}</span><Button onClick={() => setSelected([])}>取消选择</Button></>}
+                  {!!selectedCases.length && <><span aria-live="polite">共选 {selectedCases.length} 条{selectionDetails ? `（${selectionDetails}）` : ""}</span><Button onClick={() => setSelected([])}>取消选择</Button></>}
                   </div>
               {caseSearch.trim() && !selectedCases.length && !busy && <p className="eval-muted">运行范围包含搜索结果之外的用例，共 {cases.length} 条。</p>}
               {filteredCases.length ? (
@@ -350,7 +353,7 @@ export function EvaluationPanel({ objectId, name, onEnvironmentChange, onDetailC
                 </>
               ) : (
                 <div className="eval-empty">
-                  <Empty description={caseSearch.trim() ? "未找到匹配的用例" : tr("emptyCases")} />
+                  <Empty description={caseSearch.trim() ? "未找到匹配的用例" : "还没有用例，点击“新增用例”开始准备"} />
                 </div>
               )}
 
@@ -362,12 +365,12 @@ export function EvaluationPanel({ objectId, name, onEnvironmentChange, onDetailC
                   <Button disabled={currentCasePage === casePageCount} onClick={() => setCasePage(currentCasePage + 1)}>下一页</Button>
                 </div>
               </nav>}
-              <div className="eval-prototype-tools" aria-label="原型辅助">
-                <span className="eval-muted">原型辅助</span>
+              <details className="eval-prototype-tools" aria-label="原型辅助">
+                <summary>原型演示工具</summary>
                 <Tooltip value="用于演示，不纳入正式功能"><Button className="eval-prototype-action" onClick={samples}>
                   {tr("samples")}（仅原型）
                 </Button></Tooltip>
-              </div>
+              </details>
             </div>
           )}
           {section === "runs" && !current && (
@@ -387,7 +390,7 @@ export function EvaluationPanel({ objectId, name, onEnvironmentChange, onDetailC
               {invalidRunRange && <p id="eval-date-error" className="eval-field-error" role="alert">开始日期不能晚于结束日期</p>}
               {!filteredRuns.length && !invalidRunRange && (
                 <div className="eval-empty">
-                  <Empty description={runStartDate || runEndDate ? "该时间范围内暂无运行记录" : tr("emptyRuns")} />
+                  <Empty description={runStartDate || runEndDate ? "该时间范围内暂无运行记录" : "还没有运行记录，先到“评测用例”选择用例并运行"} />
                 </div>
               )}
               {visibleRuns.map((run) => (
@@ -496,11 +499,11 @@ export function EvaluationPanel({ objectId, name, onEnvironmentChange, onDetailC
               </div>}
               {report && !isActiveRun(current) && <ReportPreview html={buildReportDocument(current, t)} />}
               {!report && <details className="eval-prototype-tools" aria-label="点数状态演示"><summary>原型演示工具</summary>{([ ["pending", "统计中"], ["unavailable", "查询失败"], ["exhausted", "查询重试结束"] ] as const).map(([mode, label]) => <Button key={mode} className="eval-prototype-action" disabled={current.pointsQuery?.status === "loading"} onClick={() => void refreshRunPoints(objectId, current.id, mode)}>模拟{label}（仅原型）</Button>)}</details>}
-              {!report && isActiveRun(current) && <div className="eval-prototype-tools" aria-label="运行状态演示">
-                <span>原型辅助</span>
+              {!report && isActiveRun(current) && <details className="eval-prototype-tools" aria-label="运行状态演示">
+                <summary>运行状态演示（仅原型）</summary>
                 {["running", "judging"].includes(current.status) && <Button className="eval-prototype-action" onClick={() => requestCancelRun(objectId, current.id, true)}>模拟停止无响应（仅原型）</Button>}
                 {current.status === "stop_unconfirmed" && <><Button className="eval-prototype-action" onClick={() => cancelRun(objectId, current.id)}>模拟核实已停止（仅原型）</Button><Button className="eval-prototype-action" onClick={() => cancelRun(objectId, current.id, "error")}>模拟核实运行异常（仅原型）</Button></>}
-              </div>}
+              </details>}
               {!report && !result &&
                 current.results.map((c) => (
                   <div key={c.id} id={`eval-case-result-${c.id}`} tabIndex={-1} data-located={locatedCase?.id === c.id || undefined} className="eval-row eval-result-row">

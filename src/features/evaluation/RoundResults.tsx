@@ -19,7 +19,7 @@ export function CheckResults({ checks, results, label }: { checks: EvalCheck[]; 
   if (!checks.length) return null
   return <section className="eval-check-results"><h3 className="eval-section-title">{label} <span className="eval-section-count">（{checks.length}）</span></h3>
     {checks.some(c => ["keyword", "regex"].includes(checkKind(c))) && <p className="eval-muted">文本检查范围：{label === "整体评测标准" ? "最后一轮最终回复" : "本轮最终回复"}。</p>}
-    {checks.some(c => checkKind(c) === "file") && <p className="eval-muted">文件存在性范围：仅检查产物文件是否存在，不检查内容。</p>}
+    {checks.some(c => checkKind(c) === "file") && <p className="eval-muted">只检查生成的文件是否存在，不检查文件内容。</p>}
     {checks.map((check, index) => {
     const result = results?.find(c => c.id === check.id)
     const kind = checkKind(check)
@@ -28,7 +28,7 @@ export function CheckResults({ checks, results, label }: { checks: EvalCheck[]; 
         <div className="eval-result-check-heading"><span className="eval-result-check-kind"><CheckTypeIcon kind={kind} />{checkTypeNames[kind]}</span>{kind !== "natural" && <span>{checkMethod(check)}</span>}</div>
         {kind === "keyword" ? <div className="eval-result-keywords">{check.text.split("\n").map(v => v.trim()).filter(Boolean).map((v, i) => <span className="eval-keyword" key={i}>{v}</span>)}</div> : <div className={kind === "regex" || kind === "file" ? "eval-check-literal" : undefined}>{kind === "natural" ? checkDescription(check) : check.text}</div>}
       </div><span className="eval-status" data-status={result?.verdict}>{result ? verdicts[result.verdict] : "暂无判定"}</span></summary>
-      <dl className="eval-result-evidence"><dt>实际结果</dt><dd>{result?.actual || "未记录逐项评测结果。"}</dd><dt>判定依据</dt><dd>{result?.evidence || "暂无对应证据。"}</dd>{kind === "file" && result?.fileEvidence && <><dt>产物路径</dt><dd>{result.fileEvidence.path}</dd><dt>检查时点</dt><dd>{fileCheckTime(result.fileEvidence)}</dd></>}</dl>
+      <dl className="eval-result-evidence"><dt>实际结果</dt><dd>{result?.actual || "未记录逐项评测结果。"}</dd><dt>判定依据</dt><dd>{result?.evidence || "暂无对应证据。"}</dd>{kind === "file" && result?.fileEvidence && <><dt>文件路径</dt><dd>{result.fileEvidence.path}</dd><dt>检查时间</dt><dd>{fileCheckTime(result.fileEvidence)}</dd></>}</dl>
     </details>
   })}</section>
 }
@@ -64,7 +64,7 @@ export function RoundResults({ result }: { result: EvalResult }) {
 
     <CheckResults label="整体评测标准" checks={result.checks || []} results={result.checkResults} />
     <Files files={result.attachments || []} label="会话附件" />
-    <div className="eval-toolbar"><h3>对话轮次（{rounds.length}）</h3><div className="eval-actions"><Button onClick={() => setAll(!allExpanded)}>{allExpanded ? "全部折叠" : "全部展开"}</Button></div></div>
+    <div className="eval-toolbar"><h3>对话轮次（{rounds.length}）</h3><div className="eval-actions">{rounds.length > 1 && <Button onClick={() => setAll(!allExpanded)}>{allExpanded ? "全部折叠" : "全部展开"}</Button>}</div></div>
     {rounds.map((turn, i) => <TurnCard key={turn.id} turnId={turn.id} number={i + 1} input={turn.input}
       meta={isOpen(turn) ? "" : [turn.attachments.length && `附件 ${turn.attachments.length}`, turn.rules.length && `澄清回复 ${turn.rules.length}`, checksOf(turn).length && `评测标准 ${checksOf(turn).length}`].filter(Boolean).join(" · ")}
       status={<span className="eval-status" data-status={{ "通过": "passed", "不通过": "failed", "无法判定": "unknown" }[turnVerdict(turn, t)]}>{turnVerdict(turn, t)}</span>}
@@ -86,7 +86,7 @@ export function RoundResults({ result }: { result: EvalResult }) {
       <details className="eval-message"><summary>澄清过程</summary><p>{clarificationText(turn)}</p></details>
       {"issue" in turn && turn.issue && <div className="eval-message"><strong>执行异常</strong><dl className="eval-result-evidence"><dt>发生阶段</dt><dd>{executionIssues[turn.issue].stage}</dd><dt>原因</dt><dd>{executionIssues[turn.issue].reason}</dd><dt>处理建议</dt><dd>{executionIssues[turn.issue].action}</dd></dl></div>}
       {"tool" in turn && turn.tool && <div className="eval-message"><strong>工具调用</strong><p>{turn.tool}</p></div>}
-      <div className="eval-message"><strong>执行回复</strong><p>{responseText(turn, t)}</p></div>
+      <div className="eval-message"><strong>实际回复</strong><p>{responseText(turn, t)}</p></div>
       <CheckResults label="评测标准" checks={checksOf(turn)} results={"checkResults" in turn ? turn.checkResults as CheckResult[] : undefined} />
       {!("checkResults" in turn && (turn.checkResults as CheckResult[] | undefined)?.length) && <div className="eval-message"><strong>判定依据</strong><p>{turn.evidence ? t(turn.evidence) : turn.status === "skipped" ? "本轮未执行。" : turn.status === "cancelled" ? "本轮已停止，未生成判定依据。" : t("proto.eval.waiting")}</p></div>}
     </TurnCard>)}

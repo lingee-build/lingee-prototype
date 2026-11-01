@@ -63,7 +63,7 @@ export const evaluationZh: Record<string, string> = {
   "proto.eval.toolDone": "调用完成，返回 1 条业务记录。",
   "proto.eval.response": "执行回复",
   "proto.eval.waiting": "执行结束后展示依据。",
-  "proto.eval.storageError": "数据保存失败，当前编辑内容已保留。请恢复存储后重试保存；运行记录可能未持久化。",
+  "proto.eval.storageError": "浏览器未能保存数据。请保留当前页面并稍后重试；本次编辑和运行记录可能无法在关闭页面后保留。",
   "proto.eval.sample.passed": "明确需求：返回完整业务结果",
   "proto.eval.sample.failed": "缺少条件：应先询问再执行",
   "proto.eval.sample.blocked": "外部工具：验证执行环境支持",

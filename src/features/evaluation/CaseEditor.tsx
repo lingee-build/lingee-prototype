@@ -13,7 +13,10 @@ import { caseValidation, checkKind, checkOperators, checkValidation, checkDescri
 
 function useDeleteConfirmation() {
   const dialog = useDialog()
-  return (title: string, description: string, onConfirm: () => void) => dialog.show(() => <ConfirmDialog variant="danger" title={title} description={description} cancelText="取消" confirmText="删除" onConfirm={onConfirm} />)
+  return (title: string, description: string, onConfirm: () => void, hasContent = true) => {
+    if (!hasContent) { onConfirm(); return }
+    dialog.show(() => <ConfirmDialog variant="danger" title={title} description={description} cancelText="取消" confirmText="删除" onConfirm={onConfirm} />)
+  }
 }
 
 export function AttachmentInput({ files, onChange, label, tip, children, onUploadingChange }: { onUploadingChange?: (uploading: boolean) => void; children?: React.ReactNode; files: EvalAttachment[]; onChange: (files: EvalAttachment[]) => void; label: string; tip?: string }) {
@@ -90,6 +93,7 @@ function CheckEditor({ label, checks, onChange, fieldProps, fieldError }: {
         </DropdownMenu>
       </div>
     </div>
+    {!checks.length && <p className="eval-muted">{label === "整体评测标准" ? "检查整段对话是否完成任务；已有本轮标准时，这里可以不填。" : "写清这一轮怎样才算做对。例如：缺少单号时先询问，不自行编造。"}</p>}
     {checks.some(c => c.kind === "keyword" || c.kind === "regex") && <span className="eval-muted">文本检查范围：{label === "整体评测标准" ? "最后一轮最终回复" : "本轮最终回复"}。</span>}
     {checks.some(c => c.kind === "file") && <span className="eval-muted">文件存在性范围：仅检查产物文件是否存在，不检查内容。</span>}
     {checks.map((check, index) => {
@@ -110,7 +114,7 @@ function CheckEditor({ label, checks, onChange, fieldProps, fieldError }: {
             {fieldError(check.id)}
           </div>
         </div>
-        <Tooltip value="删除标准"><button type="button" className="eval-standard-delete" aria-label={`删除${label} ${index + 1}`} onClick={() => confirmDelete(`删除${label} ${index + 1}？`, "将删除这条评测标准，删除后无法恢复", () => onChange(checks.filter(c => c.id !== check.id)))}><Icon name="trash-16" size="small" /></button></Tooltip>
+        <Tooltip value="删除标准"><button type="button" className="eval-standard-delete" aria-label={`删除${label} ${index + 1}`} onClick={() => confirmDelete(`删除${label} ${index + 1}？`, "将移除这条评测标准，保存用例后生效。", () => onChange(checks.filter(c => c.id !== check.id)), !!(check.text.trim() || check.files?.length))}><Icon name="trash-16" size="small" /></button></Tooltip>
       </div>
     })}
   </section>
@@ -184,18 +188,20 @@ export function CaseEditor({ draft, update, save, cancel, editing }: { draft: Ev
     el.setCustomValidity("")
     if (el.value.trim()) setErrors(prev => { const next = { ...prev }; delete next[el.id]; return next }) }}>
     <h3>{editing ? "编辑用例" : "新增用例"}</h3>
-    <label>用例名称<input {...fieldProps("name", "用例名称", "请填写用例名称，不能仅包含空格。")} name="case-name" required placeholder="请输入用例名称" value={draft.name} onChange={e => update({ ...draft, name: e.target.value })} />{fieldError("name")}</label>
+    <p className="eval-muted">先填写名称、用户输入和至少一条评测标准。附件、澄清回复和多轮对话按需添加。</p>
+    <label>用例名称<input {...fieldProps("name", "用例名称", "请填写用例名称，不能仅包含空格。")} name="case-name" required placeholder="例如：缺少单号时先询问" value={draft.name} onChange={e => update({ ...draft, name: e.target.value })} />{fieldError("name")}</label>
     <AttachmentInput onUploadingChange={onUploadingChange} label="会话附件" tip={sessionAttachmentTip} files={draft.attachments || []} onChange={attachments => update({ ...currentDraft.current, attachments })} />
-    <div className="eval-toolbar"><h3>对话轮次（{turns.length}）</h3><div className="eval-actions"><Button onClick={() => setExpanded(Object.fromEntries(turns.map(t => [t.id, !allExpanded])))}>{allExpanded ? "全部折叠" : "全部展开"}</Button></div></div>
+    <div className="eval-toolbar"><h3>对话轮次（{turns.length}）</h3><div className="eval-actions">{turns.length > 1 && <Button onClick={() => setExpanded(Object.fromEntries(turns.map(t => [t.id, !allExpanded])))}>{allExpanded ? "全部折叠" : "全部展开"}</Button>}</div></div>
     {turns.map((turn, index) => <TurnCard key={turn.id} turnId={turn.id} number={index + 1} input={turn.input}
       meta={(expanded[turn.id] ?? true) ? "" : [turn.attachments.length && `附件 ${turn.attachments.length}`, turn.rules.length && `澄清回复 ${turn.rules.length}`, turn.checks.length && `评测标准 ${turn.checks.length}`].filter(Boolean).join(" · ")}
       status={!(expanded[turn.id] ?? true) && hasTurnErrors(turn) ? <span className="eval-field-error">有未填项</span> : null}
       open={expanded[turn.id] ?? true} toggle={() => setExpanded(prev => ({ ...prev, [turn.id]: !(prev[turn.id] ?? true) }))}
-      actions={turns.length > 1 ? <><Button disabled={!index} onClick={() => move(index, -1)}>上移</Button><Button disabled={index === turns.length - 1} onClick={() => move(index, 1)}>下移</Button>{turns.length > 1 && <Button onClick={() => confirmDelete(`删除第 ${index + 1} 轮对话？`, "将删除本轮用户输入、附件、澄清回复及评测标准，删除后无法恢复", () => { const next = turnsOf(currentDraft.current).filter(t => t.id !== turn.id); if (next.length) { next[0] = { ...next[0], inherit: false }; update({ ...currentDraft.current, turns: next }) } })}>删除轮次</Button>}</> : undefined}>
+      actions={turns.length > 1 ? <><Button disabled={!index} onClick={() => move(index, -1)}>上移</Button><Button disabled={index === turns.length - 1} onClick={() => move(index, 1)}>下移</Button>{turns.length > 1 && <Button onClick={() => confirmDelete(`删除第 ${index + 1} 轮对话？`, "将移除本轮输入、附件、澄清回复及标准，保存用例后生效。", () => { const next = turnsOf(currentDraft.current).filter(t => t.id !== turn.id); if (next.length) { next[0] = { ...next[0], inherit: false }; update({ ...currentDraft.current, turns: next }) } })}>删除轮次</Button>}</> : undefined}>
       <AttachmentInput onUploadingChange={onUploadingChange} label="附件" files={turn.attachments} onChange={attachments => { const i = turnsOf(currentDraft.current).findIndex(t => t.id === turn.id); if (i >= 0) setTurn(i, { attachments }) }}>
         <StandardInput className="eval-user-input" rows={2} {...fieldProps(`${turn.id}-input`, "用户输入", `请填写第 ${index + 1} 轮的用户输入，不能仅包含空格。`)} required value={turn.input} onChange={e => setTurn(index, { input: e.target.value })} />{fieldError(`${turn.id}-input`)}
       </AttachmentInput>
       <section className="eval-clarification-section"><div className="eval-toolbar"><div className="eval-field-heading"><h3 className="eval-section-title">澄清回复</h3></div><Button className="eval-add-action" icon="plus-small" onClick={() => setTurn(index, { rules: [...turn.rules, { id: crypto.randomUUID(), match: "", responses: [""] }] })}>添加澄清回复</Button></div>
+      <p className="eval-muted">可选：技能或智能体追问时，让评测按这里的配置自动回答，无需你在运行时逐条回复。</p>
       {turn.rules.length > 0 && <div className="eval-clarification-list">
         <div className="eval-clarification-columns" aria-hidden="true"><span /><span>预期追问</span><span>自动回复</span><span /></div>
         {turn.rules.map((rule, ruleIndex) => <section className="eval-clarification-row" key={rule.id} aria-label={`澄清回复 ${ruleIndex + 1}`}>
@@ -210,7 +216,7 @@ export function CaseEditor({ draft, update, save, cancel, editing }: { draft: Ev
             <StandardInput {...fieldProps(`${rule.id}-response`, "自动回复", `请填写第 ${index + 1} 轮的自动回复，不能仅包含空格。`)} required value={rule.responses.join("\n")} placeholder="例如：华东公司" onChange={e => setTurn(index, { rules: turn.rules.map(r => r.id === rule.id ? { ...r, responses: [e.target.value] } : r) })} />
             {fieldError(`${rule.id}-response`)}
           </div>
-          <div className="eval-clarification-remove-slot"><Tooltip value="删除澄清回复"><button type="button" className="eval-standard-delete eval-clarification-remove" aria-label={`删除澄清回复 ${ruleIndex + 1}`} onClick={() => confirmDelete(`删除澄清回复 ${ruleIndex + 1}？`, "将删除这组预期追问和自动回复，删除后无法恢复", () => setTurn(index, { rules: turn.rules.filter(r => r.id !== rule.id) }))}><Icon name="trash-16" size="small" /></button></Tooltip></div>
+          <div className="eval-clarification-remove-slot"><Tooltip value="删除澄清回复"><button type="button" className="eval-standard-delete eval-clarification-remove" aria-label={`删除澄清回复 ${ruleIndex + 1}`} onClick={() => confirmDelete(`删除澄清回复 ${ruleIndex + 1}？`, "将移除这组预期追问和自动回复，保存用例后生效。", () => setTurn(index, { rules: turn.rules.filter(r => r.id !== rule.id) }), !!(rule.match.trim() || rule.responses.some(v => v.trim())))}><Icon name="trash-16" size="small" /></button></Tooltip></div>
         </section>)}
       </div>}
       </section>
