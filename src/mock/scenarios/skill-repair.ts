@@ -15,7 +15,7 @@ export function skillRepairScenario({ repairTarget, projectId }: ScenarioContext
         }
         devStore.skills = devStore.skills.map(s => s.id === target.id ? { ...s, changed: true } : s)
         return {
-          text: `已在原技能「${target.displayName}」上保存模拟修改，技能 ID：${target.id}。未创建新技能，未提交或发布。可通过下方返回运行记录，再使用原对象的最新已保存内容重新运行。\n\n这是原型模拟：标记原技能有修改，用于验收对象绑定；不代表真实技能内容已修复。`,
+          text: `已在原技能「${target.displayName}」上保存模拟修改，技能 ID：${target.id}。未创建新技能，未提交或发布。请检查下方原对象产物，再返回运行记录手动复测；修复效果以新运行结果为准。\n\n这是原型模拟：标记原技能有修改，用于验收对象绑定；不代表真实技能内容已修复。`,
           card: () => ({ kind: "kdskill", config: { id: target.name, title: target.displayName, directory: `skills/${target.name}` } }),
         }
       },

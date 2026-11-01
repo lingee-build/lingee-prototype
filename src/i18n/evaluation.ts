@@ -1,4 +1,5 @@
 export const evaluationZh: Record<string, string> = {
+  "proto.eval.toolResult": "工具返回",
   "proto.eval.leaveConfig": "智能体配置尚未保存，放弃修改并打开评测？",
   "proto.eval.backList": "返回列表",
   "proto.eval.loading": "加载中…",
@@ -81,6 +82,7 @@ export const evaluationZh: Record<string, string> = {
   "proto.eval.evidence.blocked": "工具调用未完成，无法判定是否满足评测标准。请检查工具可用性后重新执行。"
 }
 export const evaluationEn: Record<string, string> = {
+  "proto.eval.toolResult": "Tool result",
   "proto.eval.leaveConfig": "Discard unsaved agent configuration and open evaluation?",
   "proto.eval.backList": "Back to list",
   "proto.eval.loading": "Loading…",

@@ -118,7 +118,7 @@ export function Component() {
               loaded ? (
                 <MessageTimeline session={session} messages={loaded} footer={
                   repairLinks[session.id] && session.status === "idle" && loaded.at(-1)?.role === "assistant" && loaded.at(-1)?.time.completed ? (
-                    <RenderCard kind="evaluation-run" config={{ title: "返回运行记录", desc: "查看评测结果或重新运行" }} onCardClick={() => navigate(repairLinks[session.id])} />
+                    <RenderCard kind="evaluation-run" config={{ title: "返回运行记录", desc: "检查修改后手动复测，修复效果以新运行结果为准" }} onCardClick={() => navigate(repairLinks[session.id])} />
                   ) : undefined
                 } />
               ) : (

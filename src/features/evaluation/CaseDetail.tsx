@@ -17,12 +17,12 @@ function Standards({ checks, label }: { checks: EvalCheck[]; label: string }) {
   </section>
 }
 
-export function CaseDetail({ value, back, edit }: { value: EvalCase; back: () => void; edit: () => void }) {
+export function CaseDetail({ value, back, edit, editLabel = "编辑", editDisabled = false }: { value: EvalCase; back: () => void; edit: () => void; editLabel?: string; editDisabled?: boolean }) {
   const rounds = turnsOf(value)
   const [collapsed, setCollapsed] = useState<string[]>([])
   const allOpen = collapsed.length === 0
   return <div className="eval-conversation eval-case-detail" aria-label="用例详情">
-    <div className="eval-toolbar"><div className="eval-actions"><IconButton icon="arrow-left" variant="ghost" aria-label="返回用例列表" title="返回用例列表" onClick={back} /><h3>用例详情</h3></div><BrandButton variant="primary" onClick={edit}>编辑</BrandButton></div>
+    <div className="eval-toolbar"><div className="eval-actions"><IconButton icon="arrow-left" variant="ghost" aria-label="返回用例列表" title="返回用例列表" onClick={back} /><h3>用例详情</h3></div><BrandButton variant="primary" disabled={editDisabled} onClick={edit}>{editLabel}</BrandButton></div>
     <div className="eval-message"><strong>用例名称</strong><p>{value.name}</p></div>
     <Files files={value.attachments || []} label="会话附件" />
     <div className="eval-toolbar"><h3>对话轮次（{rounds.length}）</h3>{rounds.length > 1 && <Button onClick={() => setCollapsed(allOpen ? rounds.map(r => r.id) : [])}>{allOpen ? "全部折叠" : "全部展开"}</Button>}</div>

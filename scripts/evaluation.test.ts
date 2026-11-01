@@ -1,4 +1,6 @@
 import { test, expect, beforeEach, afterAll } from "bun:test"
+import { basicEvaluationSample } from "../src/services/evaluation-samples"
+import type { EvalCase } from "../src/services/evaluation"
 const memory = new Map<string, string>()
 Object.defineProperty(globalThis, "localStorage", {
   value: {
@@ -27,6 +29,12 @@ const sample = {
   source: "tenant" as const,
   outcome: "failed" as const,
 }
+// 状态机测试显式提供执行材料；缺证据的用例继续验证无法判定。
+const demoSample = (outcome: "passed" | "failed") => ({ ...basicEvaluationSample({ ...sample, outcome }), id: sample.id })
+const stateEvidence = (verdict: "passed" | "failed", files: string[] = []): EvalCase["demoEvidence"] => ({
+  turns: [0, 1, 2].map(() => ({ response: verdict === "passed" ? "已满足标准" : "未满足标准", clarification: "本轮未发生澄清。", files,
+    judgments: [{ check: { text: "标准" }, verdict, actual: "已记录标准检查结果", evidence: "状态机测试的固定执行材料" }] })), overall: [],
+})
 test("selected cases are snapshotted; edits and reruns do not replace prior records", () => {
   saveCases("skill:1", [sample, { ...sample, id: "case-2" }])
   const id = startRun("skill:1", "Skill", [sample])!
@@ -215,14 +223,15 @@ test("execution failures stay unknown, stop later rounds and appear in report", 
     const html = buildReportDocument(run)
     expect(html).toContain(executionIssues[demoFailure].reason)
     expect(html).toContain(executionIssues[demoFailure].action)
-    expect(html).toContain("沙箱")
+    expect(run.environment).toBe("sandbox")
+    expect(html).not.toContain("<dt>运行环境</dt>")
   }
 })
 
 test("file evidence distinguishes existence, missing artifacts and unavailable execution", async () => {
   const { buildReportDocument } = await import("../src/features/evaluation/report-document")
   for (const [key, demo, operator] of [["exists", true, "exists"], ["absent", true, "not_exists"], ["unknown", false, "exists"]] as const) {
-    startRun(key, "File", [{ ...sample, demo, outcome: "passed", checks: [{ id: "file", kind: "file", operator, text: "outputs/result.txt", required: true, files: [] }] }])
+    startRun(key, "File", [{ ...sample, demo, demoEvidence: stateEvidence("passed", key === "exists" ? ["outputs/result.txt"] : []), outcome: "passed", checks: [{ id: "file", kind: "file", operator, text: "outputs/result.txt", required: true, files: [] }] }])
     now += 3000; advanceRuns()
     const run = useEvaluation.getState().runs[key][0]
     const check = run.results[0].checkResults![0]
@@ -239,7 +248,7 @@ test("file evidence distinguishes existence, missing artifacts and unavailable e
 
 test("repair handoff selects failed snapshots and excludes binary attachments", async () => {
   const { repairPrompt } = await import("../src/services/evaluation-repair")
-  startRun("skill:repair", "技能", [{ ...sample, demo: true, attachments: [{ id: "a", name: "单据.txt", size: 4, data: "binary-secret" }] }, { ...sample, id: "passed", demo: true, outcome: "passed" }])
+  startRun("skill:repair", "技能", [{ ...demoSample("failed"), attachments: [{ id: "a", name: "单据.txt", size: 4, data: "binary-secret" }] }, { ...demoSample("passed"), id: "passed" }])
   now += 6000; advanceRuns()
   const run = useEvaluation.getState().runs["skill:repair"][0]
   const prompt = repairPrompt("skill:repair", run)
@@ -255,7 +264,7 @@ test("repair handoff selects failed snapshots and excludes binary attachments", 
 
 test("repair availability covers running, passed, unknown, stopped and unsupported targets", async () => {
   const { repairDisabledReason } = await import("../src/services/evaluation-repair")
-  startRun("skill:r", "技能", [{ ...sample, demo: true }])
+  startRun("skill:r", "技能", [demoSample("failed")])
   let run = useEvaluation.getState().runs["skill:r"][0]
   expect(repairDisabledReason("skill:r", run, true)).toBe("评测结束后可修复")
   now += 3000; advanceRuns()
@@ -299,7 +308,7 @@ test("停止保留前轮失败，后续未开始轮次标记未执行，修复�
   const { verdictLabel } = await import("../src/services/evaluation")
   const { repairDisabledReason } = await import("../src/services/evaluation-repair")
   const turn = (id: string) => ({ id, input: "输入", expected: "", attachments: [], rules: [], checks: [{ id: id + "-check", text: "标准", required: true, files: [] }] })
-  const id = startRun("skill:stop", "测试", [{ ...sample, demo: true, turns: [turn("a"), turn("b"), turn("c")] }])!
+  const id = startRun("skill:stop", "测试", [{ ...sample, demo: true, demoEvidence: stateEvidence("failed"), turns: [turn("a"), turn("b"), turn("c")] }])!
   now += 2500; advanceRuns()
   expect(useEvaluation.getState().runs["skill:stop"][0].results[0].roundResults?.[1].status).toBe("running")
   cancelRun("skill:stop", id)
@@ -314,7 +323,7 @@ test("停止保留前轮失败，后续未开始轮次标记未执行，修复�
 test("停止未出现失败的用例不能通过，未启动用例为未执行", async () => {
   const { verdictLabel } = await import("../src/services/evaluation")
   const turn = (id: string) => ({ id, input: "输入", expected: "标准", attachments: [], rules: [] })
-  const id = startRun("skill:stop-pass", "测试", [{ ...sample, demo: true, outcome: "passed", turns: [turn("a"), turn("b")] }, { ...sample, id: "later" }])!
+  const id = startRun("skill:stop-pass", "测试", [{ ...sample, demo: true, demoEvidence: stateEvidence("passed"), outcome: "passed", turns: [turn("a"), turn("b")] }, { ...sample, id: "later" }])!
   now += 2500; advanceRuns(); cancelRun("skill:stop-pass", id)
   const results = useEvaluation.getState().runs["skill:stop-pass"][0].results
   expect(verdictLabel(results[0])).toBe("无法判定")
@@ -325,7 +334,7 @@ test("停止未出现失败的用例不能通过，未启动用例为未执行",
 test("文件证据按各轮与整体时点记录，后续推进不改写前轮", () => {
   const check = { id: "file", kind: "file" as const, operator: "exists" as const, text: "outputs/result.txt", required: true, files: [] }
   const turn = (id: string) => ({ id, input: "输入", expected: "", attachments: [], rules: [], checks: [{ ...check, id }] })
-  startRun("skill:time", "测试", [{ ...sample, outcome: "passed", demo: true, checks: [check], turns: [turn("a"), turn("b")] }])
+  startRun("skill:time", "测试", [{ ...sample, outcome: "passed", demo: true, demoEvidence: stateEvidence("passed", ["outputs/result.txt"]), checks: [check], turns: [turn("a"), turn("b")] }])
   now += 2500; advanceRuns()
   const first = useEvaluation.getState().runs["skill:time"][0].results[0].roundResults![0].checkResults![0]
   expect(first.fileEvidence?.checkedAt).toBe(102400)
@@ -351,19 +360,6 @@ test("完整性校验保留必填规则，不使用未确认的长度或容量�
   expect(caseValidation(long)).toBe("")
   expect(caseValidation({ ...long, turns: [{ ...turn, input: " " }] })).toContain("用户输入")
   expect(caseValidation({ ...value, turns: [{ ...turn, attachments: [], rules: [{ id: "r", match: "问题", responses: [" "] }] }] })).toContain("澄清")
-})
-
-test("P2 草稿关联区分双方修改与删除，重新加入后恢复已加入", async () => {
-  const { draftRelation } = await import("../src/services/evaluation")
-  const baseline = JSON.stringify(sample)
-  const edited = { ...sample, name: "修改" }
-  expect(draftRelation(sample, undefined)).toBe("待加入")
-  expect(draftRelation(sample, baseline, sample)).toBe("已加入")
-  expect(draftRelation(edited, baseline, sample)).toBe("草稿有修改")
-  expect(draftRelation(sample, baseline, edited)).toBe("正式用例有修改")
-  expect(draftRelation(edited, baseline, edited)).toBe("草稿与正式用例均有修改")
-  expect(draftRelation(sample, baseline)).toBe("关联用例已删除")
-  expect(draftRelation(edited, JSON.stringify(edited), edited)).toBe("已加入")
 })
 
 test("P2 停止补齐逐项终态并保留已有失败，报告读取相同证据", async () => {
@@ -478,7 +474,7 @@ test("unconfirmed stop survives refresh and only verified termination unlocks", 
 test("simulated judge failure preserves execution and permits later rounds", () => {
   const check = { id: "judge", kind: "natural" as const, text: "业务要求", required: true, files: [] }
   const turn = { id: "one", input: "查询", expected: "", attachments: [], rules: [], checks: [check] }
-  startRun("skill:failure", "Skill", [{ ...sample, demo: true, outcome: "passed", demoJudgingFailure: "timeout", turns: [turn, { ...turn, id: "two" }] }])
+  startRun("skill:failure", "Skill", [{ ...sample, demo: true, demoEvidence: stateEvidence("passed"), outcome: "passed", demoJudgingFailure: "timeout", turns: [turn, { ...turn, id: "two" }] }])
   now += 6000
   advanceRuns()
   const run = useEvaluation.getState().runs["skill:failure"][0]
@@ -607,7 +603,8 @@ test("partial round usage retains independent overall snapshot through failure a
   expect(runPoints(saved).missing).toBe(true)
   expect(overallPoints(saved.results[0])).toBe(0.08)
   expect(overallPointsText(saved.results[0])).toBe("消耗点数：0.08")
-  expect(buildReportDocument(saved)).toContain("<h4>整体标准判定</h4><p>消耗点数：0.08</p>")
+  expect(buildReportDocument(saved)).toContain("已获取消耗点数：0.08 · 统计不完整")
+  expect(buildReportDocument(saved)).not.toContain("<h4>整体标准判定</h4>")
   useEvaluation.setState(s => ({ runs: { ...s.runs, [key]: s.runs[key].map(r => ({ ...r, results: r.results.map(c => ({ ...c, overallJudgingPoints: 0.16 })) })) } }))
   await refreshRunPoints(key, id, "unavailable")
   await useEvaluation.persist.rehydrate()
@@ -709,8 +706,8 @@ test("智能体修复选择失败证据、遵循同一可用条件并打开原�
   const { devStore } = await import("../src/mock/dev-store")
   const agent = devStore.agents[0]
   const key = `agent:${agent.id}`
-  const failed = { ...sample, demo: true, attachments: [{ id: "file", name: "业务材料.txt", size: 1, data: "binary-secret" }] }
-  startRun(key, agent.name, [failed, { ...failed, id: "passed", outcome: "passed" }, { ...failed, id: "second-failure" }])
+  const failed = { ...demoSample("failed"), attachments: [{ id: "file", name: "业务材料.txt", size: 1, data: "binary-secret" }] }
+  startRun(key, agent.name, [failed, { ...demoSample("passed"), id: "passed" }, { ...failed, id: "second-failure" }])
   let run = useEvaluation.getState().runs[key][0]
   for (const status of ["running", "judging", "stopping", "stop_unconfirmed"] as const) {
     expect(repairDisabledReason(key, { ...run, status }, true)).toBe("评测结束后可修复")
@@ -867,4 +864,31 @@ test("自动点数更新有上限，重新进入恢复查询且不创建运行",
   expect(useEvaluation.getState().runs['auto-points'][0].pointsQuery?.queriedAt).toBe(now)
   expect(useEvaluation.getState().runs['auto-points']).toHaveLength(1)
   expect(useEvaluation.getState().runs['auto-points'][0].results[0].response).toBe(run.results[0].response)
+})
+
+test("点数演示保持选定状态，恢复后自动查询且不改变运行结论", async () => {
+  const { refreshRunPoints, updateAutomaticPoints, resumeRunPoints } = await import("../src/services/evaluation-points")
+  const key = "points-demo"
+  const id = startRun(key, "Skill", [{ ...sample, demo: true }])!
+  await updateAutomaticPoints(now)
+  now += 4000; advanceRuns()
+  const original = structuredClone(useEvaluation.getState().runs[key][0])
+  for (const mode of ["pending", "unavailable", "exhausted"] as const) {
+    await refreshRunPoints(key, id, mode)
+    const snapshot = structuredClone(useEvaluation.getState().runs[key][0].pointsQuery)
+    now += 20000
+    await updateAutomaticPoints(now)
+    expect(useEvaluation.getState().runs[key][0].pointsQuery).toEqual(snapshot)
+    expect(snapshot?.status).toBe(mode)
+  }
+  resumeRunPoints(key, id)
+  await updateAutomaticPoints(now)
+  expect(useEvaluation.getState().runs[key][0].pointsQuery?.status).toBe("complete")
+  await refreshRunPoints(key, id, "unavailable")
+  await refreshRunPoints(key, id, "normal")
+  const restored = useEvaluation.getState().runs[key][0]
+  expect(restored.pointsQuery?.status).toBe("complete")
+  expect(restored.results[0].verdict).toBe(original.results[0].verdict)
+  expect(restored.results[0].checkResults).toEqual(original.results[0].checkResults)
+  expect(useEvaluation.getState().runs[key]).toHaveLength(1)
 })

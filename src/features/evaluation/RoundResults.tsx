@@ -1,4 +1,3 @@
-import { casePoints, overallPointsText, pointsText, turnPointsText } from "@/services/evaluation-points"
 import { CheckTypeIcon } from "./CheckTypeIcon"
 import { sessionAttachmentTip } from "./attachment-help"
 import { AttachmentRow } from "./AttachmentRow"
@@ -59,9 +58,6 @@ export function RoundResults({ result }: { result: EvalResult }) {
   const allExpanded = rounds.every(isOpen)
   const setAll = (open: boolean) => setExpanded(Object.fromEntries(rounds.map(turn => [turn.id, { status: turn.status, open }])))
   return <div className="eval-conversation">
-    <p className="eval-muted">{pointsText(casePoints(result), true)}</p>
-    {overallPointsText(result) && <p className="eval-muted">整体标准判定 · {overallPointsText(result)}</p>}
-
     <CheckResults label="整体评测标准" checks={result.checks || []} results={result.checkResults} />
     <Files files={result.attachments || []} label="会话附件" />
     <div className="eval-toolbar"><h3>对话轮次（{rounds.length}）</h3><div className="eval-actions">{rounds.length > 1 && <Button onClick={() => setAll(!allExpanded)}>{allExpanded ? "全部折叠" : "全部展开"}</Button>}</div></div>
@@ -70,7 +66,6 @@ export function RoundResults({ result }: { result: EvalResult }) {
       status={<span className="eval-status" data-status={{ "通过": "passed", "不通过": "failed", "无法判定": "unknown" }[turnVerdict(turn, t)]}>{turnVerdict(turn, t)}</span>}
       open={isOpen(turn)} toggle={() => setExpanded(prev => ({ ...prev, [turn.id]: { status: turn.status, open: !isOpen(turn) } }))}>
 
-      <p className="eval-muted">{turnPointsText(turn)}</p>
       <div className="eval-input-group"><div className="eval-message"><strong>用户输入</strong><p>{turn.input}</p></div>
       <Files files={turn.attachments} label="附件" /></div>
       {!!turn.rules.length && <details className="eval-result-rules"><summary className="eval-section-title">澄清回复 <span className="eval-section-count">（{turn.rules.length}）</span></summary>
@@ -86,6 +81,7 @@ export function RoundResults({ result }: { result: EvalResult }) {
       <details className="eval-message"><summary>澄清过程</summary><p>{clarificationText(turn)}</p></details>
       {"issue" in turn && turn.issue && <div className="eval-message"><strong>执行异常</strong><dl className="eval-result-evidence"><dt>发生阶段</dt><dd>{executionIssues[turn.issue].stage}</dd><dt>原因</dt><dd>{executionIssues[turn.issue].reason}</dd><dt>处理建议</dt><dd>{executionIssues[turn.issue].action}</dd></dl></div>}
       {"tool" in turn && turn.tool && <div className="eval-message"><strong>工具调用</strong><p>{turn.tool}</p></div>}
+      {turn.toolResult && <div className="eval-message"><strong>{t("proto.eval.toolResult")}</strong><p>{turn.toolResult}</p></div>}
       <div className="eval-message"><strong>实际回复</strong><p>{responseText(turn, t)}</p></div>
       <CheckResults label="评测标准" checks={checksOf(turn)} results={"checkResults" in turn ? turn.checkResults as CheckResult[] : undefined} />
       {!("checkResults" in turn && (turn.checkResults as CheckResult[] | undefined)?.length) && <div className="eval-message"><strong>判定依据</strong><p>{turn.evidence ? t(turn.evidence) : turn.status === "skipped" ? "本轮未执行。" : turn.status === "cancelled" ? "本轮已停止，未生成判定依据。" : t("proto.eval.waiting")}</p></div>}
@@ -93,5 +89,5 @@ export function RoundResults({ result }: { result: EvalResult }) {
   </div>
 }
 export function reportBody(result: EvalResult, t: (key: string) => string) {
-  return `${result.name}\n用例编号：${result.id}\n执行：${executionLabel(result)} · 结论：${verdictLabel(result)}\n整体评测标准：\n${checkText(result.checks || [], result.checkResults)}\n会话附件：${(result.attachments || []).map(f => f.name).join("、") || "无"}\n` + resultRounds(result).map((turn, i) => `第 ${i + 1} 轮：${turnVerdict(turn, t)}\n用户输入：${turn.input}\n附件：${turn.attachments.map(f => f.name).join("、") || "无"}\n澄清回复：${turn.rules.map(ruleText).join("\n\n") || "无"}\n澄清过程：${clarificationText(turn)}\n回复：${responseText(turn, t)}\n评测标准：\n${checkText(checksOf(turn), "checkResults" in turn ? turn.checkResults as CheckResult[] : undefined)}\n依据：${turn.evidence ? t(turn.evidence) : turn.status === "skipped" ? "本轮未执行。" : turn.status === "cancelled" ? "本轮已停止，未生成判定依据。" : t("proto.eval.waiting")}`).join("\n\n")
+  return `${result.name}\n用例编号：${result.id}\n执行：${executionLabel(result)} · 结论：${verdictLabel(result)}\n整体评测标准：\n${checkText(result.checks || [], result.checkResults)}\n会话附件：${(result.attachments || []).map(f => f.name).join("、") || "无"}\n` + resultRounds(result).map((turn, i) => `第 ${i + 1} 轮：${turnVerdict(turn, t)}\n用户输入：${turn.input}\n附件：${turn.attachments.map(f => f.name).join("、") || "无"}\n澄清回复：${turn.rules.map(ruleText).join("\n\n") || "无"}\n澄清过程：${clarificationText(turn)}\n工具返回：${turn.toolResult || "未记录"}\n回复：${responseText(turn, t)}\n评测标准：\n${checkText(checksOf(turn), "checkResults" in turn ? turn.checkResults as CheckResult[] : undefined)}\n依据：${turn.evidence ? t(turn.evidence) : turn.status === "skipped" ? "本轮未执行。" : turn.status === "cancelled" ? "本轮已停止，未生成判定依据。" : t("proto.eval.waiting")}`).join("\n\n")
 }

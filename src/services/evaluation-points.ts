@@ -1,5 +1,8 @@
 import { useEvaluation, isActiveRun, checkKind, type PointsAmount, type PointsStatus, type EvalResult, type EvalRun, type EvalTurnResult } from "./evaluation"
 type Usage = { execution: number; judging: number; missing: boolean; recorded: boolean; status?: PointsStatus; valueComplete?: boolean }
+// 演示期间暂停自动覆盖；恢复自动更新或离开当前视图时解除。
+const pointsDemonstrations = new Set<string>()
+export const pointsScopeNote = "仅统计本次评测运行的消耗；生成用例和修改对象的消耗在开发会话中查看。"
 export function liveCasePoints(result: EvalResult): PointsAmount {
   const rounds = result.roundResults || []
   return {
@@ -19,17 +22,16 @@ export function runPoints(run: EvalRun): Usage {
   const value = run.pointsQuery?.amount ?? liveRunPoints(run)
   return run.pointsQuery ? { ...value, status: run.pointsQuery.status, valueComplete: run.pointsQuery.valueComplete } : value
 }
-export function pointsText(value: Usage, detail = false): string {
+export function pointsText(value: Usage): string {
   const status = value.status ?? (value.missing || !value.recorded ? "missing" : "complete")
   const waiting = status === "loading" || status === "pending"
   if (!value.recorded) return `消耗点数：${waiting ? "统计中" : "暂未获取"}`
   const amount = (value.execution + value.judging).toFixed(2)
-  const breakdown = detail ? `（执行 ${value.execution.toFixed(2)} · 判定 ${value.judging.toFixed(2)}）` : ""
   const complete = status === "complete" && !value.missing
-  return `${complete ? "消耗点数" : "已获取消耗点数"}：${amount}${breakdown}${complete ? "" : ` · ${waiting ? "统计中" : "统计不完整"}`}`
+  return `${complete ? "消耗点数" : "已获取消耗点数"}：${amount}${complete ? "" : ` · ${waiting ? "统计中" : "统计不完整"}`}`
 }
 export function turnPointsText(turn: EvalTurnResult) {
-  return pointsText({ ...(turn.pointsSnapshot ?? { execution: turn.points?.execution ?? 0, judging: turn.points?.judging ?? 0, missing: !turn.points, recorded: !!turn.points }), status: turn.pointsStatus, valueComplete: turn.pointsValueComplete }, true)
+  return pointsText({ ...(turn.pointsSnapshot ?? { execution: turn.points?.execution ?? 0, judging: turn.points?.judging ?? 0, missing: !turn.points, recorded: !!turn.points }), status: turn.pointsStatus, valueComplete: turn.pointsValueComplete })
 }
 
 /** 本地原型仅演示查询状态；真实接入复用 statements2，不用模型成本换算点数。 */
@@ -37,6 +39,8 @@ export async function refreshRunPoints(key: string, id: string, demo: "normal" |
   const current = () => useEvaluation.getState().runs[key]?.find(r => r.id === id)
   const run = current()
   if (!run || run.pointsQuery?.status === "loading") return
+  if (demo === "normal") pointsDemonstrations.delete(id)
+  else pointsDemonstrations.add(id)
   const previousTime = run.pointsQuery?.queriedAt
   const previousComplete = previousTime !== undefined && !!run.pointsQuery?.valueComplete
   const update = (status: PointsStatus, queriedAt?: number, valueComplete = false, capture = false) => {
@@ -70,6 +74,7 @@ export function pointsSourceText(run: EvalRun): string {
 // 原型模拟后台调度：活动运行持续更新；终态最多查询三次。重新进入未完整记录可开启新一轮查询。
 const pointsJobs = new Map<string, { attempts: number; nextAt: number; active: boolean }>()
 export function resumeRunPoints(key: string, id: string) {
+  pointsDemonstrations.delete(id)
   const run = useEvaluation.getState().runs[key]?.find(r => r.id === id)
   if (run && (isActiveRun(run) || run.pointsQuery?.status !== "complete")) {
     const job = pointsJobs.get(id)
@@ -81,6 +86,7 @@ export async function updateAutomaticPoints(now = Date.now()) {
   const existing = new Set<string>()
   for (const [key, runs] of Object.entries(useEvaluation.getState().runs)) for (const run of runs) {
     existing.add(run.id)
+    if (pointsDemonstrations.has(run.id)) continue
     const active = isActiveRun(run)
     let job = pointsJobs.get(run.id)
     if (!job && (active || !run.pointsQuery)) {
@@ -100,6 +106,7 @@ export async function updateAutomaticPoints(now = Date.now()) {
     }))
   }
   for (const id of pointsJobs.keys()) if (!existing.has(id)) pointsJobs.delete(id)
+  for (const id of pointsDemonstrations) if (!existing.has(id)) pointsDemonstrations.delete(id)
   await Promise.all(pending)
 }
 if (typeof window !== "undefined") {

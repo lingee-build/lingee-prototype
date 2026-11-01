@@ -1,4 +1,4 @@
-import { evaluationRegex } from "./evaluation-text"
+import { evaluationRegex, matchEvaluationText, normalizeEvaluationText } from "./evaluation-text"
 import { create } from "zustand"
 import { persist } from "zustand/middleware"
 export type Source = "tenant" | "thirdParty" | "personal" | "none"
@@ -20,11 +20,15 @@ export const checkOperators = { all: "包含全部关键词", any: "包含任一
 export interface EvalCheck { kind?: CheckKind; operator?: keyof typeof checkOperators; id: string; text: string; required: boolean; condition?: string; reference?: string; files: EvalAttachment[] }
 export interface FileEvidence { path: string; exists: boolean; checkedAt?: number; content?: string }
 export interface CheckResult extends EvalCheck { fileEvidence?: FileEvidence; verdict: "passed" | "failed" | "unknown" | "na"; actual: string; evidence: string }
+/** 仅原型：预先编写的执行材料与语义依据，不从预期结论倒推回复或文件。 */
+export interface DemoJudgment { check: Pick<EvalCheck, "text" | "condition" | "reference">; verdict: CheckResult["verdict"]; actual: string; evidence: string }
+export interface DemoTurnEvidence { response: string; tool?: string; toolResult?: string; clarification: string; files: string[]; judgments: DemoJudgment[] }
 export interface EvalTurn { checks?: EvalCheck[]; id: string; input: string; expected: string; inherit?: boolean; attachments: EvalAttachment[]; rules: { id: string; match: string; responses: string[] }[] }
 export function turnsOf(c: EvalCase): EvalTurn[] {
   return c.turns?.length ? c.turns : [{ id: c.id + "-turn", input: c.input, expected: c.expected, attachments: [], rules: [] }]
 }
 export interface EvalCase {
+  demoEvidence?: { turns: DemoTurnEvidence[]; overall: DemoJudgment[] }
   demoJudgingFailure?: "timeout" | "invalid"
   demoJudgingDelayMs?: number
   demoFailure?: ExecutionIssue
@@ -43,6 +47,7 @@ export interface EvalCase {
 export type PointsAmount = { execution: number; judging: number; missing: boolean; recorded: boolean }
 export type PointsStatus = "loading" | "pending" | "complete" | "unavailable" | "missing" | "exhausted"
 export interface EvalTurnResult extends EvalTurn {
+  toolResult?: string
   pointsSnapshot?: PointsAmount
   pointsStatus?: PointsStatus
   pointsValueComplete?: boolean
@@ -258,28 +263,31 @@ export function advanceRuns() {
             if (turnStatus === turn.status) return turn
             changed = true
             const finished = !["running", "pending"].includes(turnStatus)
+            const trace = item.demo ? item.demoEvidence?.turns[index] : undefined
             return { ...turn, status: turnStatus,
               points: item.demo ? { execution: finished ? Number((0.36 + turn.rules.length * 0.12 + index * 0.04).toFixed(2)) : 0.12, judging: finished ? checksOf(turn).filter(c => checkKind(c) === "natural").length * 0.08 : 0 } : undefined,
-              tool: finished && item.demo && item.source !== "none" ? `mcp.${item.source}.business_query` : undefined,
-              checkResults: finished ? evaluateChecks(checksOf(turn, index && turn.inherit ? rounds?.[0].expected : undefined), item, run.started + beginning + (index + 1) * 2400) : undefined,
-              responseRecorded: finished && !!item.demo,
-              response: finished ? item.demo ? `proto.eval.response.${item.outcome}` : "未取得执行回复。" : "",
-              evidence: finished ? item.demo ? `proto.eval.evidence.${item.outcome}` : "未取得可核验的执行证据。" : "",
-              clarification: finished ? (turn.rules.length ? item.demo ? turn.rules.map(rule => `示例追问：${rule.match}\n自动回复：${rule.responses.join("\n")}`).join("\n\n") : "未记录实际澄清过程。" : "本轮未发生澄清。") : "" }
+              tool: finished ? trace?.tool : undefined,
+              toolResult: finished ? trace?.toolResult : undefined,
+              checkResults: finished ? evaluateChecks(checksOf(turn, index && turn.inherit ? rounds?.[0].expected : undefined), item, run.started + beginning + (index + 1) * 2400, trace) : undefined,
+              responseRecorded: finished && !!trace,
+              response: finished ? trace?.response ?? "" : "",
+              evidence: finished ? trace?.toolResult || "未取得可核验的执行证据。" : "",
+              clarification: finished ? trace?.clarification || "未记录实际澄清过程。" : "" }
           })
           if (status !== item.status) changed = true
           const judging = status !== "running" && elapsed < offset + (item.demoJudgingDelayMs ?? 100)
           if (judging !== !!item.judging) changed = true
-          const checkResults = status === "running" || judging ? undefined : evaluateChecks(item.checks || [], item, run.started + offset)
+          const finalTrace = item.demo ? item.demoEvidence?.turns[count - 1] : undefined
+          const checkResults = status === "running" || judging ? undefined : evaluateChecks(item.checks || [], item, run.started + offset, finalTrace, true)
           const allChecks = [...(checkResults || []), ...(roundResults || []).flatMap(t => t.checkResults || [])]
           return { ...item, roundResults, status, checkResults, judging,
             overallJudgingPoints: item.demo ? status === "running" ? 0 : (item.checks || []).filter(c => checkKind(c) === "natural").length * 0.08 : undefined,
             execution: status === "running" ? undefined : item.outcome === "blocked" ? "error" : "completed",
             verdict: status === "running" || judging ? undefined : aggregateChecks(allChecks),
-            responseRecorded: status !== "running" && !!item.demo,
-            response: status === "running" ? "" : `proto.eval.response.${item.outcome}`,
-            evidence: status === "running" ? "" : `proto.eval.evidence.${item.outcome}`,
-            tool: !item.demo || item.source === "none" ? "" : `mcp.${item.source}.business_query` }
+            responseRecorded: status !== "running" && !!finalTrace,
+            response: status === "running" ? "" : finalTrace?.response ?? "",
+            evidence: status === "running" ? "" : finalTrace?.toolResult || "未取得可核验的执行证据。",
+            tool: status === "running" ? "" : finalTrace?.tool || "" }
         })
         const executed = results.every((c) => c.status !== "pending" && c.status !== "running")
         const done = executed && results.every(c => !c.judging)
@@ -310,19 +318,54 @@ export function aggregateChecks(checks: CheckResult[]): "passed" | "failed" | "u
   if (!checks.some(c => c.verdict !== "na") || checks.some(c => c.verdict === "unknown")) return "unknown"
   return "passed"
 }
-function evaluateChecks(checks: EvalCheck[], item: EvalCase, checkedAt: number): CheckResult[] {
-  return checks.map((c, i) => {
-    if (item.demo && item.demoJudgingFailure && checkKind(c) === "natural") return { ...c, verdict: "unknown", actual: "业务执行记录已保留，未取得有效判定", evidence: item.demoJudgingFailure === "timeout" ? "判定服务超时，重试结束后仍失败，无法判定；未重新执行业务。" : "判定服务返回无效结果，重试结束后仍无效，无法判定；未重新执行业务。" }
-    const verdict = !item.demo || item.outcome === "blocked" ? "unknown" : item.outcome === "failed" && i === 0 ? "failed" : "passed"
-    if (checkKind(c) === "file" && verdict !== "unknown") {
-      const exists = (c.operator !== "not_exists") === (verdict === "passed")
-      const path = c.text.trim()
-      return { ...c, verdict, fileEvidence: { path, exists, checkedAt },
-        actual: exists ? `已找到文件：${path}` : `未找到文件：${path}`,
-        evidence: `${exists ? "已找到" : "未找到"}指定路径的产物文件，${verdict === "passed" ? "符合" : "不符合"}“${c.operator === "not_exists" ? "不存在" : "存在"}”要求；未检查文件内容` }
+function evaluateChecks(checks: EvalCheck[], item: EvalCase, checkedAt: number, trace?: DemoTurnEvidence, overall = false): CheckResult[] {
+  return checks.map(c => {
+    if (!trace) return { ...c, verdict: "unknown", actual: "未取得可核验的执行结果。", evidence: item.demo ? "旧版示例未记录执行材料，请添加新版示例后运行；历史记录保持不变。" : "缺少回复、工具返回或产物证据，暂无法判定。" }
+    if (item.demoJudgingFailure && checkKind(c) === "natural") return { ...c, verdict: "unknown", actual: item.demoJudgingFailure === "timeout" ? "判定服务超时，未取得有效判定。" : "判定服务返回无效结果，未取得有效判定。", evidence: item.demoJudgingFailure === "timeout" ? "判定服务超时，重试结束后仍失败，无法判定；未重新执行业务。" : "判定服务返回无效结果，重试结束后仍无效，无法判定；未重新执行业务。" }
+    const kind = checkKind(c)
+    if (kind === "keyword" || kind === "regex") {
+      const operator = c.operator || (kind === "regex" ? "regex" : "all")
+      if (operator === "exists" || operator === "not_exists") return { ...c, verdict: "unknown", actual: "文本检查方式无效。", evidence: "请检查标准配置。" }
+      try {
+        const matched = matchEvaluationText(trace.response, c.text, operator)
+        const words = [...new Set(normalizeEvaluationText(c.text).split("\n").map(v => v.trim()).filter(Boolean))]
+        const included = words.filter(word => normalizeEvaluationText(trace.response).includes(word))
+        const actual = kind === "regex" ? `${evaluationRegex(c.text).test(normalizeEvaluationText(trace.response)) ? "匹配到" : "未匹配到"}正则表达式：${c.text}`
+          : operator === "none" ? included.length ? `出现禁止关键词：${included.join("、")}` : "未出现任何禁止关键词。"
+          : matched ? `包含关键词：${included.join("、")}` : `缺少关键词：${words.filter(word => !included.includes(word)).join("、")}`
+        return { ...c, verdict: matched === undefined ? "unknown" : matched ? "passed" : "failed", actual, evidence: `${overall ? "最后一轮" : "本轮"}最终回复：${trace.response || "（空回复）"}` }
+      } catch { return { ...c, verdict: "unknown", actual: "正则表达式无效，未完成检查。", evidence: "请检查表达式后重新运行。" } }
     }
-    return { ...c, verdict, actual: verdict === "unknown" ? "未取得可核验的执行结果。" : verdict === "failed" ? "示例结果未满足这条标准。" : "示例结果满足这条标准。", evidence: verdict === "unknown" ? "缺少回复、工具返回或产物证据，暂无法判定。" : "示例判定，用于体验评测标准与结果的对应关系。" }
+    if (kind === "file") {
+      const path = c.text.trim()
+      const exists = trace.files.includes(path)
+      return { ...c, verdict: exists === (c.operator !== "not_exists") ? "passed" : "failed", fileEvidence: { path, exists, checkedAt },
+        actual: exists ? `已找到文件：${path}` : `未找到文件：${path}`,
+        evidence: `示例在${overall ? "最后一轮" : "本轮"}结束时记录的产物清单：${trace.files.join("、") || "无产物"}。仅检查路径存在性，未检查文件内容。` }
+    }
+    const judgment = (overall ? item.demoEvidence?.overall : trace.judgments)?.find(j => j.check.text === c.text && (j.check.condition || "") === (c.condition || "") && (j.check.reference || "") === (c.reference || ""))
+    return judgment ? { ...c, verdict: judgment.verdict, actual: judgment.actual, evidence: judgment.evidence }
+      : { ...c, verdict: "unknown", actual: "这条标准没有对应的示例判定依据。", evidence: "当前原型未连接真实语义判定服务，不能根据预设结果判为通过。" }
   })
+}
+
+/** 只摘取当前运行已记录的原因，不重新判定、不读取最新用例。 */
+export function resultIssueSummary(result: EvalResult): string {
+  const label = verdictLabel(result)
+  if (label !== "不通过" && label !== "无法判定") return ""
+  const rounds = result.roundResults || []
+  const entries = [...rounds.flatMap((turn, index) => (turn.checkResults || []).map(check => ({ check, scope: `第 ${index + 1} 轮` }))), ...(result.checkResults || []).map(check => ({ check, scope: "整体标准" }))]
+  const failed = entries.find(({ check }) => check.verdict === "failed")
+  const generic = (text: string) => !text.trim() || /^(示例结果|示例判定|未取得完整执行结果|未取得可核验的执行结果)/.test(text)
+  if (failed) return `${failed.scope}：${generic(failed.check.actual) ? `未满足“${checkDescription(failed.check)}”；详情见已有证据。` : failed.check.actual}`
+  const issue = rounds.find(turn => turn.issue)?.issue
+  if (issue) return `${executionIssues[issue].stage}：${executionIssues[issue].reason}。`
+  if (result.status === "skipped") return "运行已停止，本用例未执行。"
+  if (result.status === "cancelled") return "执行已停止，尚未取得完整结果。"
+  const unknown = entries.find(({ check }) => check.verdict === "unknown")
+  if (unknown) return `${unknown.scope}：${!generic(unknown.check.actual) ? unknown.check.actual : !generic(unknown.check.evidence) ? unknown.check.evidence : "缺少可核验的执行证据，请查看详情。"}`
+  if (entries.length && entries.every(({ check }) => check.verdict === "na")) return "全部标准均不适用，无法形成通过结论。"
+  return "未记录具体原因，请查看已有结果与证据。"
 }
 export function executionLabel(result: EvalResult) {
   if (result.status === "skipped") return "未执行"
@@ -398,12 +441,4 @@ export function caseValidation(value: EvalCase): string {
   const checks = [...(value.checks || []), ...turns.flatMap(t => checksOf(t))]
   if (!checks.length) return "请至少添加一条本轮或整体评测标准。"
   return checks.map(checkValidation).find(Boolean) || ""
-}
-
-export function draftRelation(draft: EvalCase, adopted: string | undefined, current?: EvalCase) {
-  if (!adopted) return "待加入"
-  if (!current) return "关联用例已删除"
-  const draftChanged = JSON.stringify(draft) !== adopted
-  const caseChanged = JSON.stringify(current) !== adopted
-  return draftChanged && caseChanged ? "草稿与正式用例均有修改" : caseChanged ? "正式用例有修改" : draftChanged ? "草稿有修改" : "已加入"
 }

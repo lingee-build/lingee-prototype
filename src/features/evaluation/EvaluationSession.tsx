@@ -1,8 +1,8 @@
 import { evaluationObjectUnavailable } from "@/services/evaluation"
 import { useEffect, useRef, useState } from "react"
 import { useBlocker, useNavigate } from "react-router"
-import { useEvaluationConversations, saveDraftAdoption, type EvaluationConversation } from "@/services/evaluation-conversations"
-import { caseValidation, draftRelation, useEvaluation, turnsOf, type EvalCase } from "@/services/evaluation"
+import { useEvaluationConversations, addEvaluationDrafts, type EvaluationConversation } from "@/services/evaluation-conversations"
+import { turnsOf, type EvalCase } from "@/services/evaluation"
 import { saveAttachment } from "@/services/evaluation-attachments"
 import { sessionService } from "@/services/session"
 import { useSync } from "@/stores/sync"
@@ -82,11 +82,9 @@ export function EvaluationSession({ projectId, sessionId, objectId }: { projectI
   }, [stored?.session.id])
   const cardActions = useCardActions(projectId)
   const [working, setWorking] = useState(false)
-  const caseMap = useEvaluation(s => s.cases)
-  const cases = caseMap[objectId] || []
-  const relation = (c: EvalCase) => draftRelation(c, saved?.adopted[c.id], cases.find(x => x.id === c.id))
-  const changed = (c: EvalCase) => relation(c) !== "已加入"
-  const selectable = (saved?.drafts || []).filter(changed)
+  const canAdd = (c: EvalCase) => !saved?.adopted[c.id]
+  const selectable = (saved?.drafts || []).filter(canAdd)
+  const openCases = () => navigate(`/dev/${mode}/${id}/evaluation`)
   const selectedCount = selectable.filter(c => selected.includes(c.id)).length
   function publish(value: EvaluationConversation, persist = true) {
     if (evaluationObjectUnavailable(objectId)) throw new Error("被测对象已删除或正在删除，不能保存草稿。")
@@ -162,25 +160,12 @@ export function EvaluationSession({ projectId, sessionId, objectId }: { projectI
   }
   function adopt() {
     if (!saved || working) return
-    const items = saved.drafts.filter(c => selected.includes(c.id) && changed(c))
-    if (!items.length) return
-    const invalid = items.map(c => ({ c, error: caseValidation(c) })).find(x => x.error)
-    if (invalid) { setError(`${invalid.c.name}：${invalid.error}`); return }
-    const before = JSON.stringify(items.map(c => cases.find(x => x.id === c.id)))
-    const commit = () => {
-      const latest = useEvaluation.getState().cases[objectId] || []
-      if (JSON.stringify(items.map(c => latest.find(x => x.id === c.id))) !== before) { setError("正式用例已变化，请重新检查并确认加入或更新。"); return }
+    try {
+      const next = addEvaluationDrafts(saved.session.id, selected)
+      publish(next, false)
+      setSelected([])
       setError("")
-      const existing = useEvaluation.getState().cases[objectId] || []
-      const next = { ...saved, adopted: { ...saved.adopted, ...Object.fromEntries(items.map(c => [c.id, JSON.stringify(c)])) } }
-      try {
-        saveDraftAdoption(next, [...existing.filter(c => !items.some(d => d.id === c.id)), ...structuredClone(items)])
-        publish(next, false)
-        setSelected([])
-      } catch (e) { setError(e instanceof Error ? e.message : "加入用例失败，草稿和选择已保留，请重试。") }
-    }
-    if (items.some(c => saved.adopted[c.id] || cases.some(x => x.id === c.id))) dialog.show(() => <ConfirmDialog title="确认加入或更新用例？" description={items.map(c => `${c.name}：${relation(c)}`).join("；") + "。现有用例将被当前草稿完整覆盖，包括正式用例中单独修改的内容；已删除用例将重新加入，不自动合并。历史运行记录不受影响。"} confirmText="确认加入或覆盖" cancelText="返回检查" onConfirm={commit} />)
-    else commit()
+    } catch (e) { setError(e instanceof Error ? e.message : "加入用例失败，草稿和选择已保留，请重试。") }
   }
   function closeDrafts() {
     const close = () => { setPanel(false); setEditing(undefined); setPreview(undefined) }
@@ -215,12 +200,14 @@ export function EvaluationSession({ projectId, sessionId, objectId }: { projectI
           dialog.show(() => <ConfirmDialog title="放弃草稿修改？" description="未保存的修改将被丢弃" confirmText="放弃" cancelText="继续编辑" onConfirm={() => setEditing(undefined)} />)
         }} save={value => {
           if (!saved) return
+          if (useEvaluationConversations.getState().items[saved.session.id]?.adopted[value.id]) { setError("这条草稿已加入，请前往用例列表维护。"); return }
           try {
             publish({ ...saved, drafts: saved.drafts.map(c => c.id === value.id ? value : c) })
             setError(""); setEditing(undefined)
           } catch (e) { setError(e instanceof Error ? e.message : "草稿保存失败，当前编辑内容已保留，请重试。") }
-        }} /> : viewed ? <CaseDetail value={viewed} back={() => setPreview(undefined)} edit={() => { if (!working) setEditing(structuredClone(viewed)) }} /> : null}</div> : <>
+        }} /> : viewed ? <><p className="eval-muted">{canAdd(viewed) ? "检查草稿后，可一次性加入用例列表。" : "这是加入时的草稿，后续修改请前往用例列表。"}</p><CaseDetail value={viewed} back={() => setPreview(undefined)} editDisabled={working && canAdd(viewed)} editLabel={canAdd(viewed) ? "编辑" : "前往用例列表"} edit={() => { if (!canAdd(viewed)) openCases(); else if (!working) setEditing(structuredClone(viewed)) }} /></> : null}</div> : <>
           <div className="eval-draft-heading"><h3>用例草稿 <span className="eval-section-count">{saved?.drafts.length || 0}</span></h3><Button variant="ghost" onClick={() => navigate(`/dev/${mode}/${id}/evaluation`)}>返回评测</Button></div>
+          <p className="eval-muted eval-draft-note">草稿可一次性加入，加入后统一在用例列表维护。</p>
           <div className="eval-draft-list-scroll">
           {!!saved?.drafts.length && <div className="eval-selection-bar"><label className="eval-check">
             <input type="checkbox" aria-label="全选可加入的草稿" disabled={working || !selectable.length}
@@ -230,9 +217,9 @@ export function EvaluationSession({ projectId, sessionId, objectId }: { projectI
             全选
           </label></div>}
           {!saved?.drafts.length && <div className="eval-empty"><Empty description="生成的用例将在这里展示" /></div>}
-          {saved?.drafts.map(c => <div className="eval-draft-card" key={c.id}><input type="checkbox" aria-label={`选择 ${c.name}`} disabled={working || !changed(c)} checked={selected.includes(c.id) && changed(c)} onChange={e => setSelected(ids => e.target.checked ? [...ids, c.id] : ids.filter(x => x !== c.id))} /><div className="eval-grow"><button className="eval-title" onClick={() => setPreview(c.id)}>{c.name}</button><p className="eval-muted">{turnsOf(c).length} 轮对话 · {relation(c)}</p></div><Button disabled={working} onClick={() => setEditing(structuredClone(c))}>编辑</Button></div>)}
+          {saved?.drafts.map(c => <div className="eval-draft-card" key={c.id}><input type="checkbox" aria-label={`选择 ${c.name}`} disabled={working || !canAdd(c)} checked={selected.includes(c.id) && canAdd(c)} onChange={e => setSelected(ids => e.target.checked ? [...ids, c.id] : ids.filter(x => x !== c.id))} /><div className="eval-grow"><button className="eval-title" onClick={() => setPreview(c.id)}>{c.name}</button><p className="eval-muted" role="status">{turnsOf(c).length} 轮对话 · {canAdd(c) ? "待加入" : "已加入"}</p></div>{canAdd(c) ? <Button disabled={working} onClick={() => setEditing(structuredClone(c))}>编辑</Button> : <Button onClick={openCases}>前往用例列表</Button>}</div>)}
           </div>
-          {!!saved?.drafts.length && <div className="eval-draft-footer"><span className="eval-muted" aria-live="polite">已选 {selectedCount} 条</span><BrandButton variant="primary" disabled={working || !saved.drafts.some(c => selected.includes(c.id) && changed(c))} onClick={adopt}>{saved.drafts.some(c => selected.includes(c.id) && cases.some(x => x.id === c.id)) ? "确认加入或更新" : "加入用例列表"}</BrandButton></div>}
+          {!!saved?.drafts.length && <div className="eval-draft-footer"><span className="eval-muted" aria-live="polite">已选 {selectedCount} 条</span><BrandButton variant="primary" disabled={working || !selectedCount} onClick={adopt}>加入用例列表</BrandButton></div>}
         </>}
       </section>}
     </div>

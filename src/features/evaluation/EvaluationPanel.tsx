@@ -1,6 +1,6 @@
 import { DatePicker } from "@/ui/date-picker/DatePicker"
-import { completeEvaluationSample } from "@/services/evaluation-samples"
-import { casePoints, runPoints, pointsText, pointsSourceText, refreshRunPoints, resumeRunPoints, updateAutomaticPoints } from "@/services/evaluation-points"
+import { basicEvaluationSample, completeEvaluationSample } from "@/services/evaluation-samples"
+import { runPoints, pointsText, resumeRunPoints, updateAutomaticPoints } from "@/services/evaluation-points"
 import { useEditSession } from "@/features/dev-page/use-edit-session"
 import { devStore } from "@/mock/dev-store"
 import { evaluationRepairObject, repairPrompt, repairDisabledReason, registerEvaluationRepair } from "@/services/evaluation-repair"
@@ -11,6 +11,7 @@ import { useSync } from "@/stores/sync"
 import { CaseDetail } from "./CaseDetail"
 import { CaseEditor } from "./CaseEditor"
 import { RoundResults } from "./RoundResults"
+import { RunPointsSummary } from "./RunPointsSummary"
 import { ReportPreview } from "./ReportPreview"
 import { buildReportDocument } from "./report-document"
 import { useEffect, useState } from "react"
@@ -25,6 +26,7 @@ import {
   type EvalEnvironment,
   executionLabel,
   verdictLabel,
+  resultIssueSummary,
   useEvaluation,
   saveCases,
   startRun,
@@ -221,18 +223,13 @@ export function EvaluationPanel({ objectId, name, onEnvironmentChange, onDetailC
       }} />)
   }
   function samples() {
-    const next: EvalCase[] = (["passed", "failed", "blocked"] as Outcome[]).map((outcome, index) => ({
-      id: crypto.randomUUID(),
+    const next: EvalCase[] = (["passed", "failed", "blocked"] as Outcome[]).map((outcome, index) => basicEvaluationSample({
       name: tr(`sample.${outcome}`),
       input: t(`proto.eval.input.${outcome}`, { name }),
       expected: tr(`expected.${outcome}`),
       source: sources[index + 1],
       outcome,
-      demo: true,
-      checks: [{ id: crypto.randomUUID(), text: "最终结论与业务数据一致，且有查询结果或业务材料支持。", required: true, files: [] }],
-      turns: [{ id: crypto.randomUUID(), input: t(`proto.eval.input.${outcome}`, { name }), expected: tr(`expected.${outcome}`), attachments: [], rules: [], checks: [{ id: crypto.randomUUID(), text: tr(`expected.${outcome}`), required: true, files: [] }] }],
     }))
-    next[0].checks!.push({ id: crypto.randomUUID(), kind: "file", operator: "exists", text: "outputs/查询结果.txt", required: true, files: [] })
     const blocked = next.find(c => c.outcome === "blocked")!
     const failures = (["tool_unavailable", "timeout", "clarification_unmatched"] as const).map((demoFailure, index) => ({ ...structuredClone(blocked), id: crypto.randomUUID(), demoFailure, name: ["工具不可用", "执行超时", "澄清回复未匹配"][index] }))
     if (!saveCases(objectId, [...cases, completeEvaluationSample(name), ...next.filter(c => c.outcome !== "blocked"), { ...structuredClone(next[0]), id: crypto.randomUUID(), name: "判定服务超时（业务执行成功）", demoJudgingFailure: "timeout", demoJudgingDelayMs: 3000 }, ...failures])) return
@@ -427,7 +424,7 @@ export function EvaluationPanel({ objectId, name, onEnvironmentChange, onDetailC
                   onClick={() => openView({ section: "runs", runId: resultId || reportRequested ? current.id : undefined })}
                 />
                 <div className="eval-actions">
-                  <Tooltip value={repairReason} inactive={!repairReason}>
+                  <Tooltip value={repairReason || "携带失败证据进入原对象开发对话，检查修改后手动复测"}>
                     <Button className="eval-repair-action" aria-disabled={!!repairReason} onClick={() => { if (!repairReason) void repair(current, result?.id) }}>{result ? "去修复" : "修复问题"}</Button>
                   </Tooltip>
                   {isActiveRun(current) ? (
@@ -463,7 +460,7 @@ export function EvaluationPanel({ objectId, name, onEnvironmentChange, onDetailC
                 {current.stopReason && <p role="status">{current.status === "cancelled" ? "已确认运行停止。" : current.stopReason}</p>}
                 <details className="eval-muted"><summary>运行信息</summary><p>评测时的{current.objectType === "agent" ? "智能体" : "技能"}版本：{current.objectContentSummary || "未记录"}</p><p>运行编号：{current.id}</p></details>
                 <p className="eval-muted">{current.objectType === "agent" ? "智能体" : current.objectType === "skill" ? "技能" : "评测对象"} · {current.name} · {environmentLabel(current.environment)}</p>
-                <p className="eval-muted">{pointsText(runPoints(current), true)}{pointsSourceText(current) && ` · ${pointsSourceText(current)}`}</p>
+                <RunPointsSummary key={current.id} objectId={objectId} run={current} />
                 <div className="eval-counts">
                   {["通过", "不通过", "无法判定"].map((s) => (
                     <span key={s}>
@@ -498,12 +495,6 @@ export function EvaluationPanel({ objectId, name, onEnvironmentChange, onDetailC
                 )}
               </div>}
               {report && !isActiveRun(current) && <ReportPreview html={buildReportDocument(current, t)} />}
-              {!report && <details className="eval-prototype-tools" aria-label="点数状态演示"><summary>原型演示工具</summary>{([ ["pending", "统计中"], ["unavailable", "查询失败"], ["exhausted", "查询重试结束"] ] as const).map(([mode, label]) => <Button key={mode} className="eval-prototype-action" disabled={current.pointsQuery?.status === "loading"} onClick={() => void refreshRunPoints(objectId, current.id, mode)}>模拟{label}（仅原型）</Button>)}</details>}
-              {!report && isActiveRun(current) && <details className="eval-prototype-tools" aria-label="运行状态演示">
-                <summary>运行状态演示（仅原型）</summary>
-                {["running", "judging"].includes(current.status) && <Button className="eval-prototype-action" onClick={() => requestCancelRun(objectId, current.id, true)}>模拟停止无响应（仅原型）</Button>}
-                {current.status === "stop_unconfirmed" && <><Button className="eval-prototype-action" onClick={() => cancelRun(objectId, current.id)}>模拟核实已停止（仅原型）</Button><Button className="eval-prototype-action" onClick={() => cancelRun(objectId, current.id, "error")}>模拟核实运行异常（仅原型）</Button></>}
-              </details>}
               {!report && !result &&
                 current.results.map((c) => (
                   <div key={c.id} id={`eval-case-result-${c.id}`} tabIndex={-1} data-located={locatedCase?.id === c.id || undefined} className="eval-row eval-result-row">
@@ -514,8 +505,8 @@ export function EvaluationPanel({ objectId, name, onEnvironmentChange, onDetailC
                       >
                         {c.name}
                       </button>
+                      {resultIssueSummary(c) && <p className="eval-result-summary">{resultIssueSummary(c)}</p>}
                     </div>
-                    <span className="eval-muted">{pointsText(casePoints(c))}</span>
                     {executionLabel(c) !== "已完成" && <span className="eval-muted">{executionLabel(c)}</span>}<span className="eval-status" data-status={c.verdict || c.status}>{verdictLabel(c)}</span>
                     {!report && <Button
                       onClick={() => openView({ section: "runs", runId: current.id, resultId: c.id })}
@@ -534,6 +525,11 @@ export function EvaluationPanel({ objectId, name, onEnvironmentChange, onDetailC
                   <RoundResults result={result} />
                 </>
               )}
+              {!report && isActiveRun(current) && <details className="eval-prototype-tools" aria-label="运行状态演示">
+                <summary>运行状态演示（仅原型）</summary>
+                {["running", "judging"].includes(current.status) && <Button className="eval-prototype-action" onClick={() => requestCancelRun(objectId, current.id, true)}>模拟停止无响应（仅原型）</Button>}
+                {current.status === "stop_unconfirmed" && <><Button className="eval-prototype-action" onClick={() => cancelRun(objectId, current.id)}>模拟核实已停止（仅原型）</Button><Button className="eval-prototype-action" onClick={() => cancelRun(objectId, current.id, "error")}>模拟核实运行异常（仅原型）</Button></>}
+              </details>}
             </>
           )}
         </>

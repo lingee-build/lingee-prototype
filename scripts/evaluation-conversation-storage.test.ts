@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test"
-import { useEvaluationConversations as chats, saveDraftAdoption, type EvaluationConversation } from "../src/services/evaluation-conversations"
-import { useEvaluation, saveCases, startRun, draftRelation, type EvalCase } from "../src/services/evaluation"
+import { useEvaluationConversations as chats, addEvaluationDrafts, type EvaluationConversation } from "../src/services/evaluation-conversations"
+import { useEvaluation, saveCases, startRun, type EvalCase } from "../src/services/evaluation"
 
 const chatKey = "lingee.evaluation-conversations.v1"
 const evalKey = "lingee.evaluation.v1"
@@ -42,57 +42,95 @@ test("草稿保存失败恢复原记录，刷新不出现假保存，恢复存�
   expect(chats.getState().items[original.session.id].drafts[0].name).toBe("编辑后")
 }))
 
-test("加入关联写入失败时不覆盖正式用例和历史记录", () => withStorage((memory, fail) => {
+test("一次性加入标记写入失败时保留正式用例与历史记录", () => withStorage((memory, fail) => {
   const original = conversation()
   chats.getState().put(original)
-  saveCases(original.objectId, [sample])
-  startRun(original.objectId, "技能", [sample])
+  const existing = { ...sample, id: "existing" }
+  saveCases(original.objectId, [existing])
+  startRun(original.objectId, "技能", [existing])
   const saved = memory.get(evalKey)
-  const edited = { ...sample, name: "新草稿", input: "新输入" }
   fail(key => key === chatKey)
-  expect(() => saveDraftAdoption({ ...original, drafts: [edited], adopted: { case: JSON.stringify(edited) } }, [edited])).toThrow("草稿关联保存失败")
+  expect(() => addEvaluationDrafts(original.session.id, [sample.id])).toThrow("草稿关联保存失败")
   expect(memory.get(evalKey)).toBe(saved)
-  expect(useEvaluation.getState().cases[original.objectId]).toEqual([sample])
+  expect(useEvaluation.getState().cases[original.objectId]).toEqual([existing])
   expect(chats.getState().items[original.session.id].adopted).toEqual({})
 }))
 
-test("正式用例写入失败回退加入关联，恢复后加入成功且旧运行不变", () => withStorage(async (memory, fail) => {
+test("首次加入失败回退标记，恢复后可重试且旧运行不变", () => withStorage(async (memory, fail) => {
   const original = conversation()
   chats.getState().put(original)
-  saveCases(original.objectId, [sample])
-  startRun(original.objectId, "技能", [sample])
+  const existing = { ...sample, id: "existing" }
+  saveCases(original.objectId, [existing])
+  startRun(original.objectId, "技能", [existing])
   const history = structuredClone(useEvaluation.getState().runs)
   const savedChat = memory.get(chatKey)
   const savedEval = memory.get(evalKey)
-  const edited = { ...sample, name: "新草稿", input: "新输入" }
-  const adopted = { ...original, drafts: [edited], adopted: { case: JSON.stringify(edited) } }
   fail(key => key === evalKey)
-  expect(() => saveDraftAdoption(adopted, [edited])).toThrow("用例保存失败")
+  expect(() => addEvaluationDrafts(original.session.id, [sample.id])).toThrow("用例保存失败")
   expect(memory.get(chatKey)).toBe(savedChat)
   expect(memory.get(evalKey)).toBe(savedEval)
   expect(chats.getState().items[original.session.id]).toEqual(original)
   fail(() => false)
-  saveDraftAdoption(adopted, [edited])
+  addEvaluationDrafts(original.session.id, [sample.id])
   await chats.persist.rehydrate()
   await useEvaluation.persist.rehydrate()
-  expect(draftRelation(edited, chats.getState().items[original.session.id].adopted.case, useEvaluation.getState().cases[original.objectId][0])).toBe("已加入")
+  expect(chats.getState().items[original.session.id].adopted.case).toBeTruthy()
+  expect(useEvaluation.getState().cases[original.objectId]).toEqual([existing, sample])
   expect(useEvaluation.getState().runs).toEqual(history)
 }))
 
-test("关联回退也遇到存储故障时明确报错，保留原用例并允许恢复后重试", () => withStorage((memory, fail) => {
+test("加入标记回退也失败时明确报错，允许恢复存储后重试", () => withStorage((memory, fail) => {
   const original = conversation()
   chats.getState().put(original)
-  saveCases(original.objectId, [sample])
+  saveCases(original.objectId, [])
   const savedEval = memory.get(evalKey)
-  const edited = { ...sample, name: "新草稿" }
-  const adopted = { ...original, drafts: [edited], adopted: { case: JSON.stringify(edited) } }
   let disconnected = false
   fail(key => { if (key === evalKey) disconnected = true; return disconnected })
-  expect(() => saveDraftAdoption(adopted, [edited])).toThrow("关联记录尚未恢复到存储")
+  expect(() => addEvaluationDrafts(original.session.id, [sample.id])).toThrow("关联记录尚未恢复到存储")
   expect(memory.get(evalKey)).toBe(savedEval)
   expect(chats.getState().items[original.session.id]).toEqual(original)
-  expect(useEvaluation.getState().cases[original.objectId]).toEqual([sample])
+  expect(useEvaluation.getState().cases[original.objectId]).toEqual([])
   fail(() => false)
-  saveDraftAdoption(adopted, [edited])
+  addEvaluationDrafts(original.session.id, [sample.id])
+  expect(useEvaluation.getState().cases[original.objectId]).toEqual([sample])
+}))
+
+test("重复加入、正式用例编辑与删除后重开会话均不覆盖或重新创建", () => withStorage(async () => {
+  const original = conversation()
+  chats.getState().put(original)
+  addEvaluationDrafts(original.session.id, [sample.id, sample.id])
+  expect(useEvaluation.getState().cases[original.objectId]).toEqual([sample])
+  addEvaluationDrafts(original.session.id, [sample.id])
+  expect(useEvaluation.getState().cases[original.objectId]).toHaveLength(1)
+  const edited = { ...sample, name: "列表内修改", input: "新输入" }
+  saveCases(original.objectId, [edited])
+  addEvaluationDrafts(original.session.id, [sample.id])
   expect(useEvaluation.getState().cases[original.objectId]).toEqual([edited])
+  saveCases(original.objectId, [])
+  await chats.persist.rehydrate()
+  addEvaluationDrafts(original.session.id, [sample.id])
+  expect(useEvaluation.getState().cases[original.objectId]).toEqual([])
+  expect(chats.getState().items[original.session.id].drafts).toEqual([sample])
+}))
+
+test("兼容旧加入标记，不因正式用例缺失重新加入", () => withStorage(() => {
+  const original = conversation()
+  chats.getState().put({ ...original, adopted: { case: JSON.stringify(sample) } })
+  saveCases(original.objectId, [])
+  addEvaluationDrafts(original.session.id, [sample.id])
+  expect(useEvaluation.getState().cases[original.objectId]).toEqual([])
+}))
+
+test("批量无效或标识冲突整批不写入，生成中不允许加入", () => withStorage(() => {
+  const original = conversation()
+  const bad = { ...sample, id: "bad", input: " " }
+  chats.getState().put({ ...original, drafts: [sample, bad] })
+  expect(() => addEvaluationDrafts(original.session.id, [sample.id, bad.id])).toThrow("用户输入")
+  expect(useEvaluation.getState().cases[original.objectId]).toBeUndefined()
+  expect(chats.getState().items[original.session.id].adopted).toEqual({})
+  saveCases(original.objectId, [{ ...sample, name: "已有正式用例" }])
+  expect(() => addEvaluationDrafts(original.session.id, [sample.id])).toThrow("未加入或覆盖")
+  expect(useEvaluation.getState().cases[original.objectId][0].name).toBe("已有正式用例")
+  chats.getState().put({ ...original, session: { ...original.session, status: "running" } })
+  expect(() => addEvaluationDrafts(original.session.id, [sample.id])).toThrow("等待生成结束")
 }))

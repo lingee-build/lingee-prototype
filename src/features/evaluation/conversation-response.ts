@@ -14,6 +14,7 @@ export function respondToEvaluation(next: EvaluationConversation, raw: string): 
     const index = (/^\d+$/.test(target[1]) ? Number(target[1]) : '一二三四'.indexOf(target[1]) + 1) - 1
     const item = next.drafts[index]
     if (!item) return { text: `当前没有第 ${index + 1} 条草稿，请确认要修改的用例`, changed: false }
+    if (next.adopted[item.id]) return { text: `第 ${index + 1} 条已加入用例列表，请前往用例列表维护。这里保留加入时的草稿，不再修改或重复加入。`, changed: false }
     if (!/改|补充|增加|添加/.test(text)) return { text: `你希望怎样调整“${item.name}”？可以补充用户输入或评测标准`, changed: false }
     if (/多轮/.test(text)) {
       const turns = structuredClone(turnsOf(item))
@@ -47,7 +48,7 @@ export function respondToEvaluation(next: EvaluationConversation, raw: string): 
   let wanted = requested.length ? requested : scenarios(next.request)
   if (!wanted.length) wanted = ['正常查询', '信息缺失', '记录不存在']
   wanted = wanted.filter(s => !next.drafts.some(d => d.name === `${next.objectName} · ${s}`))
-  if (!wanted.length) return { text: '这些场景已有草稿，没有重复添加。可以指定其中一条继续完善，或补充新的业务场景', changed: false }
+  if (!wanted.length) return { text: '这些场景已有草稿，没有重复添加。未加入的草稿可继续完善，已加入的用例请到用例列表维护；也可补充新的业务场景', changed: false }
   next.drafts.push(...wanted.map(s => makeDraft(next.objectName, s, next.rule, next.files)))
   return { text: `已整理 ${wanted.length} 条用例：\n\n${wanted.map(s => `- ${s}`).join('\n')}\n\n每条包含用户输入和评测标准。请在草稿中确认业务数据与预期结果，再加入用例列表`, changed: true }
 }

@@ -24,7 +24,7 @@ export function agentRepairScenario({ repairTarget, projectId }: ScenarioContext
           }] },
         } : agent)
         return {
-          text: `已在原智能体「${target.name}」上保存模拟修改，智能体 ID：${target.id}。未创建新智能体，未提交或发布。可通过下方返回运行记录，再使用原对象的最新已保存内容重新运行。\n\n这是原型模拟：记录原智能体有待提交修改，用于体验修复回流；不代表真实智能体内容已修复。`,
+          text: `已在原智能体「${target.name}」上保存模拟修改，智能体 ID：${target.id}。未创建新智能体，未提交或发布。请检查下方原对象产物，再返回运行记录手动复测；修复效果以新运行结果为准。\n\n这是原型模拟：记录原智能体有待提交修改，用于体验修复回流；不代表真实智能体内容已修复。`,
           card: () => ({ kind: "ai-partner", config: { id: target.id, title: target.name } }),
         }
       },

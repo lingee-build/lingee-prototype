@@ -49,16 +49,18 @@ test("尚未执行或正在执行的轮次不冒充已确认未发生澄清", ()
 
 test("报告包含全部轮次、四种标准和模拟标识，不依赖外部资源", () => {
   const html = buildReportDocument(run)
-  for (const label of ["评测结论", "问题清单", "用例概览", "详细结果", "判定说明", "语义判断", "关键词匹配", "正则匹配", "文件存在性", "实际回复", "澄清过程", "实际结果", "判定依据"]) expect(html).toContain(label)
+  for (const label of ["评测结论", "问题清单", "用例概览", "详细结果", "语义判断", "关键词匹配", "正则匹配", "文件存在性", "实际回复", "澄清过程", "实际结果", "判定依据"]) expect(html).toContain(label)
   expect(html.match(/<details class="round" open>/g)?.length).toBe(6)
-  expect(html).not.toMatch(/<script|<link|src="https?:/)
+  expect(html).not.toMatch(/<link|src="https?:/)
+  expect(html.match(/<script>/g)).toHaveLength(1)
 })
 test("报告转义用户内容，避免下载 HTML 执行注入", () => {
   const unsafe = structuredClone(run)
   unsafe.name = '</title><script>alert(1)</script>'
   unsafe.results[0].roundResults![0].response = '<img src=x onerror="alert(1)">'
   const html = buildReportDocument(unsafe)
-  expect(html).not.toContain('<script>')
+  expect(html).not.toContain('<script>alert(1)</script>')
+  expect(html.match(/<script>/g)).toHaveLength(1)
   expect(html).not.toContain('<img src=x')
   expect(html).toContain('&lt;img src=x')
 })
@@ -87,17 +89,19 @@ test("报告区分空回复与缺失回复并显示未执行状态和文件检�
   expect(buildReportDocument(value)).toContain("<dt>检查时点</dt><dd>未记录</dd>")
 })
 
-test("P2 报告使用历史判定快照并显式展示缺失的对象内容", () => {
+test("报告不展示通用判定说明，保留运行快照并展示对象版本", () => {
   const value = structuredClone(run)
   value.checkPolicySnapshot = "当次规则：区分大小写；flags 为空"
   value.objectContentSummary = "对象摘要 <revision-1>"
   let html = buildReportDocument(value)
-  expect(html).toContain("当次规则：区分大小写；flags 为空")
+  expect(html).not.toContain("当次规则：区分大小写；flags 为空")
+  expect(value.checkPolicySnapshot).toBe("当次规则：区分大小写；flags 为空")
+  expect(html).not.toContain("判定说明")
   expect(html).toContain("对象摘要 &lt;revision-1&gt;")
   delete value.checkPolicySnapshot
   delete value.objectContentSummary
   html = buildReportDocument(value)
-  expect(html).toContain("历史运行未记录详细判定口径")
+  expect(html).not.toContain("历史运行未记录详细判定口径")
   expect(html).toContain("<dt>评测时的对象版本</dt><dd>未记录</dd>")
   expect(html).not.toContain("整体标准检查最后一轮最终回复")
 })
@@ -115,3 +119,28 @@ test("最终报告区分已停止、执行异常、无法判定与仍在判定",
   expect(buildReportDocument({ ...unknown, status: "error" })).toContain("运行因执行异常结束")
   expect(buildReportDocument({ ...unknown, status: "judging" })).toContain("运行尚未结束，结果仍在更新")
 })
+
+test("报告只展示运行总点数和状态，缺失判定消耗不能当作完整总量", async () => {
+  const { pointsText, runPoints, pointsScopeNote } = await import("../src/services/evaluation-points")
+  const value = structuredClone(run)
+  value.pointsQuery = { status: "missing", amount: { execution: 7, judging: 0, recorded: true, missing: true } }
+  const html = buildReportDocument(value)
+  expect(html).toContain(pointsText(runPoints(value)))
+  expect(html).toContain("已获取消耗点数：7.00 · 统计不完整")
+  expect(html).toContain(pointsScopeNote)
+  expect(html).not.toContain("<th>消耗点数</th>")
+  expect(html).not.toContain("（执行 ")
+  const detail = html.slice(html.indexOf('<section id="details">'))
+  expect(detail).not.toContain("消耗点数：")
+  expect(html.match(/消耗点数：/g)).toHaveLength(1)
+})
+
+ test("报告离线交互脚本受 CSP 哈希限制，用户输入不能改变脚本", async () => {
+  const { createHash } = await import("node:crypto")
+  const html = buildReportDocument(run)
+  const script = html.match(/<script>([\s\S]*?)<\/script>/)![1]
+  expect(html).toContain("script-src 'sha256-" + createHash("sha256").update(script).digest("base64") + "'")
+  const changed = structuredClone(run)
+  changed.name = '</script><script>alert(1)</script>'
+  expect(buildReportDocument(changed).match(/<script>([\s\S]*?)<\/script>/)![1]).toBe(script)
+ })
