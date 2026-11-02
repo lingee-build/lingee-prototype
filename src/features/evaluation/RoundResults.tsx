@@ -41,7 +41,7 @@ function checkText(checks: EvalCheck[], results?: CheckResult[]): string {
 }
 
 function ruleText(rule: EvalTurn["rules"][number], index: number) {
-  return `澄清回复 ${index + 1}\n预期追问：${rule.match}\n自动回复：${rule.responses.join("\n")}`
+  return `澄清回复配置 ${index + 1}\n预期追问：${rule.match}\n自动回复：${rule.responses.join("\n")}`
 }
 function turnVerdict(turn: ReturnType<typeof resultRounds>[number], t: (key: string) => string) {
   if (["pending", "running", "cancelled", "skipped"].includes(turn.status)) return t(`proto.eval.${turn.status}`)
@@ -62,23 +62,23 @@ export function RoundResults({ result }: { result: EvalResult }) {
     <Files files={result.attachments || []} label="会话附件" />
     <div className="eval-toolbar"><h3>对话轮次（{rounds.length}）</h3><div className="eval-actions">{rounds.length > 1 && <Button variant="ghost" onClick={() => setAll(!allExpanded)}>{allExpanded ? "全部折叠" : "全部展开"}</Button>}</div></div>
     {rounds.map((turn, i) => <TurnCard key={turn.id} turnId={turn.id} number={i + 1} input={turn.input}
-      meta={isOpen(turn) ? "" : [turn.attachments.length && `附件 ${turn.attachments.length}`, turn.rules.length && `澄清回复 ${turn.rules.length}`, checksOf(turn).length && `评测标准 ${checksOf(turn).length}`].filter(Boolean).join(" · ")}
+      meta={isOpen(turn) ? "" : [turn.attachments.length && `附件 ${turn.attachments.length}`, turn.rules.length && `澄清回复配置 ${turn.rules.length}`, checksOf(turn).length && `评测标准 ${checksOf(turn).length}`].filter(Boolean).join(" · ")}
       status={<span className="eval-status" data-status={{ "通过": "passed", "不通过": "failed", "无法判定": "unknown" }[turnVerdict(turn, t)]}>{turnVerdict(turn, t)}</span>}
       open={isOpen(turn)} toggle={() => setExpanded(prev => ({ ...prev, [turn.id]: { status: turn.status, open: !isOpen(turn) } }))}>
 
       <div className="eval-input-group"><div className="eval-message"><strong>用户输入</strong><p>{turn.input}</p></div>
       <Files files={turn.attachments} label="附件" /></div>
-      {!!turn.rules.length && <details className="eval-result-rules"><summary className="eval-section-title">澄清回复 <span className="eval-section-count">（{turn.rules.length}）</span></summary>
+      {!!turn.rules.length && <details className="eval-result-rules"><summary className="eval-section-title">澄清回复配置 <span className="eval-section-count">（{turn.rules.length}）</span></summary>
         <div className="eval-result-reply-list">
           <div className="eval-result-reply-columns" aria-hidden="true"><span /><span>预期追问</span><span>自动回复</span></div>
-          {turn.rules.map((r, ri) => <div className="eval-result-reply-row" key={r.id} aria-label={`澄清回复 ${ri + 1}`}>
+          {turn.rules.map((r, ri) => <div className="eval-result-reply-row" key={r.id} aria-label={`澄清回复配置 ${ri + 1}`}>
             <span className="eval-result-number">{ri + 1}</span>
             <div><span className="eval-result-mobile-label">预期追问</span><p>{r.match}</p></div>
             <div className="eval-result-reply-answer"><span className="eval-result-mobile-label">自动回复</span><p>{r.responses.join("\n")}</p></div>
           </div>)}
         </div>
       </details>}
-      <details className="eval-message"><summary>澄清过程</summary><p>{clarificationText(turn)}</p></details>
+      <details className="eval-message" open><summary>本次澄清过程</summary><p>{clarificationText(turn)}</p></details>
       {"issue" in turn && turn.issue && <div className="eval-message"><strong>执行异常</strong><dl className="eval-result-evidence"><dt>发生阶段</dt><dd>{executionIssues[turn.issue].stage}</dd><dt>原因</dt><dd>{executionIssues[turn.issue].reason}</dd><dt>处理建议</dt><dd>{executionIssues[turn.issue].action}</dd></dl></div>}
       {"tool" in turn && turn.tool && <div className="eval-message"><strong>工具调用</strong><p>{turn.tool}</p></div>}
       {turn.toolResult && <div className="eval-message"><strong>{t("proto.eval.toolResult")}</strong><p>{turn.toolResult}</p></div>}
@@ -89,5 +89,5 @@ export function RoundResults({ result }: { result: EvalResult }) {
   </div>
 }
 export function reportBody(result: EvalResult, t: (key: string) => string) {
-  return `${result.name}\n用例编号：${result.id}\n执行：${executionLabel(result)} · 结论：${verdictLabel(result)}\n整体评测标准：\n${checkText(result.checks || [], result.checkResults)}\n会话附件：${(result.attachments || []).map(f => f.name).join("、") || "无"}\n` + resultRounds(result).map((turn, i) => `第 ${i + 1} 轮：${turnVerdict(turn, t)}\n用户输入：${turn.input}\n附件：${turn.attachments.map(f => f.name).join("、") || "无"}\n澄清回复：${turn.rules.map(ruleText).join("\n\n") || "无"}\n澄清过程：${clarificationText(turn)}\n工具返回：${turn.toolResult || "未记录"}\n回复：${responseText(turn, t)}\n评测标准：\n${checkText(checksOf(turn), "checkResults" in turn ? turn.checkResults as CheckResult[] : undefined)}\n依据：${turn.evidence ? t(turn.evidence) : turn.status === "skipped" ? "本轮未执行。" : turn.status === "cancelled" ? "本轮已停止，未生成判定依据。" : t("proto.eval.waiting")}`).join("\n\n")
+  return `${result.name}\n用例编号：${result.id}\n执行：${executionLabel(result)} · 结论：${verdictLabel(result)}\n整体评测标准：\n${checkText(result.checks || [], result.checkResults)}\n会话附件：${(result.attachments || []).map(f => f.name).join("、") || "无"}\n` + resultRounds(result).map((turn, i) => `第 ${i + 1} 轮：${turnVerdict(turn, t)}\n用户输入：${turn.input}\n附件：${turn.attachments.map(f => f.name).join("、") || "无"}\n澄清回复配置：${turn.rules.map(ruleText).join("\n\n") || "无"}\n本次澄清过程：${clarificationText(turn)}\n工具返回：${turn.toolResult || "未记录"}\n回复：${responseText(turn, t)}\n评测标准：\n${checkText(checksOf(turn), "checkResults" in turn ? turn.checkResults as CheckResult[] : undefined)}\n依据：${turn.evidence ? t(turn.evidence) : turn.status === "skipped" ? "本轮未执行。" : turn.status === "cancelled" ? "本轮已停止，未生成判定依据。" : t("proto.eval.waiting")}`).join("\n\n")
 }

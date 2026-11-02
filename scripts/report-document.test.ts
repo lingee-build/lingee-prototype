@@ -50,7 +50,7 @@ test("已确认未发生澄清时，页面与报告不显示记录缺失，且�
     turn.rules = rules
     expect(clarificationText(turn)).toBe("本轮未发生澄清。")
     const html = buildReportDocument(value)
-    expect(html).toContain("<h4>澄清过程</h4><p>本轮未发生澄清。</p>")
+    expect(html).toContain("<h4>本次澄清过程</h4><p>本轮未发生澄清。</p>")
     expect(html).not.toContain("未记录澄清过程")
   }
 })
@@ -69,7 +69,7 @@ test("澄清实际过程和记录缺失分别保留，不从配置推断未发�
     turn.rules = rules
     expect(clarificationText(turn)).toBe("未记录澄清过程。")
     const html = buildReportDocument(value)
-    expect(html).toContain("<h4>澄清过程</h4><p>未记录澄清过程。</p>")
+    expect(html).toContain("<h4>本次澄清过程</h4><p>未记录澄清过程。</p>")
     expect(html).not.toContain("本轮未发生澄清。")
   }
 })
