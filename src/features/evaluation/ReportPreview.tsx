@@ -19,7 +19,7 @@ export function ReportPreview({ html }: { html: string }) {
       disconnectDocument()
       const document = frame.contentDocument
       if (!document?.body) return
-      setCases(Array.from(document.querySelectorAll("details.case")).map(item => ({id:item.id,label:item.querySelector("summary")?.textContent || ""})))
+      setCases(Array.from(document.querySelectorAll("details.case")).map(item => ({id:item.id,label:(item.querySelector(".case-heading-label") || item.querySelector("summary"))?.textContent || ""})))
       // 预览目录放在主滚动区，保持吸顶；下载文档仍使用自己的目录。
       document.documentElement.dataset.embedded = "true"
       // 测量自然内容高度，不能用至少等于 iframe 高度的 scrollHeight，否则折叠后无法缩短。

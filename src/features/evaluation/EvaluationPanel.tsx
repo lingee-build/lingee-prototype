@@ -12,6 +12,8 @@ import { CaseDetail } from "./CaseDetail"
 import { CaseEditor } from "./CaseEditor"
 import { RoundResults } from "./RoundResults"
 import { RunPointsSummary } from "./RunPointsSummary"
+import { EvaluationDuration, useEvaluationClock } from "./EvaluationDuration"
+import { caseDuration, caseDurationNote, runDuration, runDurationNote } from "@/services/evaluation-duration"
 import { ReportPreview } from "./ReportPreview"
 import { buildReportDocument } from "./report-document"
 import { useEffect, useState } from "react"
@@ -165,6 +167,7 @@ export function EvaluationPanel({ objectId, name, onEnvironmentChange, onDetailC
     void updateAutomaticPoints()
   }, [objectId, runId])
   const report = reportRequested && !!current && !isActiveRun(current)
+  const durationNow = useEvaluationClock(section === "runs" && !report && (current ? isActiveRun(current) : visibleRuns.some(isActiveRun)))
   useEffect(() => { onEnvironmentChange?.(section === "runs" && current ? current.environment : currentEvaluationEnvironment) }, [section, current?.id, current?.environment, onEnvironmentChange])
   const detailOpen = section === "cases" ? !!viewCase || !!(editorOpen && draft) : !!current
   useEffect(() => { onDetailChange?.(detailOpen); return () => onDetailChange?.(false) }, [detailOpen, onDetailChange])
@@ -391,13 +394,23 @@ export function EvaluationPanel({ objectId, name, onEnvironmentChange, onDetailC
                 </div>
               )}
               {visibleRuns.map((run) => (
-                <div className="eval-row" key={run.id}>
+                <div className="eval-row eval-run-row" key={run.id}>
                   <div className="eval-grow">
                     <button className="eval-title eval-list-name" onClick={() => openView({ section: "runs", runId: run.id })}>{date(run.started)}</button>
                     <p className="eval-muted">
                       {run.results.length} {tr("caseUnit")} · {run.results.filter((c) => verdictLabel(c) === "通过").length} {tr("passed")} · {pointsText(runPoints(run))}
                     </p>
+                    <details className="eval-run-case-times">
+                      <summary>用例明细（{run.results.length}）</summary>
+                      <ul>
+                        {run.results.map(c => <li key={c.id}>
+                          <button type="button" className="eval-case-time-link" onClick={() => openView({ section: "runs", runId: run.id, resultId: c.id })}>{c.name}</button>
+                          <EvaluationDuration value={caseDuration(c, run, durationNow)} note={caseDurationNote} />
+                        </li>)}
+                      </ul>
+                    </details>
                   </div>
+                  <EvaluationDuration label="耗时" value={runDuration(run, durationNow)} note={runDurationNote} />
                   {status(run.status)}
                   <Button
                     onClick={() => openView({ section: "runs", runId: run.id })}
@@ -453,7 +466,10 @@ export function EvaluationPanel({ objectId, name, onEnvironmentChange, onDetailC
               {!report && <div className="eval-summary">
                 <div className="eval-toolbar" style={{ margin: 0 }}>
                   <h3>{date(current.started)}</h3>
-                  {status(current.status)}
+                  <div className="eval-actions">
+                    <EvaluationDuration label="耗时" value={runDuration(current, durationNow)} note={runDurationNote} />
+                    {status(current.status)}
+                  </div>
                 </div>
                 {current.status === "judging" && <p role="status">业务执行已结束，正在完成标准判定；判定结束前不能重跑或下载最终报告。</p>}
                 {current.status === "stopping" && <p role="status">正在停止执行与判定任务，保留已有证据；确认停止前不能重跑。</p>}
@@ -507,20 +523,25 @@ export function EvaluationPanel({ objectId, name, onEnvironmentChange, onDetailC
                       </button>
                       {resultIssueSummary(c) && <p className="eval-result-summary">{resultIssueSummary(c)}</p>}
                     </div>
-                    {executionLabel(c) !== "已完成" && <span className="eval-muted">{executionLabel(c)}</span>}<span className="eval-status" data-status={c.verdict || c.status}>{verdictLabel(c)}</span>
-                    {!report && <Button
-                      onClick={() => openView({ section: "runs", runId: current.id, resultId: c.id })}
-                    >
-                      {tr("view")}
-                    </Button>}
-                    {!isActiveRun(current) && verdictLabel(c) !== "通过" && <Button disabled={busy} onClick={() => rerun(current, [c.id])} title={busy ? "当前对象有活动评测，请等待结束" : `仅重新运行：${c.name}`}>重新运行</Button>}
+                    <EvaluationDuration label="耗时" value={caseDuration(c, current, durationNow)} note={caseDurationNote} />
+                    <div className="eval-result-state">
+                      <span className="eval-status" data-status={c.verdict || c.status}>{verdictLabel(c)}</span>
+                      {executionLabel(c) !== "已完成" && <span className="eval-muted">{executionLabel(c)}</span>}
+                    </div>
+                    <div className="eval-actions eval-result-actions">
+                      <Button onClick={() => openView({ section: "runs", runId: current.id, resultId: c.id })}>{tr("view")}</Button>
+                      {!isActiveRun(current) && verdictLabel(c) !== "通过" && <Button disabled={busy} onClick={() => rerun(current, [c.id])} title={busy ? "当前对象有活动评测，请等待结束" : `仅重新运行：${c.name}`}>重新运行</Button>}
+                    </div>
                   </div>
                 ))}
               {!report && result && (
                 <>
                   <div className="eval-toolbar">
                     <h3>{result.name}</h3>
-                    <span className="eval-status" data-status={result.verdict || result.status}>{verdictLabel(result)}</span>
+                    <div className="eval-actions">
+                      <EvaluationDuration label="耗时" value={caseDuration(result, current, durationNow)} note={caseDurationNote} />
+                      <span className="eval-status" data-status={result.verdict || result.status}>{verdictLabel(result)}</span>
+                    </div>
                   </div>
                   <RoundResults result={result} />
                 </>

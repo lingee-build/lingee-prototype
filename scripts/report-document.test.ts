@@ -4,6 +4,25 @@ import { clarificationText, type EvalRun } from "../src/services/evaluation"
 import fixture from "../outputs/delivery-demo/模拟结果.json"
 const run = fixture.state.runs["skill:sk_delivery"][0] as EvalRun
 
+test("报告总耗时与单例耗时读取同一记录，缺失历史不反推或写成零", () => {
+  const value = structuredClone(run)
+  value.started = 1000; value.ended = 66000; value.status = "completed"
+  value.results = value.results.slice(0, 1)
+  value.results[0].timing = { started: 1000, ended: 3500 }
+  const html = buildReportDocument(value)
+  expect(html).toContain("耗时：<strong>1 分 05 秒</strong>")
+  expect(html).toContain('>耗时</th>')
+  expect(html).toContain('<td class="duration-cell">2.5 秒</td>')
+  expect(html).toContain('耗时：2.5 秒</span>')
+  delete value.results[0].timing
+  expect(buildReportDocument(value)).toContain('<td class="duration-cell">未记录</td>')
+  value.results[0].status = "skipped"
+  expect(buildReportDocument(value)).toContain('<td class="duration-cell">未执行</td>')
+  delete value.ended
+  expect(buildReportDocument(value)).toContain('耗时：<strong>未记录</strong>')
+  expect(buildReportDocument(value)).toContain('<dt>结束时间</dt><dd>未记录</dd>')
+})
+
 test("已确认未发生澄清时，页面与报告不显示记录缺失，且不依赖配置数量", () => {
   const value = structuredClone(run)
   const result = value.results[0]

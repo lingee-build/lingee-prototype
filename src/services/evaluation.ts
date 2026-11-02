@@ -62,6 +62,8 @@ export interface EvalTurnResult extends EvalTurn {
   clarification: string
 }
 export interface EvalResult extends EvalCase {
+  /** 仅新运行记录计时；历史缺失不按轮次数反推。 */
+  timing?: { started?: number; ended?: number }
   pointsSnapshot?: PointsAmount
   pointsStatus?: PointsStatus
   pointsValueComplete?: boolean
@@ -180,7 +182,7 @@ export function startRun(key: string, name: string, cases: EvalCase[], environme
     ruleSnapshot: "任一标准不通过，用例不通过；无不通过但存在无法判定，或所有标准均不适用时，用例无法判定；执行完整且所有适用标准通过，用例通过；执行异常或停止时保留已确定的不通过，否则无法判定。",
     started: Date.now(),
     status: "running",
-    results: cases.map((c) => ({ ...structuredClone(c), overallJudgingPoints: c.demo ? 0 : undefined, verdict: undefined, execution: undefined, checkResults: undefined, roundResults: structuredClone(turnsOf(c)).map((turn, i) => ({ ...turn, points: c.demo ? { execution: 0, judging: 0 } : undefined, checkResults: undefined, expected: i && turn.inherit ? turnsOf(c)[0].expected : turn.expected, status: "pending", responseRecorded: false, response: "", evidence: "", clarification: "" })), status: "pending", responseRecorded: false, response: "", evidence: "", tool: "" })),
+    results: cases.map((c) => ({ ...structuredClone(c), timing: {}, overallJudgingPoints: c.demo ? 0 : undefined, verdict: undefined, execution: undefined, checkResults: undefined, roundResults: structuredClone(turnsOf(c)).map((turn, i) => ({ ...turn, points: c.demo ? { execution: 0, judging: 0 } : undefined, checkResults: undefined, expected: i && turn.inherit ? turnsOf(c)[0].expected : turn.expected, status: "pending", responseRecorded: false, response: "", evidence: "", clarification: "" })), status: "pending", responseRecorded: false, response: "", evidence: "", tool: "" })),
   }
   useEvaluation.setState((s) => ({ runs: { ...s.runs, [key]: [run, ...(s.runs[key] || [])] } }))
   return run.id
@@ -205,6 +207,7 @@ export function cancelRun(key: string, id: string, terminal: "cancelled" | "erro
                 if (c.status !== "pending" && c.status !== "running" && !c.judging) return c
                 const failed = [...(c.checkResults || []), ...(c.roundResults || []).flatMap(t => t.checkResults || [])].some(check => check.verdict === "failed")
                 return { ...c, judging: false, status: c.judging ? c.status : c.status === "pending" ? "skipped" : "cancelled", verdict: failed ? "failed" : "unknown",
+                  timing: c.timing?.started !== undefined ? { ...c.timing, ended: Date.now() } : c.timing,
                   checkResults: completeStoppedChecks(c.checks || [], c.checkResults),
                   evidence: c.evidence || (c.status === "pending" ? "运行已停止，本用例未执行。" : "用户停止了本用例，已取得的证据和判定保留。"),
                   roundResults: c.roundResults?.map(t => t.status === "pending" || t.status === "running" ? {
@@ -240,18 +243,23 @@ export function advanceRuns() {
         if (run.status !== "running" && run.status !== "judging") return run
         const elapsed = Date.now() - run.started
         let offset = 0
+        let completedAt = run.started
         const results = run.results.map((item): EvalResult => {
           const rounds = item.roundResults
           const count = rounds?.length || 1
           const beginning = offset
           offset += count * 2400
+          const completion = item.demo && item.outcome === "blocked" ? beginning + 2400 : offset + (item.demoJudgingDelayMs ?? 100)
+          completedAt = Math.max(completedAt, run.started + completion)
           if (elapsed < beginning) return item
+          const timing = item.timing ? { started: item.timing.started ?? run.started + beginning, ended: elapsed >= completion ? item.timing.ended ?? run.started + completion : undefined } : undefined
+          if (timing?.started !== item.timing?.started || timing?.ended !== item.timing?.ended) changed = true
           if (item.demo && item.outcome === "blocked" && elapsed >= beginning + 2400) {
             const issue = item.demoFailure || "tool_unavailable"
             const detail = executionIssues[issue]
             const evidence = `${detail.stage}：${detail.reason}。${detail.action}`
             if (item.status !== "blocked") changed = true
-            return { ...item, status: "blocked", execution: "error", verdict: [...(item.checkResults || []), ...(rounds || []).flatMap(t => t.checkResults || [])].some(c => c.verdict === "failed") ? "failed" : "unknown", response: "", evidence, tool: "",
+            return { ...item, timing, judging: false, status: "blocked", execution: "error", verdict: [...(item.checkResults || []), ...(rounds || []).flatMap(t => t.checkResults || [])].some(c => c.verdict === "failed") ? "failed" : "unknown", response: "", evidence, tool: "",
               checkResults: completeStoppedChecks(item.checks || [], item.checkResults, evidence),
               roundResults: rounds?.map((turn, index) => ({ ...turn, points: { execution: index ? 0 : 0.18, judging: 0 }, status: index ? "skipped" : "blocked", issue: index ? undefined : issue,
                 responseRecorded: false, response: "", tool: "", clarification: !index && issue === "clarification_unmatched" ? "实际追问：请确认查询所用的核算组织\n未找到匹配的自动回复" : "",
@@ -280,7 +288,7 @@ export function advanceRuns() {
           const finalTrace = item.demo ? item.demoEvidence?.turns[count - 1] : undefined
           const checkResults = status === "running" || judging ? undefined : evaluateChecks(item.checks || [], item, run.started + offset, finalTrace, true)
           const allChecks = [...(checkResults || []), ...(roundResults || []).flatMap(t => t.checkResults || [])]
-          return { ...item, roundResults, status, checkResults, judging,
+          return { ...item, timing, roundResults, status, checkResults, judging,
             overallJudgingPoints: item.demo ? status === "running" ? 0 : (item.checks || []).filter(c => checkKind(c) === "natural").length * 0.08 : undefined,
             execution: status === "running" ? undefined : item.outcome === "blocked" ? "error" : "completed",
             verdict: status === "running" || judging ? undefined : aggregateChecks(allChecks),
@@ -297,7 +305,7 @@ export function advanceRuns() {
           ...run,
           results,
           status: nextStatus,
-          ended: done ? run.started + offset + Math.max(100, ...results.map(c => c.demoJudgingDelayMs ?? 100)) : undefined,
+          ended: done ? completedAt : undefined,
         }
       }),
     ]),

@@ -892,3 +892,46 @@ test("点数演示保持选定状态，恢复后自动查询且不改变运行�
   expect(restored.results[0].checkResults).toEqual(original.results[0].checkResults)
   expect(useEvaluation.getState().runs[key]).toHaveLength(1)
 })
+
+test("新运行记录单例起止时间，整体按最后完成时点；重载与重跑保留旧记录", async () => {
+  const key = "duration"
+  startRun(key, "Skill", [{ ...sample, demoJudgingDelayMs: 6000 }, { ...sample, id: "second" }])!
+  advanceRuns()
+  expect(useEvaluation.getState().runs[key][0].results.map(c => c.timing)).toEqual([{ started: 100000, ended: undefined }, {}])
+  now = 102500; advanceRuns()
+  let run = useEvaluation.getState().runs[key][0]
+  expect(run.results[0].judging).toBe(true)
+  expect(run.results[1].timing?.started).toBe(102400)
+  now = 110000; advanceRuns()
+  run = useEvaluation.getState().runs[key][0]
+  expect(run.ended).toBe(108400)
+  expect(run.results.map(c => c.timing)).toEqual([{ started: 100000, ended: 108400 }, { started: 102400, ended: 104900 }])
+  const original = structuredClone(run)
+  await useEvaluation.persist.rehydrate()
+  expect(useEvaluation.getState().runs[key][0].results.map(c => c.timing)).toEqual(original.results.map(c => c.timing))
+  startRun(key, "Skill", original.results)
+  expect(useEvaluation.getState().runs[key][0].results.every(c => c.timing?.started === undefined && c.timing?.ended === undefined)).toBe(true)
+  expect(useEvaluation.getState().runs[key][1]).toEqual(original)
+})
+
+test("停止确认固定已开始用例耗时，未开始的不写零耗时；异常按实际中断时点结束", () => {
+  const key = "stopped-duration"
+  const id = startRun(key, "Skill", [sample, { ...sample, id: "second" }])!
+  advanceRuns()
+  now += 1200
+  cancelRun(key, id)
+  const stopped = structuredClone(useEvaluation.getState().runs[key][0])
+  expect(stopped.ended).toBe(101200)
+  expect(stopped.results[0].timing).toEqual({ started: 100000, ended: 101200 })
+  expect(stopped.results[1].status).toBe("skipped")
+  expect(stopped.results[1].timing).toEqual({})
+  now += 20000; advanceRuns()
+  expect(useEvaluation.getState().runs[key][0]).toEqual(stopped)
+  const start = now
+  const turns = [0, 1, 2].map(i => ({ id: `turn-${i}`, input: "请求", expected: "结果", attachments: [], rules: [] }))
+  startRun("blocked-duration", "Skill", [{ ...sample, demo: true, outcome: "blocked", turns }])
+  now += 3000; advanceRuns()
+  const blocked = useEvaluation.getState().runs["blocked-duration"][0]
+  expect(blocked.ended).toBe(start + 2400)
+  expect(blocked.results[0].timing).toEqual({ started: start, ended: start + 2400 })
+})
