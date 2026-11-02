@@ -400,15 +400,6 @@ export function EvaluationPanel({ objectId, name, onEnvironmentChange, onDetailC
                     <p className="eval-muted">
                       {run.results.length} {tr("caseUnit")} · {run.results.filter((c) => verdictLabel(c) === "通过").length} {tr("passed")} · {pointsText(runPoints(run))}
                     </p>
-                    <details className="eval-run-case-times">
-                      <summary>用例明细（{run.results.length}）</summary>
-                      <ul>
-                        {run.results.map(c => <li key={c.id}>
-                          <button type="button" className="eval-case-time-link" onClick={() => openView({ section: "runs", runId: run.id, resultId: c.id })}>{c.name}</button>
-                          <EvaluationDuration value={caseDuration(c, run, durationNow)} note={caseDurationNote} />
-                        </li>)}
-                      </ul>
-                    </details>
                   </div>
                   <EvaluationDuration label="耗时" value={runDuration(run, durationNow)} note={runDurationNote} />
                   {status(run.status)}
