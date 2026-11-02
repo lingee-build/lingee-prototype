@@ -880,5 +880,6 @@
 
 .eval-panel [data-component="button"].eval-danger-action:not(:disabled):hover { color: var(--eval-danger); background: color-mix(in srgb, var(--eval-danger) 8%, transparent); }
 .eval-panel [data-component="button"].eval-danger-action:not(:disabled) { color: var(--eval-danger); }
+.eval-case-list .eval-danger-action { --eval-danger: #e53535; }
 .eval-panel .eval-tabs [role="tab"][aria-selected="true"] { color: var(--primary-600, #5558ff); }
 .eval-panel .eval-points-demo-actions [data-component="button"][aria-pressed="true"] { color: var(--primary-600, #5558ff); background: color-mix(in srgb, var(--primary-600) 8%, var(--background-white)); border-color: var(--border-selected); }
