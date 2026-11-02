@@ -25,7 +25,7 @@ export function EvaluationModelSelect({ label, hint, value, models, onChange, er
           aria-describedby={`${id}-hint${error ? ` ${id}-error` : ""}`}>
           <ModelGlyph model={current} />
           <span id={`${id}-value`} className="kcode-model-selector__trigger-label eval-model-label"
-            title={current ? `${current.provider}${current.id === defaultId ? ` · ${defaultLabel}` : ""}` : undefined}>
+            title={current ? current.id === defaultId ? defaultLabel : name(current) : undefined}>
             {current ? name(current) : value || t("proto.eval.models.choose")}
           </span>
           <Icon name="arrow-down-12" size="small" className="kcode-model-selector__trigger-chevron size-3 shrink-0" />

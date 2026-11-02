@@ -11,8 +11,8 @@ test("报告展示运行保存的两个模型及版本，旧记录不补默认�
     judging: { id: "b", name: '<script>unsafe</script>', provider: "供应方 B" },
   }
   const html = buildReportDocument(value)
-  expect(html).toContain('<dt>执行模型</dt><dd>供应方 A / 执行 A · v1</dd>')
-  expect(html).toContain('<dt>判定模型</dt><dd>供应方 B / &lt;script&gt;unsafe&lt;/script&gt;</dd>')
+  expect(html).toContain('<dt>执行模型</dt><dd>执行 A · v1</dd>')
+  expect(html).toContain('<dt>判定模型</dt><dd>&lt;script&gt;unsafe&lt;/script&gt;</dd>')
   expect(html).not.toContain('<script>unsafe</script>')
   delete value.models
   const legacy = buildReportDocument(value)

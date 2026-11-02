@@ -35,5 +35,5 @@ export function resolveEvaluationModels(ids: EvalModelIds, catalog: readonly Mod
 
 export function evaluationModelText(model?: EvalModelSnapshot, missing = "未记录") {
   if (!model) return missing
-  return `${model.provider} / ${model.name}${model.version ? ` · ${model.version}` : ""}`
+  return `${model.name}${model.version ? ` · ${model.version}` : ""}`
 }

@@ -34,8 +34,8 @@ test("模型记录与目录隔离，记录可得版本，缺失历史明确显�
   const models = resolveEvaluationModels(defaults, mutable)!
   mutable[0].name = "新名称"
   mutable[0].version = "v2"
-  expect(evaluationModelText(models.execution)).toBe("供应方 A / 执行 A · v1")
-  expect(evaluationModelText(models.judging)).toBe("供应方 B / 判定 B")
+  expect(evaluationModelText(models.execution)).toBe("执行 A · v1")
+  expect(evaluationModelText(models.judging)).toBe("判定 B")
   expect(models.judging.version).toBeUndefined()
   expect(evaluationModelText()).toBe("未记录")
 })
