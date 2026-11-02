@@ -2,3 +2,7 @@ node_modules
 dist
 .DS_Store
 *.local
+
+# 本地评测交付文档
+/deliverables/
+/docs/evaluation-mvp-prototype.md
