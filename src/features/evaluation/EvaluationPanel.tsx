@@ -462,9 +462,9 @@ export function EvaluationPanel({ objectId, name, onEnvironmentChange, onDetailC
                   onClick={() => openView({ section: "runs", runId: resultId || reportRequested ? current.id : undefined })}
                 />
                 <div className="eval-actions">
-                  <Tooltip value={repairReason || "携带失败证据进入原对象开发对话，检查修改后手动复测"}>
+                  {!report && <Tooltip value={repairReason || "携带失败证据进入原对象开发对话，检查修改后手动复测"}>
                     <Button variant="secondary" className="eval-repair-action" aria-disabled={!!repairReason} onClick={() => { if (!repairReason) void repair(current, result?.id) }}>{result ? "去修复" : "修复问题"}</Button>
-                  </Tooltip>
+                  </Tooltip>}
                   {isActiveRun(current) ? (
                     <Button variant="secondary" disabled={["stopping", "stop_unconfirmed"].includes(current.status)} onClick={() => requestCancelRun(objectId, current.id)}>{["stopping", "stop_unconfirmed"].includes(current.status) ? "停止处理中…" : tr("stop")}</Button>
                   ) : (
