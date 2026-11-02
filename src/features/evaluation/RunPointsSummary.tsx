@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+import { useEffect, useState, type ReactNode } from "react"
 import { Button } from "@/ui"
 import { type EvalRun } from "@/services/evaluation"
 import { pointsScopeNote, pointsSourceText, pointsText, refreshRunPoints, resumeRunPoints, runPoints } from "@/services/evaluation-points"
@@ -6,7 +6,7 @@ import { pointsScopeNote, pointsSourceText, pointsText, refreshRunPoints, resume
 const demonstrations = [["pending", "统计中"], ["unavailable", "查询失败"], ["exhausted", "查询重试结束"]] as const
 type Demonstration = "normal" | typeof demonstrations[number][0]
 
-export function RunPointsSummary({ objectId, run }: { objectId: string; run: EvalRun }) {
+export function RunPointsSummary({ objectId, run, duration }: { objectId: string; run: EvalRun; duration?: ReactNode }) {
   const [demonstration, setDemonstration] = useState<Demonstration>("normal")
   const loading = run.pointsQuery?.status === "loading"
 
@@ -20,7 +20,10 @@ export function RunPointsSummary({ objectId, run }: { objectId: string; run: Eva
   }
 
   return <div className="eval-run-points">
-    <p className="eval-muted eval-run-points-value" aria-live="polite" aria-atomic="true">本次运行 · {pointsText(runPoints(run))}{pointsSourceText(run) && ` · ${pointsSourceText(run)}`}</p>
+    <div className="eval-meta-line">
+      <p className="eval-muted eval-run-points-value" aria-live="polite" aria-atomic="true">本次运行 · {pointsText(runPoints(run))}{pointsSourceText(run) && ` · ${pointsSourceText(run)}`}</p>
+      {duration}
+    </div>
     <details className="eval-points-demo" aria-label="点数状态演示">
       <summary>点数状态演示<span className="eval-beta">仅原型</span></summary>
       <div className="eval-actions eval-points-demo-actions">

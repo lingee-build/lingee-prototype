@@ -1,6 +1,7 @@
 import { evaluationRegex, matchEvaluationText, normalizeEvaluationText } from "./evaluation-text"
 import { create } from "zustand"
 import { persist } from "zustand/middleware"
+import type { EvalRunModels } from "./evaluation-models"
 export type Source = "tenant" | "thirdParty" | "personal" | "none"
 export type EvalEnvironment = "sandbox" | "production"
 // 原型环境来源；接入执行器时由本地测试连接上下文提供，不由用例填写。
@@ -81,6 +82,7 @@ export interface EvalResult extends EvalCase {
   tool: string
 }
 export interface EvalRun {
+  models?: EvalRunModels
   pointsQuery?: { status: PointsStatus; queriedAt?: number; valueComplete?: boolean; amount?: PointsAmount }
   objectContentSummary?: string
   checkPolicySnapshot?: string
@@ -171,10 +173,12 @@ export function latestRunCases(key: string, run: EvalRun, resultIds = run.result
   const ids = new Set(resultIds)
   return { cases: latest.filter(c => ids.has(c.id)), missing: run.results.filter(c => ids.has(c.id) && !latest.some(item => item.id === c.id)) }
 }
-export function startRun(key: string, name: string, cases: EvalCase[], environment: EvalEnvironment = currentEvaluationEnvironment) {
+export function startRun(key: string, name: string, cases: EvalCase[], environment: EvalEnvironment = currentEvaluationEnvironment, models?: EvalRunModels) {
   if (evaluationObjectUnavailable(key) || environment !== "sandbox" || !cases.length || useEvaluation.getState().runs[key]?.some(isActiveRun)) return undefined
+  if (models && [models.execution, models.judging].some(model => !model?.id?.trim() || !model.name?.trim() || !model.provider?.trim())) return undefined
   const run: EvalRun = {
     id: crypto.randomUUID(),
+    ...(models ? { models: structuredClone(models) } : {}),
     environment,
     objectType: key.startsWith("agent:") ? "agent" : "skill",
     name,
@@ -184,7 +188,13 @@ export function startRun(key: string, name: string, cases: EvalCase[], environme
     status: "running",
     results: cases.map((c) => ({ ...structuredClone(c), timing: {}, overallJudgingPoints: c.demo ? 0 : undefined, verdict: undefined, execution: undefined, checkResults: undefined, roundResults: structuredClone(turnsOf(c)).map((turn, i) => ({ ...turn, points: c.demo ? { execution: 0, judging: 0 } : undefined, checkResults: undefined, expected: i && turn.inherit ? turnsOf(c)[0].expected : turn.expected, status: "pending", responseRecorded: false, response: "", evidence: "", clarification: "" })), status: "pending", responseRecorded: false, response: "", evidence: "", tool: "" })),
   }
+  const previous = useEvaluation.getState().runs
   useEvaluation.setState((s) => ({ runs: { ...s.runs, [key]: [run, ...(s.runs[key] || [])] } }))
+  if (!storageWriteSucceeded) {
+    useEvaluation.setState({ runs: previous, error: true })
+    return undefined
+  }
+  useEvaluation.setState({ error: false })
   return run.id
 }
 /** 请求停止与执行器确认分开；本地模拟器在下一次推进时确认。 */

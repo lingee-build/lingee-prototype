@@ -35,6 +35,53 @@ const stateEvidence = (verdict: "passed" | "failed", files: string[] = []): Eval
   turns: [0, 1, 2].map(() => ({ response: verdict === "passed" ? "已满足标准" : "未满足标准", clarification: "本轮未发生澄清。", files,
     judgments: [{ check: { text: "标准" }, verdict, actual: "已记录标准检查结果", evidence: "状态机测试的固定执行材料" }] })), overall: [],
 })
+test("运行持久化两个模型，重载与重跑不修改原运行或开发对话配置", async () => {
+  const { initialEvaluationModelIds, resolveEvaluationModels } = await import("../src/services/evaluation-models")
+  const { usePrompt } = await import("../src/stores/prompt")
+  const conversationModel = usePrompt.getState().modelId
+  const catalog = [
+    { id: "execution-a", name: "执行 A", provider: "provider-a", version: "2026-11" },
+    { id: "judging-b", name: "判定 B", provider: "provider-b" },
+  ]
+  const selected = { execution: "execution-a", judging: "judging-b" }
+  const models = resolveEvaluationModels(selected, catalog)!
+  const snapshot = structuredClone(models)
+  const key = "skill:model-test"
+  saveCases(key, [sample])
+  startRun(key, "Skill", [sample], "sandbox", models)
+  models.execution.name = "不能污染旧记录"
+  now += 4000; advanceRuns()
+  const original = structuredClone(useEvaluation.getState().runs[key][0])
+  expect(original.models).toEqual(snapshot)
+  await useEvaluation.persist.rehydrate()
+  expect(useEvaluation.getState().runs[key][0].models).toEqual(snapshot)
+  const ids = initialEvaluationModelIds({ execution: "other", judging: "other" }, undefined, original)
+  expect(ids).toEqual(selected)
+  saveCases(key, [{ ...sample, input: "最新输入" }])
+  const { latestRunCases } = await import("../src/services/evaluation")
+  startRun(key, "Skill", latestRunCases(key, original).cases, "sandbox", resolveEvaluationModels(ids, catalog))
+  const rerun = useEvaluation.getState().runs[key][0]
+  expect(rerun.models).toEqual(snapshot)
+  expect(rerun.results[0].input).toBe("最新输入")
+  expect(useEvaluation.getState().runs[key][1]).toEqual(original)
+  expect(usePrompt.getState().modelId).toBe(conversationModel)
+})
+
+test("模型配置无效或运行记录无法持久化时不创建运行", () => {
+  const model = { id: "a", name: "A", provider: "provider" }
+  expect(startRun("invalid-model", "Skill", [sample], "sandbox", { execution: model, judging: { ...model, id: "" } })).toBeUndefined()
+  expect(useEvaluation.getState().runs["invalid-model"]).toBeUndefined()
+  const write = localStorage.setItem
+  try {
+    localStorage.setItem = () => { throw new Error("QuotaExceededError") }
+    expect(startRun("storage-failure", "Skill", [sample], "sandbox", { execution: model, judging: model })).toBeUndefined()
+    expect(useEvaluation.getState().runs["storage-failure"]).toBeUndefined()
+    expect(useEvaluation.getState().error).toBe(true)
+  } finally {
+    localStorage.setItem = write
+    useEvaluation.setState({ error: false })
+  }
+})
 test("selected cases are snapshotted; edits and reruns do not replace prior records", () => {
   saveCases("skill:1", [sample, { ...sample, id: "case-2" }])
   const id = startRun("skill:1", "Skill", [sample])!

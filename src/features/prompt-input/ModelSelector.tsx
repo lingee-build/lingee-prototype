@@ -18,6 +18,32 @@ const levelIcon = (level?: string): IconName =>
 
 const formatCoefficient = (value?: string) => (value ? `${parseFloat(value).toFixed(1)}x` : undefined)
 
+export function ModelGlyph({ model }: { model?: Model }) {
+  const source = model && brandIcon(model)
+  return source ? <img src={source} alt="" className="size-4 shrink-0 object-contain" /> : <Icon name={model ? levelIcon(model.modelLevel) : "models"} size="small" className="shrink-0 text-[var(--neutral-600)]" />
+}
+
+export function ModelOptionContent({ model, selected, label }: { model: Model; selected: boolean; label: string }) {
+  return <>
+                        {brandIcon(model) ? <img src={brandIcon(model)} alt="" className="size-4 shrink-0 object-contain" /> : <Icon name={levelIcon(model.modelLevel)} size="small" className="shrink-0" />}
+                        <span className="kcode-model-selector__model-main">
+                          <span className="kcode-model-selector__model-label" title={label}>
+                            {label}
+                          </span>
+                        </span>
+                        <span className="kcode-model-selector__model-end">
+                          {model.consumptionCoefficient && (
+                            <span className="kcode-model-selector__model-ratio">{formatCoefficient(model.consumptionCoefficient)}</span>
+                          )}
+                          {selected && (
+                            <span className="kcode-model-selector__model-check">
+                              <Icon name="check" size="small" />
+                            </span>
+                          )}
+                        </span>
+  </>
+}
+
 /** 模型选择器：等级模型（快速/深度/专家）在前，其余模型在后，右侧展示消耗系数 */
 export function ModelSelector(props: { placement: "top-end" | "bottom-end"; restoreFocus: () => void }) {
   const t = useT()
@@ -65,22 +91,7 @@ export function ModelSelector(props: { placement: "top-end" | "bottom-end"; rest
                         aria-selected={model.id === modelId}
                         onSelect={() => setModel(model.id)}
                       >
-                        {brandIcon(model) ? <img src={brandIcon(model)} alt="" className="size-4 shrink-0 object-contain" /> : <Icon name={levelIcon(model.modelLevel)} size="small" className="shrink-0" />}
-                        <span className="kcode-model-selector__model-main">
-                          <span className="kcode-model-selector__model-label" title={label(model)}>
-                            {label(model)}
-                          </span>
-                        </span>
-                        <span className="kcode-model-selector__model-end">
-                          {model.consumptionCoefficient && (
-                            <span className="kcode-model-selector__model-ratio">{formatCoefficient(model.consumptionCoefficient)}</span>
-                          )}
-                          {model.id === modelId && (
-                            <span className="kcode-model-selector__model-check">
-                              <Icon name="check" size="small" />
-                            </span>
-                          )}
-                        </span>
+                        <ModelOptionContent model={model} selected={model.id === modelId} label={label(model)} />
                       </DropdownMenu.Item>
                     ))}
                   </div>

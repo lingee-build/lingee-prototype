@@ -14,7 +14,7 @@ export function RegexAssistant({ apply, close, exclude = false }: { apply: (patt
   return <section className="eval-regex-assistant" aria-label="生成正则表达式">
       <label htmlFor={`${id}-intent`}>{exclude ? "你希望回复中不出现什么格式的内容？" : "你希望回复中包含什么格式的内容？"}</label>
       <textarea id={`${id}-intent`} autoFocus rows={2} value={intent} placeholder="例如：FHTZ- 开头，后接 8 位日期和 3 位流水号的单号" onChange={e => { setIntent(e.target.value); setResult(undefined); setError("") }} />
-      <div className="eval-regex-actions"><BrandButton variant="primary" disabled={!intent.trim()} onClick={() => {
+      <div className="eval-regex-actions"><BrandButton variant={result ? "auxiliary" : "primary"} disabled={!intent.trim()} onClick={() => {
         const next = suggestRegex(intent.trim())
         setResult(next)
         setError(next ? "" : "未能生成可用表达式，请检查格式描述，或手动填写并验证；业务含义判断请使用语义判断")

@@ -4,7 +4,32 @@ import { reportSections } from "./report-document"
 /** 保留独立文档的样式与脚本隔离，全文撑开高度，由评测主内容区统一滚动。 */
 export function ReportPreview({ html }: { html: string }) {
   const [cases, setCases] = useState<{id: string; label: string}[]>([])
-  const [navOpen, setNavOpen] = useState(true)
+  const [compact, setCompact] = useState(() => window.matchMedia("(max-width: 1200px)").matches)
+  const [navOpen, setNavOpen] = useState(() => !window.matchMedia("(max-width: 1200px)").matches)
+  useEffect(() => {
+    const query = window.matchMedia("(max-width: 1200px)")
+    const sync = () => { setCompact(query.matches); setNavOpen(!query.matches) }
+    query.addEventListener("change", sync)
+    return () => query.removeEventListener("change", sync)
+  }, [])
+  const navRef = useRef<HTMLElement>(null)
+  useEffect(() => {
+    if (!compact || !navOpen) return
+    const dismiss = (event: PointerEvent) => {
+      if (!navRef.current?.contains(event.target as Node)) setNavOpen(false)
+    }
+    const escape = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return
+      setNavOpen(false)
+      navRef.current?.querySelector<HTMLButtonElement>(".eval-report-nav-toggle")?.focus()
+    }
+    document.addEventListener("pointerdown", dismiss)
+    document.addEventListener("keydown", escape)
+    return () => {
+      document.removeEventListener("pointerdown", dismiss)
+      document.removeEventListener("keydown", escape)
+    }
+  }, [compact, navOpen])
   const [active, setActive] = useState("conclusion")
   const [navWidth, setNavWidth] = useState(240)
   const dragRef = useRef<{ x: number; width: number } | null>(null)
@@ -93,21 +118,33 @@ export function ReportPreview({ html }: { html: string }) {
     }
   }, [html])
 
+  useEffect(() => {
+    if (!compact || !navOpen) return
+    const frameDocument = frameRef.current?.contentDocument
+    const dismiss = () => setNavOpen(false)
+    frameDocument?.addEventListener("pointerdown", dismiss)
+    return () => frameDocument?.removeEventListener("pointerdown", dismiss)
+  }, [compact, navOpen])
+
   const goTo = (id: string) => {
     const target = frameRef.current?.contentDocument?.getElementById(id)
     if (!target) return
     if (target.matches("details")) (target as HTMLDetailsElement).open = true
-    if (id.startsWith("case-")) setNavOpen(true)
-    target.scrollIntoView({ block: "start" })
-    target.tabIndex = -1
-    target.focus({ preventScroll: true })
+    if (compact) setNavOpen(false)
+    else if (id.startsWith("case-")) setNavOpen(true)
+    // 等目录关闭后定位并将焦点移交正文。
+    requestAnimationFrame(() => {
+      target.scrollIntoView({ block: "start" })
+      target.tabIndex = -1
+      target.focus({ preventScroll: true })
+    })
     setActive(id)
   }
 
   return <div className="eval-report-preview" style={{ "--report-nav-width": `${navWidth}px` } as CSSProperties}>
-    <nav className="eval-report-nav" aria-label="报告目录">
+    <nav ref={navRef} className="eval-report-nav" aria-label="报告目录">
       <div className="eval-report-nav-heading"><strong>报告目录</strong></div>
-      {reportSections.map(section => <div key={section.id}>
+      {reportSections.map(section => <div key={section.id} className="eval-report-nav-section">
         <div className="eval-report-section-row">
           <a href={`#${section.id}`} aria-current={active === section.id ? "location" : undefined} onClick={event => { event.preventDefault(); goTo(section.id) }}>{section.label}</a>
           {section.id === "details" && <button className="eval-report-nav-toggle" aria-label={navOpen ? "收起用例目录" : "展开用例目录"} aria-expanded={navOpen} aria-controls="report-case-navigation" onClick={() => setNavOpen(!navOpen)}>{navOpen ? "⌄" : "›"}</button>}

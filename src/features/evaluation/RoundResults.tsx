@@ -60,7 +60,7 @@ export function RoundResults({ result }: { result: EvalResult }) {
   return <div className="eval-conversation">
     <CheckResults label="整体评测标准" checks={result.checks || []} results={result.checkResults} />
     <Files files={result.attachments || []} label="会话附件" />
-    <div className="eval-toolbar"><h3>对话轮次（{rounds.length}）</h3><div className="eval-actions">{rounds.length > 1 && <Button onClick={() => setAll(!allExpanded)}>{allExpanded ? "全部折叠" : "全部展开"}</Button>}</div></div>
+    <div className="eval-toolbar"><h3>对话轮次（{rounds.length}）</h3><div className="eval-actions">{rounds.length > 1 && <Button variant="ghost" onClick={() => setAll(!allExpanded)}>{allExpanded ? "全部折叠" : "全部展开"}</Button>}</div></div>
     {rounds.map((turn, i) => <TurnCard key={turn.id} turnId={turn.id} number={i + 1} input={turn.input}
       meta={isOpen(turn) ? "" : [turn.attachments.length && `附件 ${turn.attachments.length}`, turn.rules.length && `澄清回复 ${turn.rules.length}`, checksOf(turn).length && `评测标准 ${checksOf(turn).length}`].filter(Boolean).join(" · ")}
       status={<span className="eval-status" data-status={{ "通过": "passed", "不通过": "failed", "无法判定": "unknown" }[turnVerdict(turn, t)]}>{turnVerdict(turn, t)}</span>}

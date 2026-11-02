@@ -104,6 +104,7 @@ export interface Model {
   id: string
   name: string
   provider: string
+  version?: string
   modelLevel?: "fast" | "deep" | "expert"
   consumptionCoefficient?: string
 }

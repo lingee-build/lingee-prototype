@@ -25,7 +25,7 @@ export function CaseDetail({ value, back, edit, editLabel = "编辑", editDisabl
     <div className="eval-toolbar"><div className="eval-actions"><IconButton icon="arrow-left" variant="ghost" aria-label="返回用例列表" title="返回用例列表" onClick={back} /><h3>用例详情</h3></div><BrandButton variant="primary" disabled={editDisabled} onClick={edit}>{editLabel}</BrandButton></div>
     <div className="eval-message"><strong>用例名称</strong><p>{value.name}</p></div>
     <Files files={value.attachments || []} label="会话附件" />
-    <div className="eval-toolbar"><h3>对话轮次（{rounds.length}）</h3>{rounds.length > 1 && <Button onClick={() => setCollapsed(allOpen ? rounds.map(r => r.id) : [])}>{allOpen ? "全部折叠" : "全部展开"}</Button>}</div>
+    <div className="eval-toolbar"><h3>对话轮次（{rounds.length}）</h3>{rounds.length > 1 && <Button variant="ghost" onClick={() => setCollapsed(allOpen ? rounds.map(r => r.id) : [])}>{allOpen ? "全部折叠" : "全部展开"}</Button>}</div>
     {rounds.map((turn, i) => <TurnCard key={turn.id} turnId={turn.id} number={i + 1} input={turn.input} meta="" status={null} open={!collapsed.includes(turn.id)} toggle={() => setCollapsed(ids => ids.includes(turn.id) ? ids.filter(id => id !== turn.id) : [...ids, turn.id])}>
       <div className="eval-input-group"><div className="eval-message"><strong>用户输入</strong><p>{turn.input}</p></div><Files files={turn.attachments} label="附件" /></div>
       {!!turn.rules.length && <section><h3 className="eval-section-title">澄清回复 <span className="eval-section-count">（{turn.rules.length}）</span></h3><div className="eval-result-reply-list">

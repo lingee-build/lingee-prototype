@@ -173,7 +173,7 @@ export function EvaluationSession({ projectId, sessionId, objectId }: { projectI
     else close()
   }
   const viewed = saved?.drafts.find(c => c.id === preview)
-  if (!objectName) return <div className="p-6">评测对象不存在<Button onClick={() => navigate(`/dev/${mode}`)}>返回</Button></div>
+  if (!objectName) return <div className="p-6">评测对象不存在<Button variant="ghost" onClick={() => navigate(`/dev/${mode}`)}>返回</Button></div>
   return <div className="eval-authoring-session">
     <ControlledConfirmDialog open={blocker.state === "blocked"} title="放弃草稿修改？" description="离开后，未保存的修改将被丢弃" confirmText="放弃并离开" cancelText="继续编辑" onConfirm={() => { if (blocker.state === "blocked") blocker.proceed() }} onClose={() => { if (blocker.state === "blocked") blocker.reset() }} />
     {!panel && <PageActions inSession={!!sessionId} />}
@@ -217,7 +217,7 @@ export function EvaluationSession({ projectId, sessionId, objectId }: { projectI
             全选
           </label></div>}
           {!saved?.drafts.length && <div className="eval-empty"><Empty description="生成的用例将在这里展示" /></div>}
-          {saved?.drafts.map(c => <div className="eval-draft-card" key={c.id}><input type="checkbox" aria-label={`选择 ${c.name}`} disabled={working || !canAdd(c)} checked={selected.includes(c.id) && canAdd(c)} onChange={e => setSelected(ids => e.target.checked ? [...ids, c.id] : ids.filter(x => x !== c.id))} /><div className="eval-grow"><button className="eval-title" onClick={() => setPreview(c.id)}>{c.name}</button><p className="eval-muted" role="status">{turnsOf(c).length} 轮对话 · {canAdd(c) ? "待加入" : "已加入"}</p></div>{canAdd(c) ? <Button disabled={working} onClick={() => setEditing(structuredClone(c))}>编辑</Button> : <Button onClick={openCases}>前往用例列表</Button>}</div>)}
+          {saved?.drafts.map(c => <div className="eval-draft-card" key={c.id}><input type="checkbox" aria-label={`选择 ${c.name}`} disabled={working || !canAdd(c)} checked={selected.includes(c.id) && canAdd(c)} onChange={e => setSelected(ids => e.target.checked ? [...ids, c.id] : ids.filter(x => x !== c.id))} /><div className="eval-grow"><button className="eval-title" onClick={() => setPreview(c.id)}>{c.name}</button><p className="eval-muted" role="status">{turnsOf(c).length} 轮对话 · {canAdd(c) ? "待加入" : "已加入"}</p></div>{canAdd(c) ? <Button variant="ghost" disabled={working} onClick={() => setEditing(structuredClone(c))}>编辑</Button> : <Button variant="ghost" onClick={openCases}>前往用例列表</Button>}</div>)}
           </div>
           {!!saved?.drafts.length && <div className="eval-draft-footer"><span className="eval-muted" aria-live="polite">已选 {selectedCount} 条</span><BrandButton variant="primary" disabled={working || !selectedCount} onClick={adopt}>加入用例列表</BrandButton></div>}
         </>}

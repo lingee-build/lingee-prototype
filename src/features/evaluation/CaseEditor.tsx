@@ -191,16 +191,16 @@ export function CaseEditor({ draft, update, save, cancel, editing }: { draft: Ev
     <p className="eval-muted">先填写名称、用户输入和至少一条评测标准。附件、澄清回复和多轮对话按需添加。</p>
     <label>用例名称<input {...fieldProps("name", "用例名称", "请填写用例名称，不能仅包含空格。")} name="case-name" required placeholder="例如：缺少单号时先询问" value={draft.name} onChange={e => update({ ...draft, name: e.target.value })} />{fieldError("name")}</label>
     <AttachmentInput onUploadingChange={onUploadingChange} label="会话附件" tip={sessionAttachmentTip} files={draft.attachments || []} onChange={attachments => update({ ...currentDraft.current, attachments })} />
-    <div className="eval-toolbar"><h3>对话轮次（{turns.length}）</h3><div className="eval-actions">{turns.length > 1 && <Button onClick={() => setExpanded(Object.fromEntries(turns.map(t => [t.id, !allExpanded])))}>{allExpanded ? "全部折叠" : "全部展开"}</Button>}</div></div>
+    <div className="eval-toolbar"><h3>对话轮次（{turns.length}）</h3><div className="eval-actions">{turns.length > 1 && <Button variant="ghost" onClick={() => setExpanded(Object.fromEntries(turns.map(t => [t.id, !allExpanded])))}>{allExpanded ? "全部折叠" : "全部展开"}</Button>}</div></div>
     {turns.map((turn, index) => <TurnCard key={turn.id} turnId={turn.id} number={index + 1} input={turn.input}
       meta={(expanded[turn.id] ?? true) ? "" : [turn.attachments.length && `附件 ${turn.attachments.length}`, turn.rules.length && `澄清回复 ${turn.rules.length}`, turn.checks.length && `评测标准 ${turn.checks.length}`].filter(Boolean).join(" · ")}
       status={!(expanded[turn.id] ?? true) && hasTurnErrors(turn) ? <span className="eval-field-error">有未填项</span> : null}
       open={expanded[turn.id] ?? true} toggle={() => setExpanded(prev => ({ ...prev, [turn.id]: !(prev[turn.id] ?? true) }))}
-      actions={turns.length > 1 ? <><Button disabled={!index} onClick={() => move(index, -1)}>上移</Button><Button disabled={index === turns.length - 1} onClick={() => move(index, 1)}>下移</Button>{turns.length > 1 && <Button onClick={() => confirmDelete(`删除第 ${index + 1} 轮对话？`, "将移除本轮输入、附件、澄清回复及标准，保存用例后生效。", () => { const next = turnsOf(currentDraft.current).filter(t => t.id !== turn.id); if (next.length) { next[0] = { ...next[0], inherit: false }; update({ ...currentDraft.current, turns: next }) } })}>删除轮次</Button>}</> : undefined}>
+      actions={turns.length > 1 ? <><Button variant="ghost" disabled={!index} onClick={() => move(index, -1)}>上移</Button><Button variant="ghost" disabled={index === turns.length - 1} onClick={() => move(index, 1)}>下移</Button>{turns.length > 1 && <Button variant="ghost" className="eval-danger-action" onClick={() => confirmDelete(`删除第 ${index + 1} 轮对话？`, "将移除本轮输入、附件、澄清回复及标准，保存用例后生效。", () => { const next = turnsOf(currentDraft.current).filter(t => t.id !== turn.id); if (next.length) { next[0] = { ...next[0], inherit: false }; update({ ...currentDraft.current, turns: next }) } })}>删除轮次</Button>}</> : undefined}>
       <AttachmentInput onUploadingChange={onUploadingChange} label="附件" files={turn.attachments} onChange={attachments => { const i = turnsOf(currentDraft.current).findIndex(t => t.id === turn.id); if (i >= 0) setTurn(i, { attachments }) }}>
         <StandardInput className="eval-user-input" rows={2} {...fieldProps(`${turn.id}-input`, "用户输入", `请填写第 ${index + 1} 轮的用户输入，不能仅包含空格。`)} required value={turn.input} onChange={e => setTurn(index, { input: e.target.value })} />{fieldError(`${turn.id}-input`)}
       </AttachmentInput>
-      <section className="eval-clarification-section"><div className="eval-toolbar"><div className="eval-field-heading"><h3 className="eval-section-title">澄清回复</h3></div><Button className="eval-add-action" icon="plus-small" onClick={() => setTurn(index, { rules: [...turn.rules, { id: crypto.randomUUID(), match: "", responses: [""] }] })}>添加澄清回复</Button></div>
+      <section className="eval-clarification-section"><div className="eval-toolbar"><div className="eval-field-heading"><h3 className="eval-section-title">澄清回复</h3></div><Button variant="ghost" className="eval-add-action" icon="plus-small" onClick={() => setTurn(index, { rules: [...turn.rules, { id: crypto.randomUUID(), match: "", responses: [""] }] })}>添加澄清回复</Button></div>
       <p className="eval-muted">可选：技能或智能体追问时，让评测按这里的配置自动回答，无需你在运行时逐条回复。</p>
       {turn.rules.length > 0 && <div className="eval-clarification-list">
         <div className="eval-clarification-columns" aria-hidden="true"><span /><span>预期追问</span><span>自动回复</span><span /></div>
@@ -222,12 +222,12 @@ export function CaseEditor({ draft, update, save, cancel, editing }: { draft: Ev
       </section>
       <CheckEditor label="评测标准" checks={turn.checks} onChange={checks => setTurn(index, { checks, inherit: false })} fieldProps={fieldProps} fieldError={fieldError} />
     </TurnCard>)}
-    <Button className="eval-add-turn eval-add-action" icon="plus-small" onClick={() => {
+    <Button variant="ghost" className="eval-add-turn eval-add-action" icon="plus-small" onClick={() => {
       const id = crypto.randomUUID()
       flushSync(() => { update({ ...draft, turns: [...turns, { id, input: "", expected: "", attachments: [], rules: [] }] }); setExpanded(prev => ({ ...prev, [id]: true })) })
       formRef.current?.querySelector<HTMLTextAreaElement>(`[data-turn-id="${id}"] textarea`)?.focus()
     }}>添加一轮对话</Button>
     <div data-global-checks><CheckEditor label="整体评测标准" checks={draft.checks || []} onChange={checks => { update({ ...currentDraft.current, checks }); setErrors(prev => ({ ...prev, checks: "" })) }} fieldProps={fieldProps} fieldError={fieldError} />{errors.checks && <p className="eval-field-error" role="alert">{errors.checks}</p>}</div>
-    <div className="eval-actions eval-form-footer"><BrandButton type="submit" variant="primary" disabled={uploadingCount > 0}>保存</BrandButton>{uploadingCount > 0 && <span role="status" className="eval-muted">附件上传中，请等待完成后保存</span>}<Button onClick={cancel}>取消</Button></div>
+    <div className="eval-actions eval-form-footer"><BrandButton type="submit" variant="primary" disabled={uploadingCount > 0}>保存</BrandButton>{uploadingCount > 0 && <span role="status" className="eval-muted">附件上传中，请等待完成后保存</span>}<Button variant="ghost" onClick={cancel}>取消</Button></div>
   </form>
 }

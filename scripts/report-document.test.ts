@@ -4,13 +4,29 @@ import { clarificationText, type EvalRun } from "../src/services/evaluation"
 import fixture from "../outputs/delivery-demo/模拟结果.json"
 const run = fixture.state.runs["skill:sk_delivery"][0] as EvalRun
 
+test("报告展示运行保存的两个模型及版本，旧记录不补默认值，名称安全转义", () => {
+  const value = structuredClone(run)
+  value.models = {
+    execution: { id: "a", name: "执行 A", provider: "供应方 A", version: "v1" },
+    judging: { id: "b", name: '<script>unsafe</script>', provider: "供应方 B" },
+  }
+  const html = buildReportDocument(value)
+  expect(html).toContain('<dt>执行模型</dt><dd>供应方 A / 执行 A · v1</dd>')
+  expect(html).toContain('<dt>判定模型</dt><dd>供应方 B / &lt;script&gt;unsafe&lt;/script&gt;</dd>')
+  expect(html).not.toContain('<script>unsafe</script>')
+  delete value.models
+  const legacy = buildReportDocument(value)
+  expect(legacy).toContain('<dt>执行模型</dt><dd>未记录</dd>')
+  expect(legacy).toContain('<dt>判定模型</dt><dd>未记录</dd>')
+})
+
 test("报告总耗时与单例耗时读取同一记录，缺失历史不反推或写成零", () => {
   const value = structuredClone(run)
   value.started = 1000; value.ended = 66000; value.status = "completed"
   value.results = value.results.slice(0, 1)
   value.results[0].timing = { started: 1000, ended: 3500 }
   const html = buildReportDocument(value)
-  expect(html).toContain("耗时：<strong>1 分 05 秒</strong>")
+  expect(html.replace(/<[^>]*>/g, "")).toContain("耗时：1 分 05 秒")
   expect(html).toContain('>耗时</th>')
   expect(html).toContain('<td class="duration-cell">2.5 秒</td>')
   expect(html).toContain('耗时：2.5 秒</span>')
@@ -19,7 +35,7 @@ test("报告总耗时与单例耗时读取同一记录，缺失历史不反推�
   value.results[0].status = "skipped"
   expect(buildReportDocument(value)).toContain('<td class="duration-cell">未执行</td>')
   delete value.ended
-  expect(buildReportDocument(value)).toContain('耗时：<strong>未记录</strong>')
+  expect(buildReportDocument(value).replace(/<[^>]*>/g, "")).toContain('耗时：未记录')
   expect(buildReportDocument(value)).toContain('<dt>结束时间</dt><dd>未记录</dd>')
 })
 
