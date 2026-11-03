@@ -90,7 +90,7 @@ function CheckEditor({ label, checks, onChange, fieldProps, fieldError }: {
         </DropdownMenu>
       </div>
     </div>
-    {!checks.length && <p className="eval-muted">{label === "整体验收标准" ? "检查整段对话是否完成任务；已有本轮标准时，这里可以不填。" : "写清这一轮怎样才算做对。例如：缺少单号时先询问，不自行编造。"}</p>}
+    {label === "整体验收标准" ? <p className="eval-muted">检查跨轮一致性或整个任务是否完成，无需重复各轮标准。</p> : !checks.length && <p className="eval-muted">写清这一轮怎样才算做对。例如：缺少单号时先询问，不自行编造。</p>}
     {checks.some(c => c.kind === "keyword" || c.kind === "regex") && <span className="eval-muted">文本检查范围：{label === "整体验收标准" ? "最后一轮最终回复" : "本轮最终回复"}。</span>}
     {checks.some(c => c.kind === "file") && <span className="eval-muted">文件存在性范围：仅检查产物文件是否存在，不检查内容。</span>}
     {checks.map((check, index) => {
@@ -113,7 +113,6 @@ function CheckEditor({ label, checks, onChange, fieldProps, fieldError }: {
 export function CaseEditor({ draft, update, save, cancel, editing }: { draft: EvalCase; update: (c: EvalCase) => void; save: (c: EvalCase) => void; cancel: () => void; editing: boolean }) {
   const confirmDelete = useDeleteConfirmation()
   const prefix = useId()
-  const [showOverall, setShowOverall] = useState(false)
   const [uploadingCount, setUploadingCount] = useState(0)
   const onUploadingChange = useCallback((uploading: boolean) => {
     setUploadingCount(count => count + (uploading ? 1 : -1))
@@ -225,9 +224,8 @@ export function CaseEditor({ draft, update, save, cancel, editing }: { draft: Ev
       flushSync(() => { update({ ...draft, checks: turns.length === 1 ? [] : draft.checks, turns: [...turns, { id, input: "", expected: "", attachments: [], rules: [] }] }); setExpanded(prev => ({ ...prev, [id]: true })) })
       formRef.current?.querySelector<HTMLTextAreaElement>(`[data-turn-id="${id}"] textarea`)?.focus()
     }}>添加一轮对话</Button>
-    <div data-global-checks>
-      {turns.length > 1 && !draft.checks?.length && !showOverall && <Button variant="ghost" icon="plus-small" onClick={() => setShowOverall(true)}>添加整体验收标准（可选）</Button>}
-      {(turns.length > 1 && (!!draft.checks?.length || showOverall)) && <><p className="eval-muted">用于检查跨轮一致性或整个任务的完成情况，无需重复各轮标准。</p><CheckEditor label="整体验收标准" checks={draft.checks || []} onChange={checks => { update({ ...currentDraft.current, checks }); setErrors(prev => ({ ...prev, checks: "" })) }} fieldProps={fieldProps} fieldError={fieldError} /></>}{errors.checks && <p className="eval-field-error" role="alert">{errors.checks}</p>}</div>
+    <div data-global-checks className={turns.length > 1 ? "eval-overall-checks" : undefined}>
+      {turns.length > 1 && <CheckEditor label="整体验收标准" checks={draft.checks || []} onChange={checks => { update({ ...currentDraft.current, checks }); setErrors(prev => ({ ...prev, checks: "" })) }} fieldProps={fieldProps} fieldError={fieldError} />}{errors.checks && <p className="eval-field-error" role="alert">{errors.checks}</p>}</div>
     <div className="eval-actions eval-form-footer"><BrandButton type="submit" variant="primary" disabled={uploadingCount > 0}>保存</BrandButton>{uploadingCount > 0 && <span role="status" className="eval-muted">附件上传中，请等待完成后保存</span>}<Button variant="ghost" onClick={cancel}>取消</Button></div>
   </form>
 }

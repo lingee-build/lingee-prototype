@@ -391,6 +391,7 @@
 .eval-upload-trigger:focus-within { outline: 2px solid var(--primary-600); outline-offset: 2px; }
 .eval-form-footer { position: sticky; bottom: -24px; background: var(--background-page, var(--main-bg)); padding: 12px 0; border-top: 1px solid var(--border-base); z-index: 2; }
 .eval-add-turn { justify-self: start; }
+.eval-overall-checks { margin-top: 16px; }
 .eval-conversation > .eval-toolbar { margin: 0; }
 @media (max-width: 600px) { .eval-form-footer { bottom: -16px; } }
 
