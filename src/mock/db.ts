@@ -25,8 +25,8 @@ try {
   const saved = JSON.parse(localStorage.getItem("lingee.evaluation-repairs.v1") || "null")
   for (const item of Object.values(saved?.state?.items || {}) as { session: Session; messages: Message[] }[]) {
     if (item.session?.id && Array.isArray(item.messages)) {
-      db.sessions.push({ ...item.session, status: "idle" })
-      db.messages.push(...item.messages)
+      if (!db.sessions.some(s => s.id === item.session.id)) db.sessions.push({ ...item.session, status: "idle" })
+      for (const message of item.messages) if (!db.messages.some(m => m.id === message.id)) db.messages.push(message)
     }
   }
 } catch { /* Ignore unavailable or malformed browser storage. */ }

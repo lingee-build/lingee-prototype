@@ -179,3 +179,16 @@ test("报告只展示运行总点数和状态，缺失判定消耗不能当作�
   changed.name = '</script><script>alert(1)</script>'
   expect(buildReportDocument(changed).match(/<script>([\s\S]*?)<\/script>/)![1]).toBe(script)
  })
+
+
+test("报告标题和元信息位于目录之前，正文无重复统计总结", () => {
+  const html = buildReportDocument(run)
+  const cover = html.indexOf('<header class="report-cover">')
+  const nav = html.indexOf('<aside aria-label="报告目录">')
+  const body = html.indexOf('<section id="conclusion">')
+  expect(cover).toBeGreaterThan(0)
+  expect(nav).toBeGreaterThan(cover)
+  expect(body).toBeGreaterThan(nav)
+  expect(html.match(/<h1>/g)?.length).toBe(1)
+  expect(html).not.toContain('本次评测包含')
+})

@@ -1,3 +1,4 @@
+import { clarificationResponses } from "@/services/evaluation"
 import { CheckTypeIcon } from "./CheckTypeIcon"
 import { sessionAttachmentTip } from "./attachment-help"
 import { AttachmentRow } from "./AttachmentRow"
@@ -13,7 +14,7 @@ function resultRounds(result: EvalResult): EvalTurnResult[] {
 export function Files({ files, label }: { files: EvalAttachment[]; label: string }) {
   return files.length ? <div className="eval-message"><div className="eval-field-heading"><strong>{label}</strong>{label === "会话附件" && <Tooltip value={sessionAttachmentTip}><button type="button" className="eval-field-help" aria-label={sessionAttachmentTip}><Icon name="help" size="small" /></button></Tooltip>}</div><div className="eval-attachments">{files.map(f => <AttachmentRow key={f.id} file={f} download={() => { void downloadAttachment(f).catch(() => showToast({ variant: "error", title: "附件无法读取" })) }} />)}</div></div> : null
 }
-const verdicts = { passed: "通过", failed: "不通过", unknown: "无法判定", na: "不适用" }
+const verdicts = { passed: "通过", failed: "不通过", unknown: "无法判定", na: "不适用", skipped: "已跳过" }
 export function CheckResults({ checks, results, label }: { checks: EvalCheck[]; results?: CheckResult[]; label: string }) {
   if (!checks.length) return null
   return <section className="eval-check-results"><h3 className="eval-section-title">{label} <span className="eval-section-count">（{checks.length}）</span></h3>
@@ -41,7 +42,7 @@ function checkText(checks: EvalCheck[], results?: CheckResult[]): string {
 }
 
 function ruleText(rule: EvalTurn["rules"][number], index: number) {
-  return `澄清回复配置 ${index + 1}\n预期追问：${rule.match}\n自动回复：${rule.responses.join("\n")}`
+  return `澄清回复配置 ${index + 1}\n预期追问：${rule.match}\n自动回复：${clarificationResponses(rule.responses)}`
 }
 function turnVerdict(turn: ReturnType<typeof resultRounds>[number], t: (key: string) => string) {
   if (["pending", "running", "cancelled", "skipped"].includes(turn.status)) return t(`proto.eval.${turn.status}`)

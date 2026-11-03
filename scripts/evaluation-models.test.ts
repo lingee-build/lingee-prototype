@@ -23,10 +23,9 @@ test("模型下线或默认项无法解析时拒绝启动，不静默替换，�
   expect(resolveEvaluationModels(defaults, catalog.slice(0, 1))).toBeUndefined()
   expect(resolveEvaluationModels({ execution: "", judging: "judge" }, catalog)).toBeUndefined()
   expect(resolveEvaluationModels({ execution: "exec", judging: "exec" }, catalog)?.judging.id).toBe("exec")
-  expect(evaluationExecutionDefault("exec", "expert")).toBe("lingee-expert")
-  expect(evaluationExecutionDefault("exec", "fast")).toBe("lingee-fast")
-  expect(evaluationExecutionDefault("exec", "auto")).toBe("exec")
-  expect(evaluationExecutionDefault("exec")).toBe("exec")
+  expect(evaluationExecutionDefault(catalog)).toBe("exec")
+  expect(evaluationExecutionDefault([...catalog].reverse())).toBe("judge")
+  expect(evaluationExecutionDefault([])).toBe("")
 })
 
 test("模型记录与目录隔离，记录可得版本，缺失历史明确显示未记录", () => {

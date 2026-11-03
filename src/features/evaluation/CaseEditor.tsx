@@ -1,5 +1,3 @@
-import { Popover } from "radix-ui"
-import { RegexAssistant } from "./RegexAssistant"
 import { EvaluationSelect } from "./EvaluationSelect"
 import { CheckTypeIcon } from "./CheckTypeIcon"
 import { sessionAttachmentTip } from "./attachment-help"
@@ -74,7 +72,6 @@ function CheckEditor({ label, checks, onChange, fieldProps, fieldError }: {
 }) {
   const confirmDelete = useDeleteConfirmation()
   checks = checks.map(simplifyCheck)
-  const [activeRegex, setActiveRegex] = useState<string | null>(null)
   const [adding, setAdding] = useState(false)
   const addedField = useRef<string | undefined>(undefined)
   const patch = (id: string, value: Partial<EvalCheck>) => onChange(checks.map(c => c.id === id ? { ...c, ...value } : c))
@@ -105,12 +102,6 @@ function CheckEditor({ label, checks, onChange, fieldProps, fieldError }: {
           {check.kind && check.kind !== "natural" && <EvaluationSelect label={`标准 ${index + 1} 检查方式`} value={check.operator || (check.kind === "file" ? "exists" : check.kind === "regex" ? "regex" : "all")} onChange={value => patch(check.id, { operator: value as EvalCheck["operator"] })} options={(check.kind === "file" ? ["exists", "not_exists"] as const : check.kind === "regex" ? ["regex", "not_regex"] as const : ["all", "any", "none"] as const).map(op => ({ value: op, label: checkOperators[op] }))} />}
           <div className={`eval-check-value${check.kind === "regex" ? " eval-regex-value" : ""}`}>
             {check.kind === "keyword" ? <KeywordInput key={`${check.id}-keywords`} field={props} value={check.text} onChange={text => patch(check.id, { text })} /> : <StandardInput {...props} required placeholder={check.kind === "file" ? "相对工作区的文件路径，如 outputs/对账报告.xlsx" : check.kind === "regex" ? "输入正则表达式，无需两侧斜杠" : "例如：缺少组织信息时，应先询问用户"} value={check.text} onChange={e => patch(check.id, { text: e.target.value })} />}
-            {check.kind === "regex" && <Popover.Root open={activeRegex === check.id} onOpenChange={open => setActiveRegex(open ? check.id : null)}>
-              <Popover.Trigger asChild><Button className="eval-regex-generate" variant="ghost">AI 生成</Button></Popover.Trigger>
-              <Popover.Portal><Popover.Content className="eval-regex-popover" side="bottom" align="end" sideOffset={8} collisionPadding={12} aria-label="生成正则表达式">
-                <RegexAssistant exclude={check.operator === "not_regex"} close={() => setActiveRegex(null)} apply={text => patch(check.id, { text })} />
-              </Popover.Content></Popover.Portal>
-            </Popover.Root>}
             {fieldError(check.id)}
           </div>
         </div>
@@ -141,7 +132,7 @@ export function CaseEditor({ draft, update, save, cancel, editing }: { draft: Ev
   const allExpanded = turns.every(t => expanded[t.id] ?? true)
   const hasTurnErrors = (turn: typeof turns[number]) => [
     `${turn.id}-input`, ...turn.checks.map(c => c.id),
-    ...turn.rules.flatMap(r => [`${r.id}-match`, `${r.id}-response`]),
+    ...turn.rules.flatMap(r => [`${r.id}-match`, ...r.responses.map((_, n) => `${r.id}-response-${n}`)]),
   ].some(key => !!errors[`${prefix}-${key}`])
   const setTurn = (index: number, patch: Partial<EvalTurn>) => update({ ...currentDraft.current, turns: turnsOf(currentDraft.current).map((t, i) => i === index ? { ...t, ...patch } : t) })
   function move(index: number, delta: number) {
@@ -181,7 +172,7 @@ export function CaseEditor({ draft, update, save, cancel, editing }: { draft: Ev
     }
     const validation = caseValidation(draft)
     if (validation) { setErrors({ ...nextErrors, checks: validation }); return }
-    const normalized = turns.map(t => ({ ...t, rules: t.rules.map(r => ({ ...r, responses: [r.responses.join("\n")] })), inherit: false, expected: t.checks.map(checkDescription).join("；") }))
+    const normalized = turns.map(t => ({ ...t, inherit: false, expected: t.checks.map(checkDescription).join("；") }))
     save({ ...draft, name: draft.name.trim(), input: turns[0].input, expected: normalized[0].expected, turns: normalized, checks: draft.checks?.map(simplifyCheck), demo: false })
   }} onInput={e => { const el = e.target as HTMLInputElement
     if (!el.setCustomValidity) return
@@ -201,7 +192,7 @@ export function CaseEditor({ draft, update, save, cancel, editing }: { draft: Ev
         <StandardInput className="eval-user-input" rows={2} {...fieldProps(`${turn.id}-input`, "用户输入", `请填写第 ${index + 1} 轮的用户输入，不能仅包含空格。`)} required value={turn.input} onChange={e => setTurn(index, { input: e.target.value })} />{fieldError(`${turn.id}-input`)}
       </AttachmentInput>
       <section className="eval-clarification-section"><div className="eval-toolbar"><div className="eval-field-heading"><h3 className="eval-section-title">澄清回复</h3></div><Button variant="ghost" className="eval-add-action" icon="plus-small" onClick={() => setTurn(index, { rules: [...turn.rules, { id: crypto.randomUUID(), match: "", responses: [""] }] })}>添加澄清回复</Button></div>
-      <p className="eval-muted">可选：技能或智能体追问时，让评测按这里的配置自动回答，无需你在运行时逐条回复。</p>
+      <p className="eval-muted">技能或智能体追问时，让评测按这里的配置自动回答，无需你在运行时逐条回复。</p>
       {turn.rules.length > 0 && <div className="eval-clarification-list">
         <div className="eval-clarification-columns" aria-hidden="true"><span /><span>预期追问</span><span>自动回复</span><span /></div>
         {turn.rules.map((rule, ruleIndex) => <section className="eval-clarification-row" key={rule.id} aria-label={`澄清回复 ${ruleIndex + 1}`}>
@@ -213,8 +204,14 @@ export function CaseEditor({ draft, update, save, cancel, editing }: { draft: Ev
           </div>
           <div className="eval-clarification-cell eval-clarification-answer">
             <label className="eval-clarification-mobile-label" htmlFor={`${prefix}-${rule.id}-response`}>自动回复</label>
-            <StandardInput {...fieldProps(`${rule.id}-response`, "自动回复", `请填写第 ${index + 1} 轮的自动回复，不能仅包含空格。`)} required value={rule.responses.join("\n")} placeholder="例如：华东公司" onChange={e => setTurn(index, { rules: turn.rules.map(r => r.id === rule.id ? { ...r, responses: [e.target.value] } : r) })} />
-            {fieldError(`${rule.id}-response`)}
+            {rule.responses.map((response, answerIndex) => <div key={answerIndex}>
+              {rule.responses.length > 1 && <span className="eval-muted">问题 {answerIndex + 1} 的答案</span>}
+              <StandardInput {...fieldProps(`${rule.id}-response-${answerIndex}`, `自动回复 ${answerIndex + 1}`, "请填写自动回复，不能仅包含空格。")} required value={response} placeholder="例如：华东公司" onChange={e => setTurn(index, { rules: turn.rules.map(r => r.id === rule.id ? { ...r, responses: r.responses.map((v, n) => n === answerIndex ? e.target.value : v) } : r) })} />
+              {fieldError(`${rule.id}-response-${answerIndex}`)}
+              {rule.responses.length > 1 && <Button variant="ghost" onClick={() => setTurn(index, { rules: turn.rules.map(r => r.id === rule.id ? { ...r, responses: r.responses.filter((_, n) => n !== answerIndex) } : r) })}>删除此答案</Button>}
+            </div>)}
+            <Button variant="ghost" onClick={() => setTurn(index, { rules: turn.rules.map(r => r.id === rule.id ? { ...r, responses: [...r.responses, ""] } : r) })}>添加下一问题的答案</Button>
+            <p className="eval-muted">一次提出多个问题时，按问题顺序分别填写答案。</p>
           </div>
           <div className="eval-clarification-remove-slot"><Tooltip value="删除澄清回复"><button type="button" className="eval-standard-delete eval-clarification-remove" aria-label={`删除澄清回复 ${ruleIndex + 1}`} onClick={() => confirmDelete(`删除澄清回复 ${ruleIndex + 1}？`, "将移除这组预期追问和自动回复，保存用例后生效。", () => setTurn(index, { rules: turn.rules.filter(r => r.id !== rule.id) }), !!(rule.match.trim() || rule.responses.some(v => v.trim())))}><Icon name="trash-16" size="small" /></button></Tooltip></div>
         </section>)}

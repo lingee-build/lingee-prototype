@@ -1,3 +1,4 @@
+import { conversationRepairScenario } from "./scenarios/evaluation-repair-dialog"
 import { evaluationRepairTarget } from "@/services/evaluation-repair"
 import { db } from "./db"
 import { sleep, uid } from "./latency"
@@ -34,7 +35,11 @@ export async function runAssistantStream(sessionId: string, prompt: string, emit
   const run: Run = { controller: new AbortController() }
   runs.set(sessionId, run)
   const aborted = () => run.controller.signal.aborted
-  const scenario = pickScenario({ prompt, repairTarget: evaluationRepairTarget(sessionId), projectId: db.sessions.find((x) => x.id === sessionId)?.projectId ?? "" })
+  const session = db.sessions.find(x => x.id === sessionId)
+  const bound = evaluationRepairTarget(sessionId)
+  const scenario = session && !bound && /评测|报告/.test(prompt) && /修复|修改|改进/.test(prompt)
+    ? conversationRepairScenario(session, prompt)
+    : pickScenario({ prompt, repairTarget: bound, projectId: session?.projectId ?? "" })
 
   const pause = (ms: number) => sleep(ms, run.controller.signal)
   const pacing = scenario.pacing

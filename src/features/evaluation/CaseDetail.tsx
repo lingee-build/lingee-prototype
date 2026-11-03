@@ -1,3 +1,4 @@
+import { clarificationResponses } from "@/services/evaluation"
 import { useState } from "react"
 import { BrandButton, Button, IconButton } from "@/ui"
 import { checkKind, checkDescription, checkOperators, checksOf, turnsOf, type EvalCase, type EvalCheck } from "@/services/evaluation"
@@ -30,7 +31,7 @@ export function CaseDetail({ value, back, edit, editLabel = "编辑", editDisabl
       <div className="eval-input-group"><div className="eval-message"><strong>用户输入</strong><p>{turn.input}</p></div><Files files={turn.attachments} label="附件" /></div>
       {!!turn.rules.length && <section><h3 className="eval-section-title">澄清回复 <span className="eval-section-count">（{turn.rules.length}）</span></h3><div className="eval-result-reply-list">
         <div className="eval-result-reply-columns" aria-hidden="true"><span /><span>预期追问</span><span>自动回复</span></div>
-        {turn.rules.map((rule, ri) => <div className="eval-result-reply-row" key={rule.id}><span className="eval-result-number">{ri + 1}</span><div><span className="eval-result-mobile-label">预期追问</span><p>{rule.match}</p></div><div><span className="eval-result-mobile-label">自动回复</span><p>{rule.responses.join("\n")}</p></div></div>)}
+        {turn.rules.map((rule, ri) => <div className="eval-result-reply-row" key={rule.id}><span className="eval-result-number">{ri + 1}</span><div><span className="eval-result-mobile-label">预期追问</span><p>{rule.match}</p></div><div><span className="eval-result-mobile-label">自动回复</span><p>{clarificationResponses(rule.responses)}</p></div></div>)}
       </div></section>}
       <Standards label="评测标准" checks={checksOf(turn)} />
     </TurnCard>)}

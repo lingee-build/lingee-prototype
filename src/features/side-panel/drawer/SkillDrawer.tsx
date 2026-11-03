@@ -1,3 +1,4 @@
+import { ObjectEvaluationReport } from "@/features/evaluation/ObjectEvaluationReport"
 import { useMemo, useState, type CSSProperties } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { BrandButton, CapsuleTag, ConfirmDialog, DropdownMenu, Empty, Icon, IconButton, Markdown, SegmentedControl, Tag, Tooltip, showToast, useDialog } from "@/ui"
@@ -13,7 +14,7 @@ import { ValidationReport } from "@/features/skill-detail/CheckGroup"
 import { OverviewTab } from "@/features/skill-detail/OverviewTab"
 import { validationOf } from "@/features/skill-detail/validation"
 
-type Tab = "overview" | "preview" | "check"
+type Tab = "overview" | "preview" | "check" | "evaluation"
 
 const FADE = "linear-gradient(to bottom, transparent 0, black 24px, black 100%)"
 const Spinner = () => (
@@ -162,12 +163,13 @@ export function SkillDrawer(props: { id: string; working: boolean }) {
         <SegmentedControl
           value={tab}
           onChange={(value) => setTab(value as Tab)}
-          items={(["overview", "preview", "check"] as const).map((value) => ({ value, label: t(`kcode.skillPreview.tab.${value}`) }))}
+          items={[...(["overview", "preview", "check"] as const).map((value) => ({ value, label: t(`kcode.skillPreview.tab.${value}`) })), { value: "evaluation", label: "评测报告" }]}
         />
         <IconButton icon="refresh" variant="ghost" iconSize="small" className="ml-auto h-7 w-7" title={t("session.files.refresh")} onClick={() => void query.refetch()} />
       </div>
 
-      <div className="flex-1 min-h-0 overflow-y-auto no-scrollbar py-6" style={{ maskImage: FADE, WebkitMaskImage: FADE }}>
+      <div className={`flex-1 min-h-0 overflow-y-auto no-scrollbar ${tab === "evaluation" ? "" : "py-6"}`} style={tab === "evaluation" ? undefined : { maskImage: FADE, WebkitMaskImage: FADE }}>
+        {tab === "evaluation" && <ObjectEvaluationReport objectId={`skill:${skill.id}`} />}
         {tab === "overview" && (
           <>
             <div className="flex gap-3 items-start px-6 pb-5">

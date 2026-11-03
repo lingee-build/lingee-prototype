@@ -1,17 +1,15 @@
-import { useEffect, useRef, useState, type CSSProperties } from "react"
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 import { reportSections } from "./report-document"
 
 /** 保留独立文档的样式与脚本隔离，全文撑开高度，由评测主内容区统一滚动。 */
-export function ReportPreview({ html }: { html: string }) {
+export function ReportPreview({ html, actions }: { html: string; actions?: ReactNode }) {
   const [cases, setCases] = useState<{id: string; label: string}[]>([])
-  const [compact, setCompact] = useState(() => window.matchMedia("(max-width: 1200px)").matches)
-  const [navOpen, setNavOpen] = useState(() => !window.matchMedia("(max-width: 1200px)").matches)
-  useEffect(() => {
-    const query = window.matchMedia("(max-width: 1200px)")
-    const sync = () => { setCompact(query.matches); setNavOpen(!query.matches) }
-    query.addEventListener("change", sync)
-    return () => query.removeEventListener("change", sync)
-  }, [])
+  const compact = true
+  const [navOpen, setNavOpen] = useState(false)
+  const heading = useMemo(() => {
+    const doc = new DOMParser().parseFromString(html, "text/html")
+    return { title: doc.querySelector("h1")?.textContent || "评测报告", meta: doc.querySelector(".report-meta-line")?.outerHTML || "" }
+  }, [html])
   const navRef = useRef<HTMLElement>(null)
   useEffect(() => {
     if (!compact || !navOpen) return
@@ -31,10 +29,18 @@ export function ReportPreview({ html }: { html: string }) {
     }
   }, [compact, navOpen])
   const [active, setActive] = useState("conclusion")
-  const [navWidth, setNavWidth] = useState(240)
-  const dragRef = useRef<{ x: number; width: number } | null>(null)
-  const changeWidth = (width: number) => setNavWidth(Math.min(420, Math.max(200, width)))
   const frameRef = useRef<HTMLIFrameElement>(null)
+  const scrollToTarget = (target: HTMLElement) => {
+    const frame = frameRef.current
+    const panel = frame?.closest<HTMLElement>(".eval-panel")
+    if (!frame || !panel) return
+    frame.contentWindow?.scrollTo(0, 0)
+    const offset = frame.getBoundingClientRect().top + target.getBoundingClientRect().top - panel.getBoundingClientRect().top - (navRef.current?.offsetHeight || 56) - 12
+    panel.scrollBy({ top: offset, behavior: "instant" })
+    target.tabIndex = -1
+    target.focus({ preventScroll: true })
+  }
+
 
   useEffect(() => {
     const frame = frameRef.current
@@ -81,9 +87,7 @@ export function ReportPreview({ html }: { html: string }) {
         event.preventDefault()
         if (target.matches("details")) (target as HTMLDetailsElement).open = true
         resize()
-        target.scrollIntoView({ block: "start" })
-        target.tabIndex = -1
-        target.focus({ preventScroll: true })
+        scrollToTarget(target)
       }
       let tick = 0
       const trackSection = () => {
@@ -134,14 +138,16 @@ export function ReportPreview({ html }: { html: string }) {
     else if (id.startsWith("case-")) setNavOpen(true)
     // 等目录关闭后定位并将焦点移交正文。
     requestAnimationFrame(() => {
-      target.scrollIntoView({ block: "start" })
-      target.tabIndex = -1
-      target.focus({ preventScroll: true })
+      scrollToTarget(target)
     })
     setActive(id)
   }
 
-  return <div className="eval-report-preview" style={{ "--report-nav-width": `${navWidth}px` } as CSSProperties}>
+  return <div className="eval-report-preview eval-report-unified">
+    <header className="eval-report-cover">
+      <div className="eval-report-title-row"><h2>{heading.title}</h2>{actions}</div>
+      <div className="eval-report-metadata" dangerouslySetInnerHTML={{ __html: heading.meta }} />
+    </header>
     <nav ref={navRef} className="eval-report-nav" aria-label="报告目录">
       <div className="eval-report-nav-heading"><strong>报告目录</strong></div>
       {reportSections.map(section => <div key={section.id} className="eval-report-nav-section">
@@ -156,12 +162,6 @@ export function ReportPreview({ html }: { html: string }) {
         </div>}
       </div>)}
     </nav>
-    <div className="eval-report-resizer" role="separator" tabIndex={0} aria-label="调整报告目录宽度" aria-orientation="vertical" aria-valuemin={200} aria-valuemax={420} aria-valuenow={navWidth} title="拖动调整目录宽度；方向键微调，双击复位"
-      onPointerDown={event => { if (event.button !== 0) return; dragRef.current = { x: event.clientX, width: navWidth }; event.currentTarget.setPointerCapture(event.pointerId); event.preventDefault() }}
-      onPointerMove={event => { if (dragRef.current) changeWidth(dragRef.current.width + event.clientX - dragRef.current.x) }}
-      onPointerUp={event => { dragRef.current = null; if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId) }}
-      onPointerCancel={() => { dragRef.current = null }} onLostPointerCapture={() => { dragRef.current = null }} onDoubleClick={() => changeWidth(240)}
-      onKeyDown={event => { const widths: Record<string, number> = { ArrowLeft: navWidth - 20, ArrowRight: navWidth + 20, Home: 200, End: 420 }; if (event.key in widths) { event.preventDefault(); changeWidth(widths[event.key]) } }} />
     <iframe ref={frameRef} className="eval-report-document" title="评测报告预览" sandbox="allow-same-origin" srcDoc={html.replace(/<script>[\s\S]*?<\/script>/g, "")} />
   </div>
 }

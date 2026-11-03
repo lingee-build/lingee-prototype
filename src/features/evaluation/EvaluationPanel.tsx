@@ -6,7 +6,7 @@ import { devStore } from "@/mock/dev-store"
 import { evaluationRepairObject, repairPrompt, repairDisabledReason, registerEvaluationRepair } from "@/services/evaluation-repair"
 import { EvaluationSelect } from "./EvaluationSelect"
 import { RunEvaluationDialog } from "./RunEvaluationDialog"
-import { usePrompt } from "@/stores/prompt"
+import { ImportCases } from "./ImportCases"
 import { defaultJudgingModelId, evaluationExecutionDefault, evaluationModelText, initialEvaluationModelIds, type EvalModelIds, type EvalRunModels } from "@/services/evaluation-models"
 import { useBlocker, useNavigate, useSearchParams } from "react-router"
 import { ControlledConfirmDialog } from "@/ui/dialog/ConfirmDialog"
@@ -80,12 +80,13 @@ export function EvaluationPanel({ objectId, name, onEnvironmentChange, onDetailC
   const [searchParams, setSearchParams] = useSearchParams()
   const runId = searchParams.get("run") || undefined
   const resultId = searchParams.get("case") || undefined
-  const reportRequested = searchParams.get("view") === "report"
+  const reportHome = searchParams.get("tab") === "reports" && !runId
+  const reportRequested = searchParams.get("view") === "report" || reportHome
   const section = runId || resultId || reportRequested || searchParams.get("tab") === "runs" ? "runs" : "cases"
-  function openView(view: { section: "cases" | "runs"; runId?: string; resultId?: string; report?: boolean }) {
+  function openView(view: { section: "cases" | "runs" | "reports"; runId?: string; resultId?: string; report?: boolean }) {
     const next = new URLSearchParams(searchParams)
     for (const key of ["tab", "run", "case", "view", "focusCase"]) next.delete(key)
-    if (view.section === "runs") next.set("tab", "runs")
+    if (view.section !== "cases") next.set("tab", view.section)
     if (view.runId) {
       next.set("run", view.runId)
       if (view.report) next.set("view", "report")
@@ -149,6 +150,7 @@ export function EvaluationPanel({ objectId, name, onEnvironmentChange, onDetailC
   }
   const [viewCaseId, setViewCaseId] = useState<string>()
   const viewCase = cases.find(c => c.id === viewCaseId)
+  const [importOpen, setImportOpen] = useState(false)
   const [editorOpen, setEditorOpen] = useState(false)
   const draft = state.drafts[objectId]
   const setDraft = (value: EvalCase | undefined) => {
@@ -162,7 +164,7 @@ export function EvaluationPanel({ objectId, name, onEnvironmentChange, onDetailC
     const timer = setTimeout(() => updateNotice({ text: "", transient: false }), 3000)
     return () => clearTimeout(timer)
   }, [notice])
-  const current = runs.find((r) => r.id === runId)
+  const current = reportHome ? runs.find(r => !isActiveRun(r)) : runs.find((r) => r.id === runId)
   const focusCase = searchParams.get("focusCase")
   useEffect(() => {
     if (!focusCase || !current || resultId || reportRequested) return
@@ -183,7 +185,7 @@ export function EvaluationPanel({ objectId, name, onEnvironmentChange, onDetailC
   const detailOpen = section === "cases" ? !!viewCase || !!(editorOpen && draft) : !!current
   useEffect(() => { onDetailChange?.(detailOpen); return () => onDetailChange?.(false) }, [detailOpen, onDetailChange])
   const result = current?.results.find((c) => c.id === resultId)
-  const locationError = !runId && (resultId || reportRequested) ? "详情链接缺少运行编号，请返回运行记录列表。"
+  const locationError = !runId && !reportHome && (resultId || reportRequested) ? "详情链接缺少运行编号，请返回运行记录列表。"
     : runId && !current ? "指定运行记录不存在或已不可访问，请返回运行记录列表。"
     : resultId && !result ? "本次运行中不存在指定用例结果，请返回本次运行。"
     : ""
@@ -194,7 +196,7 @@ export function EvaluationPanel({ objectId, name, onEnvironmentChange, onDetailC
   const selectionDetails = [selectedOutsideSearch && `搜索结果外 ${selectedOutsideSearch} 条`, selectedOnOtherPages && `其他页 ${selectedOnOtherPages} 条`].filter(Boolean).join("，")
   const savedDraft = draft ? cases.find((c) => c.id === draft.id) : undefined
   const draftChanged = !!draft && (savedDraft ? JSON.stringify(draft) !== JSON.stringify(savedDraft) : !!(draft.checks?.length || draft.name.trim() || turnsOf(draft).some(t => t.input.trim() || t.checks?.length || t.expected.trim() || t.attachments.length || t.rules.length) || draft.attachments?.length))
-  const unsaved = editorOpen && draftChanged
+  const unsaved = (editorOpen && draftChanged) || importOpen
   const blocker = useBlocker(unsaved)
   const activeRun = runs.find(isActiveRun)
   const busy = !!activeRun
@@ -209,8 +211,7 @@ export function EvaluationPanel({ objectId, name, onEnvironmentChange, onDetailC
   }, [unsaved])
   function configureRun(list: EvalCase[], scope: string, original?: EvalRun, missingCount = 0) {
     if (!list.length || busy) return
-    const agent = objectId.startsWith("agent:") ? devStore.agents.find(a => `agent:${a.id}` === objectId) : undefined
-    const defaults = { execution: evaluationExecutionDefault(usePrompt.getState().modelId, agent?.defaultModelLevel), judging: defaultJudgingModelId(useSync.getState().models) }
+    const defaults = { execution: evaluationExecutionDefault(useSync.getState().models), judging: defaultJudgingModelId(useSync.getState().models) }
     const latest = runs.find(run => run.models)
     setRunSetup({ cases: list, scope, original, defaults, missingCount, initial: initialEvaluationModelIds(defaults, latest, original) })
   }
@@ -272,19 +273,47 @@ export function EvaluationPanel({ objectId, name, onEnvironmentChange, onDetailC
       {tr(value)}
     </span>
   )
+  const currentActions = current && (
+                <div className="eval-actions">
+                  {!result && <Tooltip value={repairReason || "携带失败证据进入原对象开发对话，检查修改后手动复测"}>
+                    <Button variant="secondary" className="eval-repair-action" aria-disabled={!!repairReason} onClick={() => { if (!repairReason) void repair(current) }}>修复问题</Button>
+                  </Tooltip>}
+                  {isActiveRun(current) ? (
+                    <Button variant="secondary" disabled={["stopping", "stop_unconfirmed"].includes(current.status)} onClick={() => requestCancelRun(objectId, current.id)}>{["stopping", "stop_unconfirmed"].includes(current.status) ? "停止处理中…" : tr("stop")}</Button>
+                  ) : (
+                    <>
+                      {report ? <Button variant="secondary" onClick={() => exportReport(current)}>下载报告</Button> : <Button variant="secondary"
+                        onClick={() => openView({ section: "runs", runId: current.id, report: true })}
+                      >
+                        {tr("report")}
+                      </Button>}
+                      {!result && <DropdownMenu placement="bottom-end">
+                        <DropdownMenu.Trigger asChild>
+                          <BrandButton variant="primary" disabled={busy} title={busy ? "当前对象有活动评测，请等待结束" : "选择范围，使用最新已保存内容运行"}>重新运行 <Icon name="chevron-down" size="small" /></BrandButton>
+                        </DropdownMenu.Trigger>
+                        <DropdownMenu.Portal><DropdownMenu.Content>
+                          <DropdownMenu.Item onSelect={() => rerun(current)}>本次全部用例（{current.results.length}）</DropdownMenu.Item>
+                          <DropdownMenu.Item disabled={!failedRunResults(current).length} onSelect={() => rerun(current, failedRunResults(current).map(c => c.id), "failed")}>不通过用例（{failedRunResults(current).length}）</DropdownMenu.Item>
+                        </DropdownMenu.Content></DropdownMenu.Portal>
+                      </DropdownMenu>}
+                    </>
+                  )}
+                </div>
+  )
+
   return (
     <section className="eval-panel" data-view={section} aria-label={tr("title")}>
       {runSetup && <RunEvaluationDialog name={name} count={runSetup.cases.length} scope={tr(`models.${runSetup.scope}`)}
         initial={runSetup.initial} defaults={runSetup.defaults} rerun={!!runSetup.original} missingCount={runSetup.missingCount}
         onClose={() => setRunSetup(undefined)} onStart={begin} />}
       <ControlledConfirmDialog open={blocker.state === "blocked"} title="放弃本次修改？" description="离开后，本次未保存的用例修改将被丢弃" confirmText="放弃并离开" cancelText="继续编辑" variant="danger"
-        onConfirm={() => { if (blocker.state === "blocked") { setDraft(undefined); blocker.proceed() } }}
+        onConfirm={() => { if (blocker.state === "blocked") { setDraft(undefined); setImportOpen(false); blocker.proceed() } }}
         onClose={() => { if (blocker.state === "blocked") blocker.reset() }} />
       {state.error && <p role="alert">{tr("storageError")}</p>}
       <div aria-live="polite" className="eval-muted">
         {notice.text}
       </div>
-      {locationError ? (
+      {importOpen ? <ImportCases objectId={objectId} close={() => { setImportOpen(false); setNotice("导入已结束，请查看用例列表", true) }} /> : locationError ? (
         <div className="eval-empty"><p role="alert">{locationError}</p><Button variant="ghost" onClick={() => openView({ section: "runs", runId: current?.id })}>{current ? "返回本次运行" : "返回运行记录"}</Button></div>
       ) : editorOpen && draft && section === "cases" ? (
         <CaseEditor draft={draft} update={setDraft} editing={!!savedDraft} cancel={() => {
@@ -303,38 +332,30 @@ export function EvaluationPanel({ objectId, name, onEnvironmentChange, onDetailC
           <nav className="eval-tabs light-segmented" aria-label={tr("title")}>
             <SegmentedControl
               value={section}
-              onChange={value => openView({ section: value === "runs" ? "runs" : "cases" })}
+              onChange={value => openView({ section: value === "runs" ? "reports" : "cases" })}
               items={["cases", "runs"].map(value => ({
                 value,
-                label: `${tr(value)} (${value === "cases" ? cases.length : runs.length})`,
+                label: `${value === "cases" ? "评测用例" : "评测报告"} (${value === "cases" ? cases.length : runs.length})`,
               }))}
             />
           </nav>
+          {section === "runs" && <div className="eval-toolbar eval-report-switcher">
+            {reportHome ? <strong>最新报告</strong> : report ? <div className="eval-actions"><Button variant="ghost" onClick={() => openView({ section: "runs" })}>返回历史报告</Button><span>历史报告</span></div> : <strong>历史报告</strong>}
+            <div className="eval-actions"><Button variant="ghost" onClick={() => openView({ section: reportHome ? "runs" : "reports" })}>{reportHome ? "查看历史报告" : "最新报告"}</Button>
+            {activeRun && <Button variant="secondary" onClick={() => openView({ section: "runs", runId: activeRun.id })}>查看当前任务进度</Button>}</div>
+          </div>}
+          {reportHome && !current && <div className="eval-empty"><p>暂无已结束的评测报告</p><Button onClick={() => openView({ section: "cases" })}>准备并运行用例</Button></div>}
           {section === "cases" && (
             <div className="eval-case-list">
-              <div className="eval-toolbar eval-case-toolbar">
+              {!!cases.length && <><div className="eval-toolbar eval-case-toolbar">
                   <input className="eval-case-search" type="search" aria-label="搜索用例名称" placeholder="搜索用例名称" value={caseSearch}
                     onChange={e => { setCaseSearch(e.target.value); setCasePage(1) }} />
                 <div className="eval-actions eval-case-toolbar-actions">
-                  <DropdownMenu placement="bottom-start">
-                    <DropdownMenu.Trigger asChild>
-                      <BrandButton variant="auxiliary" className="eval-create-action">{tr("add")}<Icon name="chevron-down" size="small" /></BrandButton>
-                    </DropdownMenu.Trigger>
-                    <DropdownMenu.Portal>
-                      <DropdownMenu.Content className="eval-create-menu">
-                        <DropdownMenu.Item onSelect={startGeneration}>
-                          <svg className="eval-create-menu-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 2.5h10a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1H6l-3.5 2v-2H3a1 1 0 0 1-1-1v-7a1 1 0 0 1 1-1Z"/><path d="M5 5.5h6M5 8h4"/></svg>
-                          <div><div className="eval-create-menu-title">对话生成</div><p>描述业务场景，生成多条用例</p></div>
-                        </DropdownMenu.Item>
-                        <DropdownMenu.Item onSelect={() => setDraft({ id: crypto.randomUUID(), name: "", input: "", expected: "", source: "none", outcome: "passed" })}>
-                          <svg className="eval-create-menu-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m9.5 3.5 3 3M2.5 13.5l3.5-1 7.25-7.25a1.6 1.6 0 0 0-3-3L3 9.5l-.5 4ZM8 13.5h5.5"/></svg>
-                          <div><div className="eval-create-menu-title">手动创建</div><p>填写一条用例</p></div>
-                        </DropdownMenu.Item>
-                      </DropdownMenu.Content>
-                    </DropdownMenu.Portal>
-                  </DropdownMenu>
+                  <div className="eval-actions eval-case-create-actions"><Button variant="secondary" onClick={startGeneration}>AI生成</Button>
+                  <Button variant="secondary" onClick={() => setImportOpen(true)}>导入用例</Button>
+                  </div>
                   <BrandButton variant="primary" disabled={!busy && !cases.length} onClick={() => { if (activeRun) openView({ section: "runs", runId: activeRun.id }); else configureRun(selectedCases.length ? selectedCases : cases, selectedCases.length ? "selected" : "all") }}>
-                    {busy ? "查看当前运行" : selectedCases.length ? `运行所选 (${selectedCases.length})` : `运行全部 ${cases.length} 条`}
+                    {busy ? "查看当前运行" : selectedCases.length ? `运行选中（${selectedCases.length}）` : `运行全部（${cases.length}）`}
                   </BrandButton>
                 </div>
               </div>
@@ -348,10 +369,10 @@ export function EvaluationPanel({ objectId, name, onEnvironmentChange, onDetailC
                     />
                     {tr("selectAll")}
                   </label>
-                  <Button variant="ghost" className="eval-danger-action" disabled={!selectedCases.length} onClick={() => removeCases(selectedCases.map(c => c.id))}>删除</Button>
-                  {!!selectedCases.length && <><span aria-live="polite">共选 {selectedCases.length} 条{selectionDetails ? `（${selectionDetails}）` : ""}</span><Button variant="ghost" onClick={() => setSelected([])}>取消选择</Button></>}
+
+                  {!!selectedCases.length && <><span aria-live="polite">已选 {selectedCases.length} 条{selectionDetails ? `（${selectionDetails}）` : ""}</span><Button variant="ghost" onClick={() => setSelected([])}>取消选择</Button><Button variant="ghost" className="eval-danger-action" onClick={() => removeCases(selectedCases.map(c => c.id))}>删除</Button></>}
                   </div>
-              {caseSearch.trim() && !selectedCases.length && !busy && <p className="eval-muted">运行范围包含搜索结果之外的用例，共 {cases.length} 条。</p>}
+              </>}{caseSearch.trim() && !!cases.length && !selectedCases.length && !busy && <p className="eval-muted">运行范围包含搜索结果之外的用例，共 {cases.length} 条。</p>}
               {filteredCases.length ? (
                 <>
                   {visibleCases.map((c) => (
@@ -375,7 +396,11 @@ export function EvaluationPanel({ objectId, name, onEnvironmentChange, onDetailC
                 </>
               ) : (
                 <div className="eval-empty">
-                  <Empty description={caseSearch.trim() ? "未找到匹配的用例" : "还没有用例，点击“新增用例”开始准备"} />
+                  <Empty description={cases.length ? "未找到匹配的用例" : "还没有评测用例"} />
+                  {!cases.length && <div className="eval-actions eval-empty-actions">
+                    <BrandButton variant="primary" onClick={startGeneration}>AI生成</BrandButton>
+                    <Button variant="secondary" onClick={() => setImportOpen(true)}>导入用例</Button>
+                  </div>}
                 </div>
               )}
 
@@ -395,7 +420,7 @@ export function EvaluationPanel({ objectId, name, onEnvironmentChange, onDetailC
               </details>
             </div>
           )}
-          {section === "runs" && !current && (
+          {section === "runs" && !current && !reportHome && (
             <>
               <div className="eval-date-filter" role="group" aria-label="运行记录筛选">
                 <EvaluationSelect id="eval-run-range" title="按运行开始时间筛选" label="运行开始时间" value={runRangePreset} onChange={applyRunRange} options={[
@@ -427,9 +452,9 @@ export function EvaluationPanel({ objectId, name, onEnvironmentChange, onDetailC
               {visibleRuns.map((run) => (
                 <div className="eval-row eval-run-row" key={run.id}>
                   <div className="eval-grow">
-                    <button className="eval-title eval-list-name" onClick={() => openView({ section: "runs", runId: run.id })}>{date(run.started)}</button>
+                    <button className="eval-title eval-list-name" onClick={() => openView({ section: "runs", runId: run.id, report: !isActiveRun(run) })}>{date(run.started)}</button>
                     <p className="eval-muted eval-meta-line">
-                      <span>{run.results.length} {tr("caseUnit")} · {run.results.filter((c) => verdictLabel(c) === "通过").length} {tr("passed")}</span>
+                      <span>{run.results.length} {tr("caseUnit")} · {run.results.filter((c) => verdictLabel(c) === "通过").length} {tr("passed")} · {run.results.filter(c => verdictLabel(c) === "不通过").length} 不通过 · {run.results.filter(c => verdictLabel(c) === "无法判定").length} 无法判定</span>
                       <span>{pointsText(runPoints(run))}</span>
                       <EvaluationDuration label="耗时" value={runDuration(run, durationNow)} note={runDurationNote} />
                     </p>
@@ -437,7 +462,7 @@ export function EvaluationPanel({ objectId, name, onEnvironmentChange, onDetailC
                   <div className="eval-run-actions">
                   {status(run.status)}
                   <Button variant="ghost"
-                    onClick={() => openView({ section: "runs", runId: run.id })}
+                    onClick={() => openView({ section: "runs", runId: run.id, report: !isActiveRun(run) })}
                   >
                     {tr("view")}
                   </Button>
@@ -456,36 +481,12 @@ export function EvaluationPanel({ objectId, name, onEnvironmentChange, onDetailC
           )}
           {current && section === "runs" && (
             <>
-              <div className="eval-toolbar">
-                <IconButton icon="arrow-left" variant="ghost" className="!text-[var(--text-weak)]" iconClass="!text-[var(--text-weak)]"
+              <div className="eval-toolbar" hidden={report}>
+                {!reportHome && <IconButton icon="arrow-left" variant="ghost" className="!text-[var(--text-weak)]" iconClass="!text-[var(--text-weak)]"
                   aria-label={resultId || reportRequested ? "返回本次运行" : "返回运行记录"} title={resultId || reportRequested ? "返回本次运行" : "返回运行记录"}
-                  onClick={() => openView({ section: "runs", runId: resultId || reportRequested ? current.id : undefined })}
-                />
-                <div className="eval-actions">
-                  {!report && <Tooltip value={repairReason || "携带失败证据进入原对象开发对话，检查修改后手动复测"}>
-                    <Button variant="secondary" className="eval-repair-action" aria-disabled={!!repairReason} onClick={() => { if (!repairReason) void repair(current, result?.id) }}>{result ? "去修复" : "修复问题"}</Button>
-                  </Tooltip>}
-                  {isActiveRun(current) ? (
-                    <Button variant="secondary" disabled={["stopping", "stop_unconfirmed"].includes(current.status)} onClick={() => requestCancelRun(objectId, current.id)}>{["stopping", "stop_unconfirmed"].includes(current.status) ? "停止处理中…" : tr("stop")}</Button>
-                  ) : (
-                    <>
-                      {report ? <Button variant="secondary" onClick={() => exportReport(current)}>下载报告</Button> : <Button variant="secondary"
-                        onClick={() => openView({ section: "runs", runId: current.id, report: true })}
-                      >
-                        {tr("report")}
-                      </Button>}
-                      {!result && !report && <DropdownMenu placement="bottom-end">
-                        <DropdownMenu.Trigger asChild>
-                          <BrandButton variant="primary" disabled={busy} title={busy ? "当前对象有活动评测，请等待结束" : "选择范围，使用最新已保存内容运行"}>重新运行 <Icon name="chevron-down" size="small" /></BrandButton>
-                        </DropdownMenu.Trigger>
-                        <DropdownMenu.Portal><DropdownMenu.Content>
-                          <DropdownMenu.Item onSelect={() => rerun(current)}>本次全部用例（{current.results.length}）</DropdownMenu.Item>
-                          <DropdownMenu.Item disabled={!failedRunResults(current).length} onSelect={() => rerun(current, failedRunResults(current).map(c => c.id), "failed")}>不通过用例（{failedRunResults(current).length}）</DropdownMenu.Item>
-                        </DropdownMenu.Content></DropdownMenu.Portal>
-                      </DropdownMenu>}
-                    </>
-                  )}
-                </div>
+                  onClick={() => openView({ section: "runs", runId: resultId || (reportRequested && !reportHome) ? current.id : undefined })}
+                />}
+                {!report && currentActions}
               </div>
               {reportRequested && isActiveRun(current) && <p role="status">评测尚未结束，暂不能查看最终报告；当前显示本次运行进度。</p>}
               {!report && <div className="eval-summary">
@@ -537,7 +538,7 @@ export function EvaluationPanel({ objectId, name, onEnvironmentChange, onDetailC
                   </div>
                 )}
               </div>}
-              {report && !isActiveRun(current) && <ReportPreview html={buildReportDocument(current, t)} />}
+              {report && !isActiveRun(current) && <ReportPreview html={buildReportDocument(current, t)} actions={currentActions} />}
               {!report && !result &&
                 current.results.map((c) => (
                   <div key={c.id} id={`eval-case-result-${c.id}`} tabIndex={-1} data-located={locatedCase?.id === c.id || undefined} className="eval-row eval-result-row">

@@ -81,7 +81,7 @@ export const evaluationZh: Record<string, string> = {
   "proto.eval.selectAll": "全选",
   "proto.eval.select": "选择",
   "proto.eval.emptyCases": "暂无评测用例",
-  "proto.eval.emptyHint": "通过对话生成或手动创建用例",
+  "proto.eval.emptyHint": "通过AI生成或导入用例开始准备",
   "proto.eval.emptyRuns": "还没有运行记录",
   "proto.eval.emptyRunsHint": "选择用例并运行评测。",
   "proto.eval.caseUnit": "条用例",

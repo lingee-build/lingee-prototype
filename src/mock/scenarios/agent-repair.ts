@@ -1,3 +1,4 @@
+import { evaluationRepairEvidence } from "@/services/evaluation-repair"
 import { currentDisplayName } from "@/stores/auth"
 import { evaluationObjectUnavailable } from "@/services/evaluation"
 import { devStore } from "../dev-store"
@@ -11,7 +12,7 @@ export function agentRepairScenario({ repairTarget, projectId }: ScenarioContext
       todo: 1,
       resolve: () => {
         const target = devStore.agents.find(agent => agent.id === repairTarget?.objectId && agent.projectId === projectId)
-        if (repairTarget?.objectType !== "agent" || !target || !repairTarget.runId || evaluationObjectUnavailable(`agent:${target.id}`)) return {
+        if (repairTarget?.objectType !== "agent" || !target || !evaluationRepairEvidence(repairTarget, projectId) || evaluationObjectUnavailable(`agent:${target.id}`)) return {
           text: "无法确认原智能体或其所属项目，已停止修复。请返回评测重新打开修复入口；不会创建同名智能体或改动其他对象。",
         }
         devStore.agents = devStore.agents.map(agent => agent.id === target.id ? {
@@ -24,7 +25,7 @@ export function agentRepairScenario({ repairTarget, projectId }: ScenarioContext
           }] },
         } : agent)
         return {
-          text: `已在原智能体「${target.name}」上保存模拟修改，智能体 ID：${target.id}。未创建新智能体，未提交或发布。请检查下方原对象产物，再返回运行记录手动复测；修复效果以新运行结果为准。\n\n这是原型模拟：记录原智能体有待提交修改，用于体验修复回流；不代表真实智能体内容已修复。`,
+          text: `已在原智能体「${target.name}」上保存模拟修改，智能体 ID：${target.id}。未创建新智能体，未提交或发布。请检查下方原对象产物，再返回来源报告手动复测；修复效果以新运行结果为准。\n\n这是原型模拟：记录原智能体有待提交修改，用于体验修复回流；不代表真实智能体内容已修复。`,
           card: () => ({ kind: "ai-partner", config: { id: target.id, title: target.name } }),
         }
       },

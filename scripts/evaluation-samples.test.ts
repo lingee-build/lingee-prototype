@@ -78,7 +78,7 @@ test("预设通过不能覆盖缺少关键词、正则不匹配，整体文本�
   const checks = result.roundResults![0].checkResults!
   expect(checks.find(c => c.kind === "keyword")!.verdict).toBe("failed")
   expect(checks.find(c => c.kind === "regex")!.verdict).toBe("failed")
-  expect(result.checkResults!.find(c => c.id === "last-only")!.verdict).toBe("failed")
+  expect(result.checkResults!.find(c => c.id === "last-only")!.verdict).toBe("skipped")
   expect(result.verdict).toBe("failed")
   expect(resultIssueSummary(result)).toContain("第 1 轮：缺少关键词：FHTZ-20261030-001、优品科技")
 })
@@ -90,7 +90,7 @@ test("文件存在性由对应时点产物清单决定，否定检查也不能�
   const files = result.roundResults![2].checkResults!.filter(c => c.kind === "file")
   expect(files.map(c => c.verdict)).toEqual(["failed", "failed"])
   expect(files.map(c => c.fileEvidence!.exists)).toEqual([false, true])
-  expect(result.checkResults!.filter(c => c.kind === "file").map(c => c.verdict)).toEqual(["failed", "failed"])
+  expect(result.checkResults!.filter(c => c.kind === "file").map(c => c.verdict)).toEqual(["skipped", "skipped"])
 })
 
 test("语义依据只匹配原标准，未知标准、编辑后及旧版示例均不假通过", () => {

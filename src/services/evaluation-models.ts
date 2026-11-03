@@ -1,5 +1,4 @@
 import type { Model } from "@/mock/types"
-import type { ModelLevel } from "@/mock/fixtures/dev"
 
 /** 运行时保存目录返回的身份与名称；历史展示不再查询当前模型目录。 */
 export interface EvalModelSnapshot { id: string; name: string; provider: string; version?: string }
@@ -13,9 +12,8 @@ export function defaultJudgingModelId(catalog: readonly Model[]): string {
     ?? catalog[0])?.id ?? ""
 }
 
-export function evaluationExecutionDefault(conversationModelId: string, agentLevel?: ModelLevel): string {
-  if (!agentLevel || agentLevel === "auto") return conversationModelId
-  return { fast: "lingee-fast", expert: "lingee-expert", ultra: "lingee-ultra" }[agentLevel]
+export function evaluationExecutionDefault(catalog: readonly Model[]): string {
+  return catalog[0]?.id ?? ""
 }
 
 export function initialEvaluationModelIds(defaults: EvalModelIds, latest?: { models?: EvalRunModels }, original?: { models?: EvalRunModels }): EvalModelIds {

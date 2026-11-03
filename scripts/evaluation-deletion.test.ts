@@ -128,3 +128,16 @@ test("智能体修复会话仅进入所属项目且不自动发送", async () =>
   expect(created?.projectId).toBe("agent-project")
   expect(db.messages).toHaveLength(0)
 })
+
+test("已有普通开发对话参与报告修复后，删除对象只清除报告关联而不删除对话", async () => {
+  const { registerEvaluationRepair } = await import("../src/services/evaluation-repair")
+  const ordinary = session("ordinary-existing")
+  db.sessions.push(ordinary); useSync.setState({ sessions: [ordinary] })
+  const message = { id: "keep-message", sessionId: ordinary.id, role: "user" as const, parts: [], time: { created: 1 } }
+  db.messages.push(message)
+  registerEvaluationRepair(ordinary, "修复评测问题", { objectType: "skill", objectId: "delete-existing", runId: "old-report" }, false)
+  await remove(["skill:delete-existing"])
+  expect(db.sessions.some(s => s.id === ordinary.id)).toBe(true)
+  expect(db.messages.some(m => m.id === message.id)).toBe(true)
+  expect(repairs.getState().links[ordinary.id]).toBeUndefined()
+})

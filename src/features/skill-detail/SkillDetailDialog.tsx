@@ -1,5 +1,5 @@
 import { useNavigate } from "react-router"
-import { EvaluationLabel } from "@/features/evaluation/EvaluationPanel"
+import { ObjectEvaluationReport } from "@/features/evaluation/ObjectEvaluationReport"
 import { useMemo, useState, type CSSProperties } from "react"
 import { BrandButton, CapsuleTag, Dialog, Icon, Markdown, SegmentedControl, Tag, Tooltip, useDialog } from "@/ui"
 import { cx } from "@/lib/cx"
@@ -12,7 +12,7 @@ import { CheckTab } from "./CheckTab"
 import { summarize, validationOf } from "./validation"
 import { OverviewTab } from "./OverviewTab"
 
-type DetailTab = "overview" | "preview" | "check"
+type DetailTab = "overview" | "preview" | "check" | "evaluation"
 
 function MetaCell(props: { label: string; value: string; className?: string; icon?: boolean }) {
   return (
@@ -144,17 +144,13 @@ export function SkillDetailDialog(props: { skill: Skill; initialTab?: DetailTab;
           >
             <SegmentedControl
               value={tab}
-              onChange={(value) => {
-                if (value === "evaluation") {
-                  dialog.close()
-                  navigate(`/dev/skill/${encodeURIComponent(skill.id)}/evaluation`)
-                } else setTab(value as DetailTab)
-              }}
-              items={[...(["overview", "preview", "check"] as const).map((value) => ({ value, label: t(`kcode.skillPreview.tab.${value}`) })), {value:"evaluation", label:<EvaluationLabel />}]}
+              onChange={value => setTab(value as DetailTab)}
+              items={[...(["overview", "preview", "check"] as const).map((value) => ({ value, label: t(`kcode.skillPreview.tab.${value}`) })), {value:"evaluation", label:"评测报告"}]}
             />
           </div>
 
           <div className="flex-1 min-h-0 overflow-y-auto no-scrollbar">
+            {tab === "evaluation" && <ObjectEvaluationReport objectId={`skill:${skill.id}`} open={url => { dialog.close(); navigate(url) }} />}
             {tab === "overview" && <OverviewTab skill={skill} detail={detail} />}
             {tab === "preview" && (
               <div className="flex-1 px-6 pb-4 select-text">

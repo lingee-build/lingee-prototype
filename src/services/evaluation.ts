@@ -20,7 +20,7 @@ export type CheckKind = "natural" | "text" | "keyword" | "regex" | "file"
 export const checkOperators = { all: "包含全部关键词", any: "包含任一关键词", none: "不包含任一关键词", regex: "匹配正则表达式", not_regex: "不匹配正则表达式", exists: "存在", not_exists: "不存在" }
 export interface EvalCheck { kind?: CheckKind; operator?: keyof typeof checkOperators; id: string; text: string; required: boolean; condition?: string; reference?: string; files: EvalAttachment[] }
 export interface FileEvidence { path: string; exists: boolean; checkedAt?: number; content?: string }
-export interface CheckResult extends EvalCheck { fileEvidence?: FileEvidence; verdict: "passed" | "failed" | "unknown" | "na"; actual: string; evidence: string }
+export interface CheckResult extends EvalCheck { fileEvidence?: FileEvidence; verdict: "passed" | "failed" | "unknown" | "na" | "skipped"; actual: string; evidence: string }
 /** 仅原型：预先编写的执行材料与语义依据，不从预期结论倒推回复或文件。 */
 export interface DemoJudgment { check: Pick<EvalCheck, "text" | "condition" | "reference">; verdict: CheckResult["verdict"]; actual: string; evidence: string }
 export interface DemoTurnEvidence { response: string; tool?: string; toolResult?: string; clarification: string; files: string[]; judgments: DemoJudgment[] }
@@ -82,6 +82,7 @@ export interface EvalResult extends EvalCase {
   tool: string
 }
 export interface EvalRun {
+  hardRuleStop?: boolean
   models?: EvalRunModels
   pointsQuery?: { status: PointsStatus; queriedAt?: number; valueComplete?: boolean; amount?: PointsAmount }
   objectContentSummary?: string
@@ -182,6 +183,7 @@ export function startRun(key: string, name: string, cases: EvalCase[], environme
     environment,
     objectType: key.startsWith("agent:") ? "agent" : "skill",
     name,
+    hardRuleStop: true,
     checkPolicySnapshot: evaluationCheckPolicy,
     ruleSnapshot: "任一标准不通过，用例不通过；无不通过但存在无法判定，或所有标准均不适用时，用例无法判定；执行完整且所有适用标准通过，用例通过；执行异常或停止时保留已确定的不通过，否则无法判定。",
     started: Date.now(),
@@ -259,12 +261,12 @@ export function advanceRuns() {
           const count = rounds?.length || 1
           const beginning = offset
           offset += count * 2400
-          const completion = item.demo && item.outcome === "blocked" ? beginning + 2400 : offset + (item.demoJudgingDelayMs ?? 100)
-          completedAt = Math.max(completedAt, run.started + completion)
-          if (elapsed < beginning) return item
+          let completion = item.demo && item.outcome === "blocked" ? beginning + 2400 : offset + (item.demoJudgingDelayMs ?? 100)
+          if (elapsed < beginning) { completedAt = Math.max(completedAt, run.started + completion); return item }
           const timing = item.timing ? { started: item.timing.started ?? run.started + beginning, ended: elapsed >= completion ? item.timing.ended ?? run.started + completion : undefined } : undefined
           if (timing?.started !== item.timing?.started || timing?.ended !== item.timing?.ended) changed = true
           if (item.demo && item.outcome === "blocked" && elapsed >= beginning + 2400) {
+            completedAt = Math.max(completedAt, run.started + completion)
             const issue = item.demoFailure || "tool_unavailable"
             const detail = executionIssues[issue]
             const evidence = `${detail.stage}：${detail.reason}。${detail.action}`
@@ -275,31 +277,50 @@ export function advanceRuns() {
                 responseRecorded: false, response: "", tool: "", clarification: !index && issue === "clarification_unmatched" ? "实际追问：请确认查询所用的核算组织\n未找到匹配的自动回复" : "",
                 evidence: index ? "前序轮次执行异常，本轮未执行" : evidence, checkResults: completeStoppedChecks(checksOf(turn), turn.checkResults, index ? "前序轮次执行异常，本轮未执行，缺少所需证据，无法判定。" : evidence) })) }
           }
-          const status = elapsed < offset ? "running" : item.outcome
+          let status: EvalResult["status"] = elapsed < offset ? "running" : item.outcome
+          let hardFailedAt = -1
           const roundResults = rounds?.map((turn, index): EvalTurnResult => {
+            if (hardFailedAt >= 0) {
+              if (turn.status === "skipped") return turn
+              changed = true
+              return { ...turn, status: "skipped", response: "", responseRecorded: false, clarification: "", tool: undefined, toolResult: undefined, points: item.demo ? { execution: 0, judging: 0 } : undefined,
+                evidence: "前序轮次硬规则不通过，本轮未执行。", checkResults: skippedChecks(checksOf(turn), "前序轮次硬规则不通过，本轮未执行。") }
+            }
             const turnStatus = elapsed < beginning + index * 2400 ? "pending" : elapsed < beginning + (index + 1) * 2400 ? "running" : item.outcome
-            if (turnStatus === turn.status) return turn
+            if (turnStatus === turn.status) {
+              if (run.hardRuleStop && hasHardFailure(turn.checkResults || [])) hardFailedAt = index
+              return turn
+            }
             changed = true
             const finished = !["running", "pending"].includes(turnStatus)
             const trace = item.demo ? item.demoEvidence?.turns[index] : undefined
-            return { ...turn, status: turnStatus,
-              points: item.demo ? { execution: finished ? Number((0.36 + turn.rules.length * 0.12 + index * 0.04).toFixed(2)) : 0.12, judging: finished ? checksOf(turn).filter(c => checkKind(c) === "natural").length * 0.08 : 0 } : undefined,
+            const evaluated = finished ? evaluateChecks(checksOf(turn, index && turn.inherit ? rounds?.[0].expected : undefined), item, run.started + beginning + (index + 1) * 2400, trace, false, !!run.hardRuleStop) : undefined
+            if (run.hardRuleStop && hasHardFailure(evaluated || [])) hardFailedAt = index
+            return { ...turn, status: hardFailedAt === index ? "failed" : turnStatus,
+              points: item.demo ? { execution: finished ? Number((0.36 + turn.rules.length * 0.12 + index * 0.04).toFixed(2)) : 0.12, judging: finished ? (evaluated || []).filter(c => checkKind(c) === "natural" && c.verdict !== "skipped").length * 0.08 : 0 } : undefined,
               tool: finished ? trace?.tool : undefined,
               toolResult: finished ? trace?.toolResult : undefined,
-              checkResults: finished ? evaluateChecks(checksOf(turn, index && turn.inherit ? rounds?.[0].expected : undefined), item, run.started + beginning + (index + 1) * 2400, trace) : undefined,
+              checkResults: evaluated,
               responseRecorded: finished && !!trace,
               response: finished ? trace?.response ?? "" : "",
               evidence: finished ? trace?.toolResult || "未取得可核验的执行证据。" : "",
               clarification: finished ? trace?.clarification || "未记录实际澄清过程。" : "" }
           })
+          if (hardFailedAt >= 0) {
+            offset = beginning + (hardFailedAt + 1) * 2400
+            completion = offset
+            status = "failed"
+            if (timing) timing.ended = run.started + completion
+          }
+          completedAt = Math.max(completedAt, run.started + completion)
           if (status !== item.status) changed = true
-          const judging = status !== "running" && elapsed < offset + (item.demoJudgingDelayMs ?? 100)
+          const judging = hardFailedAt < 0 && status !== "running" && elapsed < offset + (item.demoJudgingDelayMs ?? 100)
           if (judging !== !!item.judging) changed = true
-          const finalTrace = item.demo ? item.demoEvidence?.turns[count - 1] : undefined
-          const checkResults = status === "running" || judging ? undefined : evaluateChecks(item.checks || [], item, run.started + offset, finalTrace, true)
+          const finalTrace = item.demo ? item.demoEvidence?.turns[hardFailedAt >= 0 ? hardFailedAt : count - 1] : undefined
+          const checkResults = hardFailedAt >= 0 ? skippedChecks(item.checks || [], "本轮硬规则不通过，当前用例结束，整体判定跳过。") : status === "running" || judging ? undefined : evaluateChecks(item.checks || [], item, run.started + offset, finalTrace, true, !!run.hardRuleStop)
           const allChecks = [...(checkResults || []), ...(roundResults || []).flatMap(t => t.checkResults || [])]
           return { ...item, timing, roundResults, status, checkResults, judging,
-            overallJudgingPoints: item.demo ? status === "running" ? 0 : (item.checks || []).filter(c => checkKind(c) === "natural").length * 0.08 : undefined,
+            overallJudgingPoints: item.demo ? status === "running" ? 0 : (checkResults || []).filter(c => checkKind(c) === "natural" && c.verdict !== "skipped").length * 0.08 : undefined,
             execution: status === "running" ? undefined : item.outcome === "blocked" ? "error" : "completed",
             verdict: status === "running" || judging ? undefined : aggregateChecks(allChecks),
             responseRecorded: status !== "running" && !!finalTrace,
@@ -333,10 +354,22 @@ export function checksOf(turn: EvalTurn, inherited?: string): EvalCheck[] {
 }
 export function aggregateChecks(checks: CheckResult[]): "passed" | "failed" | "unknown" {
   if (checks.some(c => c.verdict === "failed")) return "failed"
-  if (!checks.some(c => c.verdict !== "na") || checks.some(c => c.verdict === "unknown")) return "unknown"
+  if (!checks.some(c => c.verdict !== "na") || checks.some(c => c.verdict === "unknown" || c.verdict === "skipped")) return "unknown"
   return "passed"
 }
-function evaluateChecks(checks: EvalCheck[], item: EvalCase, checkedAt: number, trace?: DemoTurnEvidence, overall = false): CheckResult[] {
+export function skippedChecks(checks: EvalCheck[], reason: string): CheckResult[] {
+  return checks.map(c => ({ ...c, verdict: "skipped", actual: "未执行", evidence: reason }))
+}
+export function hasHardFailure(checks: CheckResult[]) {
+  return checks.some(c => checkKind(c) !== "natural" && c.verdict === "failed")
+}
+export function evaluateChecks(checks: EvalCheck[], item: EvalCase, checkedAt: number, trace?: DemoTurnEvidence, overall = false, hardFirst = true): CheckResult[] {
+  if (hardFirst) {
+    const hard = evaluateChecks(checks.filter(c => checkKind(c) !== "natural"), item, checkedAt, trace, overall, false)
+    const semantic = checks.filter(c => checkKind(c) === "natural")
+    const results = [...hard, ...(hasHardFailure(hard) ? skippedChecks(semantic, "同一范围的硬规则不通过，跳过语义判定。") : evaluateChecks(semantic, item, checkedAt, trace, overall, false))]
+    return checks.map(c => results.find(r => r.id === c.id)!)
+  }
   return checks.map(c => {
     if (!trace) return { ...c, verdict: "unknown", actual: "未取得可核验的执行结果。", evidence: item.demo ? "旧版示例未记录执行材料，请添加新版示例后运行；历史记录保持不变。" : "缺少回复、工具返回或产物证据，暂无法判定。" }
     if (item.demoJudgingFailure && checkKind(c) === "natural") return { ...c, verdict: "unknown", actual: item.demoJudgingFailure === "timeout" ? "判定服务超时，未取得有效判定。" : "判定服务返回无效结果，未取得有效判定。", evidence: item.demoJudgingFailure === "timeout" ? "判定服务超时，重试结束后仍失败，无法判定；未重新执行业务。" : "判定服务返回无效结果，重试结束后仍无效，无法判定；未重新执行业务。" }
@@ -437,7 +470,8 @@ export function fileCheckTime(evidence?: FileEvidence): string {
   return evidence?.checkedAt === undefined ? "未记录" : new Date(evidence.checkedAt).toLocaleString("zh-CN", { hour12: false })
 }
 
-export const evaluationCheckPolicy = `语义判断：轮次标准读取截至本轮的实际输入、澄清、工具返回及最终回复，不读取后续轮次；整体标准只在业务正常完成后发起，读取完整的实际执行记录；执行异常或用户停止后不发起新的整体判定，已有结论保留，其余为无法判定。仅条件明确未发生时可判不适用，条件证据缺失时无法判定；全部不适用不算通过。附件仅在内容已解析并留存时可作为证据，MVP 不自动读取产物内容。
+export const evaluationCheckPolicy = `硬规则优先：本轮关键词、正则、文件存在性均检查；任一明确不通过，跳过本轮语义判定、后续业务轮次和整体判定，结束当前用例为不通过，其他用例继续。语义不通过不阻止后续轮次；硬规则无法判定不等同明确失败。整体标准同样先检查硬规则。
+语义判断：轮次标准读取截至本轮的实际输入、澄清、工具返回及最终回复，不读取后续轮次；整体标准只在业务正常完成后发起，读取完整的实际执行记录；执行异常或用户停止后不发起新的整体判定，已有结论保留，其余为无法判定。仅条件明确未发生时可判不适用，条件证据缺失时无法判定；全部不适用不算通过。附件仅在内容已解析并留存时可作为证据，MVP 不自动读取产物内容。
 关键词与正则：轮次检查本轮最终回复，整体检查最后一轮最终回复，不拼入输入、澄清、工具返回或文件内容。保留 Markdown、大小写与空格，仅将 CRLF、CR 统一为 LF。回复缺失为无法判定；明确采集的空回复按空文本检查。
 关键词：去除关键词首尾空白，保留内部空格并去重；区分大小写，按字面子串检查全部、任一或不包含任一。
 正则：ECMAScript RegExp，默认 flags 为空，查找任意匹配；完整匹配须显式使用锚点。表达式不包含两侧斜杠或外置 flags。
@@ -454,9 +488,13 @@ export function caseValidation(value: EvalCase): string {
   const turns = turnsOf(value)
   for (const [i, turn] of turns.entries()) {
     if (!turn.input.trim()) return `第 ${i + 1} 轮用户输入必填，不能仅包含空白。`
-    if (turn.rules.some(r => !r.match.trim() || !r.responses.join("\n").trim())) return `第 ${i + 1} 轮澄清追问和自动回复不能为空。`
+    if (turn.rules.some(r => !r.match.trim() || !r.responses.length || r.responses.some(v => !v.trim()))) return `第 ${i + 1} 轮澄清追问和自动回复不能为空。`
   }
   const checks = [...(value.checks || []), ...turns.flatMap(t => checksOf(t))]
   if (!checks.length) return "请至少添加一条本轮或整体评测标准。"
   return checks.map(checkValidation).find(Boolean) || ""
+}
+
+export function clarificationResponses(responses: string[]): string {
+  return responses.length > 1 ? responses.map((answer, i) => `问题 ${i + 1}：${answer}`).join("\n") : responses[0] || ""
 }
