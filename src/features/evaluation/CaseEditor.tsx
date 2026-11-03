@@ -90,8 +90,8 @@ function CheckEditor({ label, checks, onChange, fieldProps, fieldError }: {
         </DropdownMenu>
       </div>
     </div>
-    {!checks.length && <p className="eval-muted">{label === "整体评测标准" ? "检查整段对话是否完成任务；已有本轮标准时，这里可以不填。" : "写清这一轮怎样才算做对。例如：缺少单号时先询问，不自行编造。"}</p>}
-    {checks.some(c => c.kind === "keyword" || c.kind === "regex") && <span className="eval-muted">文本检查范围：{label === "整体评测标准" ? "最后一轮最终回复" : "本轮最终回复"}。</span>}
+    {!checks.length && <p className="eval-muted">{label === "整体验收标准" ? "检查整段对话是否完成任务；已有本轮标准时，这里可以不填。" : "写清这一轮怎样才算做对。例如：缺少单号时先询问，不自行编造。"}</p>}
+    {checks.some(c => c.kind === "keyword" || c.kind === "regex") && <span className="eval-muted">文本检查范围：{label === "整体验收标准" ? "最后一轮最终回复" : "本轮最终回复"}。</span>}
     {checks.some(c => c.kind === "file") && <span className="eval-muted">文件存在性范围：仅检查产物文件是否存在，不检查内容。</span>}
     {checks.map((check, index) => {
       const props = fieldProps(check.id, `${label} ${index + 1}`, `请填写${label} ${index + 1}，不能仅包含空格。`)
@@ -113,6 +113,7 @@ function CheckEditor({ label, checks, onChange, fieldProps, fieldError }: {
 export function CaseEditor({ draft, update, save, cancel, editing }: { draft: EvalCase; update: (c: EvalCase) => void; save: (c: EvalCase) => void; cancel: () => void; editing: boolean }) {
   const confirmDelete = useDeleteConfirmation()
   const prefix = useId()
+  const [showOverall, setShowOverall] = useState(false)
   const [uploadingCount, setUploadingCount] = useState(0)
   const onUploadingChange = useCallback((uploading: boolean) => {
     setUploadingCount(count => count + (uploading ? 1 : -1))
@@ -127,7 +128,7 @@ export function CaseEditor({ draft, update, save, cancel, editing }: { draft: Ev
   const formRef = useRef<HTMLFormElement>(null)
   const currentDraft = useRef(draft)
   currentDraft.current = draft
-  const turns = turnsOf(draft).map((t, i, list) => ({ ...t, checks: checksOf(t, i && t.inherit ? list[0].expected : undefined).map(simplifyCheck) }))
+  const turns = turnsOf(draft).map((t, i, list) => ({ ...t, checks: [...checksOf(t, i && t.inherit ? list[0].expected : undefined), ...(list.length === 1 ? draft.checks || [] : [])].map(simplifyCheck) }))
   const [expanded, setExpanded] = useState<Record<string, boolean>>(() => Object.fromEntries(turns.map((t, i) => [t.id, i === 0])))
   const allExpanded = turns.every(t => expanded[t.id] ?? true)
   const hasTurnErrors = (turn: typeof turns[number]) => [
@@ -165,15 +166,15 @@ export function CaseEditor({ draft, update, save, cancel, editing }: { draft: Ev
       return
     }
     if (!(draft.checks?.length || turns.some(t => t.checks.length))) {
-      setErrors({ ...nextErrors, checks: "请至少添加一条本轮或整体评测标准。" })
-      formRef.current?.querySelector<HTMLElement>("[data-global-checks]")?.scrollIntoView({ block: "center" })
-      formRef.current?.querySelector<HTMLButtonElement>("[data-global-checks] [data-component=button]")?.focus()
+      flushSync(() => { setErrors({ ...nextErrors, checks: "请至少添加一条评测标准。" }); setExpanded(prev => ({ ...prev, [turns[0].id]: true })) })
+      formRef.current?.querySelector<HTMLElement>(".eval-check-editor")?.scrollIntoView({ block: "center" })
+      formRef.current?.querySelector<HTMLButtonElement>(".eval-check-editor [data-component=button]")?.focus()
       return
     }
     const validation = caseValidation(draft)
     if (validation) { setErrors({ ...nextErrors, checks: validation }); return }
     const normalized = turns.map(t => ({ ...t, inherit: false, expected: t.checks.map(checkDescription).join("；") }))
-    save({ ...draft, name: draft.name.trim(), input: turns[0].input, expected: normalized[0].expected, turns: normalized, checks: draft.checks?.map(simplifyCheck), demo: false })
+    save({ ...draft, name: draft.name.trim(), input: turns[0].input, expected: normalized[0].expected, turns: normalized, checks: turns.length === 1 ? [] : draft.checks?.map(simplifyCheck), demo: false })
   }} onInput={e => { const el = e.target as HTMLInputElement
     if (!el.setCustomValidity) return
     el.setCustomValidity("")
@@ -217,14 +218,16 @@ export function CaseEditor({ draft, update, save, cancel, editing }: { draft: Ev
         </section>)}
       </div>}
       </section>
-      <CheckEditor label="评测标准" checks={turn.checks} onChange={checks => setTurn(index, { checks, inherit: false })} fieldProps={fieldProps} fieldError={fieldError} />
+      <CheckEditor label={turns.length > 1 ? "本轮评测标准" : "评测标准"} checks={turn.checks} onChange={checks => turns.length === 1 ? update({ ...currentDraft.current, checks: [], turns: [{ ...turn, checks, inherit: false }] }) : setTurn(index, { checks, inherit: false })} fieldProps={fieldProps} fieldError={fieldError} />
     </TurnCard>)}
     <Button variant="ghost" className="eval-add-turn eval-add-action" icon="plus-small" onClick={() => {
       const id = crypto.randomUUID()
-      flushSync(() => { update({ ...draft, turns: [...turns, { id, input: "", expected: "", attachments: [], rules: [] }] }); setExpanded(prev => ({ ...prev, [id]: true })) })
+      flushSync(() => { update({ ...draft, checks: turns.length === 1 ? [] : draft.checks, turns: [...turns, { id, input: "", expected: "", attachments: [], rules: [] }] }); setExpanded(prev => ({ ...prev, [id]: true })) })
       formRef.current?.querySelector<HTMLTextAreaElement>(`[data-turn-id="${id}"] textarea`)?.focus()
     }}>添加一轮对话</Button>
-    <div data-global-checks><CheckEditor label="整体评测标准" checks={draft.checks || []} onChange={checks => { update({ ...currentDraft.current, checks }); setErrors(prev => ({ ...prev, checks: "" })) }} fieldProps={fieldProps} fieldError={fieldError} />{errors.checks && <p className="eval-field-error" role="alert">{errors.checks}</p>}</div>
+    <div data-global-checks>
+      {turns.length > 1 && !draft.checks?.length && !showOverall && <Button variant="ghost" icon="plus-small" onClick={() => setShowOverall(true)}>添加整体验收标准（可选）</Button>}
+      {(turns.length > 1 && (!!draft.checks?.length || showOverall)) && <><p className="eval-muted">用于检查跨轮一致性或整个任务的完成情况，无需重复各轮标准。</p><CheckEditor label="整体验收标准" checks={draft.checks || []} onChange={checks => { update({ ...currentDraft.current, checks }); setErrors(prev => ({ ...prev, checks: "" })) }} fieldProps={fieldProps} fieldError={fieldError} /></>}{errors.checks && <p className="eval-field-error" role="alert">{errors.checks}</p>}</div>
     <div className="eval-actions eval-form-footer"><BrandButton type="submit" variant="primary" disabled={uploadingCount > 0}>保存</BrandButton>{uploadingCount > 0 && <span role="status" className="eval-muted">附件上传中，请等待完成后保存</span>}<Button variant="ghost" onClick={cancel}>取消</Button></div>
   </form>
 }

@@ -33,8 +33,8 @@ export function CaseDetail({ value, back, edit, editLabel = "编辑", editDisabl
         <div className="eval-result-reply-columns" aria-hidden="true"><span /><span>预期追问</span><span>自动回复</span></div>
         {turn.rules.map((rule, ri) => <div className="eval-result-reply-row" key={rule.id}><span className="eval-result-number">{ri + 1}</span><div><span className="eval-result-mobile-label">预期追问</span><p>{rule.match}</p></div><div><span className="eval-result-mobile-label">自动回复</span><p>{clarificationResponses(rule.responses)}</p></div></div>)}
       </div></section>}
-      <Standards label="评测标准" checks={checksOf(turn)} />
+      <Standards label={rounds.length > 1 ? "本轮评测标准" : "评测标准"} checks={[...checksOf(turn), ...(rounds.length === 1 ? value.checks || [] : [])]} />
     </TurnCard>)}
-    <Standards label="整体评测标准" checks={value.checks || []} />
+    {rounds.length > 1 && <Standards label="整体验收标准" checks={value.checks || []} />}
   </div>
 }

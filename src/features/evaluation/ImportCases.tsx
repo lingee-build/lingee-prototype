@@ -69,7 +69,7 @@ export function ImportCases({ objectId, close }: { objectId: string; close: () =
     </section>
     {busy && <p role="status">正在处理，请稍候…</p>}
     {preview && <><p>预览：{preview.cases.length} 条用例 · {preview.cases.reduce((n, c) => n + turnsOf(c).length, 0)} 个业务轮次 · {preview.cases.reduce((n, c) => n + (c.checks?.length || 0) + turnsOf(c).reduce((m, t) => m + (t.checks?.length || 0), 0), 0)} 条标准</p>
-      {preview.cases.map(c => <details key={c.id}><summary>{c.businessId} · {c.name}（{turnsOf(c).length} 轮）</summary>{turnsOf(c).map((t, i) => <p key={t.id}>第 {i + 1} 轮：{t.input} · 标准 {t.checks?.length || 0} 条 · 澄清回复 {t.rules.length} 组</p>)}<p>整体评测标准 {c.checks?.length || 0} 条</p></details>)}
+      {preview.cases.map(c => <details key={c.id}><summary>{c.businessId} · {c.name}（{turnsOf(c).length} 轮）</summary>{turnsOf(c).map((t, i) => <p key={t.id}>第 {i + 1} 轮：{t.input} · 标准 {t.checks?.length || 0} 条 · 澄清回复 {t.rules.length} 组</p>)}<p>整体验收标准 {c.checks?.length || 0} 条</p></details>)}
       {!!preview.errors.length && <ul role="alert">{preview.errors.map((e, i) => <li key={i}>评测用例 · 第 {e.row} 行 · {e.field}：{e.message}</li>)}</ul>}
       {duplicate && <p role="status">已有同编号或同名用例。再次确认将新增独立用例，不覆盖已有内容。</p>}
       <BrandButton variant="primary" disabled={busy || !!preview.errors.length || !preview.cases.length || !attachmentsReady} onClick={async () => {

@@ -10,8 +10,8 @@ export function basicEvaluationSample(value: Pick<EvalCase, "name" | "input" | "
   const evidence = failed ? "用户输入明确表示编号稍后补充；示例未发生澄清，工具使用 DEMO-001 查询，回复称已完成处理。" : "示例工具返回单号 DEMO-001、状态已完成、来源业务系统；最终回复逐项呈现这些字段。"
   const verdict = failed ? "failed" : "passed"
   return { ...value, id: crypto.randomUUID(), demo: true,
-    checks: [{ id: crypto.randomUUID(), text: overall, required: true, files: [] }, ...(!failed && value.outcome !== "blocked" ? [{ id: crypto.randomUUID(), kind: "file" as const, operator: "exists" as const, text: "outputs/查询结果.txt", required: true, files: [] }] : [])],
-    turns: [{ id: crypto.randomUUID(), input: value.input, expected: value.expected, attachments: [], rules: [], checks: [{ id: crypto.randomUUID(), text: value.expected, required: true, files: [] }] }],
+    checks: [],
+    turns: [{ id: crypto.randomUUID(), input: value.input, expected: value.expected, attachments: [], rules: [], checks: [{ id: crypto.randomUUID(), text: value.expected, required: true, files: [] }, ...(!failed && value.outcome !== "blocked" ? [{ id: crypto.randomUUID(), kind: "file" as const, operator: "exists" as const, text: "outputs/查询结果.txt", required: true, files: [] }] : [])] }],
     demoEvidence: { turns: [{
       response: failed ? "已按默认编号 DEMO-001 完成处理。" : "业务记录 DEMO-001，状态：已完成，来源：业务系统。查询结果已保存至 outputs/查询结果.txt。",
       tool: `mcp.${value.source}.business_query`,
@@ -50,7 +50,7 @@ export function completeEvaluationSample(name: string): EvalCase {
         checks: [check("natural", "汇总包含单号、客户、审核状态、应发100件、已发60件和未发40件"), check("keyword", "outputs/查询汇总.txt", "all"), check("file", "outputs/查询汇总.txt", "exists"), check("file", "outputs/客户联系方式.txt", "not_exists")],
       },
     ],
-    checks: [check("natural", "完整完成澄清、查询、核对及汇总，保持跨轮次组织与单据一致，不编造数据"), check("keyword", "outputs/查询汇总.txt", "all"), check("regex", "outputs/[^\\n]+\\.txt", "regex"), check("file", "outputs/查询汇总.txt", "exists"), check("file", "outputs/客户联系方式.txt", "not_exists")],
+    checks: [check("natural", "完整完成澄清、查询、核对及汇总，保持跨轮次组织与单据一致，不编造数据")],
     demoEvidence: {
       turns: [
         {

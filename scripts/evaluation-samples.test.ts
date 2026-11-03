@@ -18,7 +18,8 @@ test("完整示例覆盖表单字段、四类标准和全部检查方式，附�
   }
   const checks = [...sample.checks!, ...sample.turns!.flatMap(t => t.checks!)]
   expect(new Set(checks.map(checkKind)).size).toBe(4)
-  expect(new Set(sample.checks!.map(checkKind)).size).toBe(4)
+  expect(sample.checks).toHaveLength(1)
+  expect(checkKind(sample.checks![0])).toBe("natural")
   expect(new Set(checks.map(c => c.operator).filter(Boolean)).size).toBe(7)
   for (const c of checks) expect(checkValidation(c)).toBe("")
   for (const f of [...sample.attachments!, ...sample.turns!.flatMap(t => t.attachments)]) {
@@ -90,7 +91,7 @@ test("文件存在性由对应时点产物清单决定，否定检查也不能�
   const files = result.roundResults![2].checkResults!.filter(c => c.kind === "file")
   expect(files.map(c => c.verdict)).toEqual(["failed", "failed"])
   expect(files.map(c => c.fileEvidence!.exists)).toEqual([false, true])
-  expect(result.checkResults!.filter(c => c.kind === "file").map(c => c.verdict)).toEqual(["skipped", "skipped"])
+  expect(result.checkResults!.map(c => c.verdict)).toEqual(["skipped"])
 })
 
 test("语义依据只匹配原标准，未知标准、编辑后及旧版示例均不假通过", () => {
@@ -137,4 +138,31 @@ test("修正示例并新建运行，不改写已有运行；缺失历史原因�
   expect(JSON.stringify(run)).toBe(snapshot)
   const legacy = { ...run.results[0], verdict: "unknown" as const, roundResults: undefined, checkResults: undefined }
   expect(resultIssueSummary(legacy)).toBe("未记录具体原因，请查看已有结果与证据。")
+})
+
+// No implicit overall evaluation: verdict is aggregated from configured standards.
+test("单轮和多轮无整体标准均按轮次汇总，报告不显示空整体区", () => {
+  for (const sample of [basic("passed"), { ...completeEvaluationSample("多轮无整体"), checks: [] }]) {
+    const run = finishSample(sample)
+    expect(run.results[0].verdict).toBe("passed")
+    expect(run.results[0].checkResults).toEqual([])
+    expect(run.results[0].overallJudgingPoints).toBe(0)
+    expect(buildReportDocument(run)).not.toContain("整体验收标准")
+  }
+})
+test("已有单轮整体标准继续参与判定，不能因只有一轮而忽略失败", () => {
+  const sample = basic("passed")
+  sample.checks = [{ id: "legacy", kind: "keyword", operator: "all", text: "不存在的关键词", required: true, files: [] }]
+  const run = finishSample(sample)
+  expect(run.results[0].verdict).toBe("failed")
+  expect(run.results[0].checkResults![0].verdict).toBe("failed")
+  expect(buildReportDocument(run)).toContain("整体验收标准")
+})
+
+test("多轮整体失败影响最终结论", () => {
+  const sample = completeEvaluationSample("整体失败")
+  sample.demoEvidence!.overall![0].verdict = "failed"
+  const result = finishSample(sample).results[0]
+  expect(result.roundResults!.flatMap(t => t.checkResults!).every(c => c.verdict === "passed")).toBe(true)
+  expect(result.verdict).toBe("failed")
 })

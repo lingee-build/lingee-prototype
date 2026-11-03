@@ -317,7 +317,7 @@ export function advanceRuns() {
           const judging = hardFailedAt < 0 && status !== "running" && elapsed < offset + (item.demoJudgingDelayMs ?? 100)
           if (judging !== !!item.judging) changed = true
           const finalTrace = item.demo ? item.demoEvidence?.turns[hardFailedAt >= 0 ? hardFailedAt : count - 1] : undefined
-          const checkResults = hardFailedAt >= 0 ? skippedChecks(item.checks || [], "本轮硬规则不通过，当前用例结束，整体判定跳过。") : status === "running" || judging ? undefined : evaluateChecks(item.checks || [], item, run.started + offset, finalTrace, true, !!run.hardRuleStop)
+          const checkResults = hardFailedAt >= 0 ? skippedChecks(item.checks || [], "本轮硬规则不通过，当前用例结束，整体判定跳过。") : status === "running" || judging ? undefined : item.checks?.length ? evaluateChecks(item.checks, item, run.started + offset, finalTrace, true, !!run.hardRuleStop) : []
           const allChecks = [...(checkResults || []), ...(roundResults || []).flatMap(t => t.checkResults || [])]
           return { ...item, timing, roundResults, status, checkResults, judging,
             overallJudgingPoints: item.demo ? status === "running" ? 0 : (checkResults || []).filter(c => checkKind(c) === "natural" && c.verdict !== "skipped").length * 0.08 : undefined,
@@ -491,7 +491,7 @@ export function caseValidation(value: EvalCase): string {
     if (turn.rules.some(r => !r.match.trim() || !r.responses.length || r.responses.some(v => !v.trim()))) return `第 ${i + 1} 轮澄清追问和自动回复不能为空。`
   }
   const checks = [...(value.checks || []), ...turns.flatMap(t => checksOf(t))]
-  if (!checks.length) return "请至少添加一条本轮或整体评测标准。"
+  if (!checks.length) return "请至少添加一条评测标准。"
   return checks.map(checkValidation).find(Boolean) || ""
 }
 
