@@ -14,9 +14,10 @@ test('最近两次按开始时间定位且包含运行中记录，数量不足�
  expect(resolveReportContext('最近五份', runs).error).toBeTruthy()
  expect(resolveReportContext('最新报告', []).error).toBeTruthy()
 })
-test('连续指代不被页面覆盖，单数指代多份报告需澄清，当前报告显式选页面', () => {
- expect(resolveReportContext('继续分析它们', runs, 'c', ['a','b']).runs.map(r => r.id)).toEqual(['a','b'])
- expect(resolveReportContext('修复这份报告', runs, 'c', ['a','b']).error).toBeTruthy()
+test('当前页面优先于旧指代，操作不可继承历史目标', () => {
+ expect(resolveReportContext('继续分析它们', runs, 'c', ['a','b']).runs.map(r => r.id)).toEqual(['c'])
+ expect(resolveReportContext('修复这份报告', runs, 'c', ['a','b']).runs[0].id).toBe('c')
+ expect(resolveReportContext('重跑一下', runs, undefined, ['a']).error).toBeTruthy()
  expect(resolveReportContext('分析当前报告', runs, 'c', ['a','b']).runs[0].id).toBe('c')
  expect(resolveReportContext('分析结果', runs, undefined, ['a']).runs[0].id).toBe('a')
  expect(resolveReportContext('分析结果', runs).runs).toEqual([])

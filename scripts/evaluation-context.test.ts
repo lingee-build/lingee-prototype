@@ -57,3 +57,9 @@ test('报告菜单自然语言明确来源及范围，并正确触发两类重�
   expect(reportRerunIds(run, '只重跑无法判定用例')).toEqual(['unknown'])
   expect(reportRerunIds(run, '只重跑不通过用例')).toEqual(['fail'])
 })
+
+test('报告口语查询不进入用例生成，仍允许明确生成用例', () => {
+  for (const text of ['哪些用例没通过', '哪些用例未通过？', '哪些用例无法判定', '失败用例的原因', '通过率是多少']) expect(evaluationIntent(text)).toBe('report')
+  expect(evaluationIntent('生成三条查询用例')).toBe('cases')
+  expect(evaluationIntent('重跑未通过用例')).toBe('rerun')
+})

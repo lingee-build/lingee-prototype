@@ -28,7 +28,7 @@ export function ReportPreview({ html, actions, status, focusCaseIndex = -1 }: { 
     const escape = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return
       setNavOpen(false)
-      navRef.current?.querySelector<HTMLButtonElement>(".eval-report-nav-toggle")?.focus()
+      navRef.current?.querySelector<HTMLButtonElement>(".eval-report-details-trigger")?.focus()
     }
     document.addEventListener("pointerdown", dismiss)
     document.addEventListener("keydown", escape)
@@ -169,8 +169,9 @@ export function ReportPreview({ html, actions, status, focusCaseIndex = -1 }: { 
       <div className="eval-report-nav-heading"><strong>报告目录</strong></div>
       {reportSections.map(section => <div key={section.id} className="eval-report-nav-section">
         <div className="eval-report-section-row">
-          <a href={`#${section.id}`} aria-current={active === section.id ? "location" : undefined} onClick={event => { event.preventDefault(); goTo(section.id) }}>{section.label}</a>
-          {section.id === "details" && <button className="eval-report-nav-toggle" aria-label={navOpen ? "收起用例目录" : "展开用例目录"} aria-expanded={navOpen} aria-controls="report-case-navigation" onClick={() => setNavOpen(!navOpen)}>{navOpen ? "⌄" : "›"}</button>}
+          {section.id === "details" ? <button type="button" className="eval-report-details-trigger" aria-expanded={navOpen} aria-controls="report-case-navigation" aria-current={active === section.id ? "location" : undefined} onClick={() => setNavOpen(!navOpen)}>
+            <span>{section.label}</span><span className="eval-report-nav-toggle" aria-hidden="true" aria-expanded={navOpen} />
+          </button> : <a href={`#${section.id}`} aria-current={active === section.id ? "location" : undefined} onClick={event => { event.preventDefault(); goTo(section.id) }}>{section.label}</a>}
         </div>
         {section.id === "details" && <div id="report-case-navigation" className="eval-report-case-group" hidden={!navOpen}>
           {cases.map((item, index) => <a key={item.id} href={`#${item.id}`} title={item.label} className="eval-report-case-link" aria-current={active === item.id ? "location" : undefined} onClick={event => { event.preventDefault(); goTo(item.id) }}>

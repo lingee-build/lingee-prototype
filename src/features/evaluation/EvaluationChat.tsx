@@ -1,3 +1,4 @@
+import { Button } from "@/ui"
 import { resolveReportContext, compareReportText, reportEvidence } from "./report-context"
 import { evaluationRepairObject, repairDisabledReason } from "@/services/evaluation-repair"
 import { SessionPromptDock } from "@/pages/session/composer/SessionPromptDock"
@@ -19,9 +20,9 @@ import type { Session, SyncEvent } from "@/mock/types"
 import { respondToEvaluation } from "./conversation-response"
 
 /** 评测只绑定对象和右侧内容；消息、输入、附件、模型及流式反馈复用开发会话。 */
-export function EvaluationChat({ objectId, name, sessionId, operation, currentRun, rerunRequest, onRerunConsumed, onRepair, onSession, onRun, onRerun, onLocate, onViewRun, onReports, readOnly, disabled, hidden, viewDraft }: {
+export function EvaluationChat({ onNewConversation, objectId, name, sessionId, operation, currentRun, onRepair, onSession, onRun, onRerun, onLocate, onViewRun, onReports, readOnly, disabled, hidden, viewDraft }: {
+  onNewConversation: () => void
   viewDraft: PromptDraft
-  rerunRequest?: { runId: string; token: number; text: string }; onRerunConsumed: () => void
   onRepair: (run: EvalRun) => void | Promise<void>
   objectId: string; name: string; sessionId?: string; operation: "cases" | "runs"; currentRun?: EvalRun; onSession: (id?: string) => void
   onRerun: (run: EvalRun, ids?: string[], sessionId?: string) => void; onLocate: (run: EvalRun, id: string) => void
@@ -43,6 +44,8 @@ export function EvaluationChat({ objectId, name, sessionId, operation, currentRu
     text = text.replace(/^\/(?:evaluation-builder|evaluation-assistant|evaluation-case-designer)\s*/, "").trim()
     if (sending.current || session.status === "running") throw new Error("正在回复，请稍后再发送")
     if (disabled) { setError("请先保存或取消右侧编辑，再继续对话。"); throw new Error("当前不可修改") }
+    // 输入草稿只保留内容；目标以发送时页面为准，显式 ER 由解析器优先处理。
+    const activeContext = { runId: currentRun?.id, operation, readOnly }
     sending.current = true; setError("")
     try {
       if (!target || !useSync.getState().projects.some(p => p.id === projectId)) throw new Error("对象所属项目不可用，请恢复后重试。")
@@ -54,10 +57,10 @@ export function EvaluationChat({ objectId, name, sessionId, operation, currentRu
       for (const file of files) next.files.push(await saveAttachment(file))
       const intent = evaluationIntent(text)
       const runIntent = intent === "run" || intent === "rerun"
-      const context = resolveReportContext(text, useEvaluation.getState().runs[objectId] || [], currentRun?.id, conversation?.reportContext || [])
+      const context = resolveReportContext(text, useEvaluation.getState().runs[objectId] || [], activeContext.runId, ["run", "rerun", "stop", "repair", "confirmRepair"].includes(intent) ? [] : conversation?.reportContext || [])
       const caseRequest = /(?:生成|新增|修改|改名|补充|设计|添加|删除).*(?:用例|标准|输入|轮次)|(?:用例|标准|输入|轮次).*(?:改为|改成|修改|补充)/.test(text) && intent === "cases"
-      const wantsNewRun = intent === "run" && !/ER-\d+|报告/.test(text)
-      const reportIntent = !caseRequest && !wantsNewRun && (operation === "runs" || intent === "report" || /ER-\d+|报告|对比|比较/.test(text) || !!conversation?.reportContext?.length)
+      const wantsNewRun = intent === "run" && activeContext.operation === "cases" && !/ER-\d+|报告/.test(text)
+      const reportIntent = !caseRequest && !wantsNewRun && (activeContext.operation === "runs" || intent === "report" || /ER-\d+|报告|对比|比较/.test(text))
       const needsReport = reportIntent || ['rerun', 'stop', 'repair', 'confirmRepair', 'repairStatus'].includes(intent)
       const reportRuns = needsReport ? context.runs : []
       const reportRun = reportRuns.length === 1 ? reportRuns[0] : undefined
@@ -76,14 +79,14 @@ export function EvaluationChat({ objectId, name, sessionId, operation, currentRu
       const located = codes.length ? referenced[0] : reportRun?.results[index]
       if (reportError) response = reply(reportError)
       else if (actionAmbiguous) response = reply('当前涉及多份报告，请指定要操作的一份报告（ER 编码）及范围，本次未执行操作。')
-      else if (readOnly && caseRequest) response = reply('历史用例快照不可修改，请返回评测用例页修改当前用例。')
+      else if (activeContext.readOnly && caseRequest) response = reply('历史用例快照不可修改，请返回评测用例页修改当前用例。')
       else if (reportRuns.length > 1 && reportIntent && !runIntent && intent !== 'help') response = reply(compareReportText(reportRuns))
       else if (referenceError) response = reply(referenceError)
       else if (intent === 'help') response = reply('本次未执行操作。可以查询进度、打开报告、停止运行、修复问题或重新运行；请明确要执行的操作。')
       else if (intent === 'repairStatus') response = reply(next.repair?.runId === reportRun?.id ? next.repair!.summary : '本次尚未发起修复，可以说“修复这次评测发现的问题”。')
       else if (intent === 'repair' || intent === 'confirmRepair' || (next.repair?.stage === 'planned' && intent === 'cases')) {
         const reason = reportRun ? repairDisabledReason(objectId, reportRun, !!evaluationRepairObject(objectId)) : '请先选择要修复的来源报告。'
-        response = reply(reason || '修复请求已准备，请在新会话发送后开始分析。确认方案后才修改对象。')
+        response = reply(reason || '正在打开修复会话并分析来源报告，确认方案后才修改对象。')
         if (!reason && reportRun) action = () => { void onRepair(reportRun) }
       }
       else if (intent === 'stop') {
@@ -98,6 +101,7 @@ export function EvaluationChat({ objectId, name, sessionId, operation, currentRu
         const ids = failedOnly && reportRun ? reportRerunIds(reportRun, text) : codes.length ? referenced.map(item => item.id) : undefined
         if (busy) response = reply('当前有评测正在运行，请等待结束或先停止本次运行。')
         else if ((intent === 'rerun' || failedOnly) && !reportRun) response = reply('请先选择要重新运行的来源报告。')
+        else if (!reportRun && !ids && /选中|勾选|这些|这几条/.test(text)) response = reply('右侧勾选仅用于页面操作。请点击右侧“运行选中”，或在对话中指定用例编号。')
         else if (ids && !ids.length) response = reply('所选范围没有可运行的用例，本次未新建运行。')
         else if (reportRun) { response = reply('请确认重跑范围、用例版本及来源报告模型；确认后使用最新对象内容运行，原报告保留。'); action = () => onRerun(reportRun, ids, active.id) }
         else if (!next.drafts.length) response = reply('当前没有用例，请先生成或导入。')
@@ -110,9 +114,9 @@ export function EvaluationChat({ objectId, name, sessionId, operation, currentRu
         } else {
           response = reply(reportConversationText(reportRun))
           if (reportRun && /异常|为什么.*久/.test(text)) response.text += '\n\n' + (reportRun.stopReason || reportRun.results.filter(item => item.evidence).map(item => `${item.code}：${item.evidence}`).join('\n') || '当前尚无记录可解释原因，不能仅凭等待时间判断异常。')
-          if (reportRun && /未通过|不通过|失败/.test(text)) {
+          if (reportRun && /没通过|未通过|不通过|失败/.test(text)) {
             const failures = failedRunResults(reportRun)
-            response.text += '\n\n' + (failures.map(item => `${item.code} ${item.name}`).join('\n') || '当前尚无已判定不通过的用例。')
+            response.text += '\n\n' + (failures.map(item => `${item.code} ${item.name}：${item.evidence || "请查看逐项判定依据"}`).join('\n') || '当前尚无已判定不通过的用例。')
             action = () => failures.length ? onLocate(reportRun, failures[0].id) : onViewRun(reportRun)
           } else if (reportRun && /打开|查看|看看/.test(text)) action = () => onViewRun(reportRun)
           else if (!reportRun) action = onReports
@@ -153,16 +157,9 @@ export function EvaluationChat({ objectId, name, sessionId, operation, currentRu
     } catch (e) { setError(e instanceof Error ? e.message : "保存失败，请重试。"); throw e }
     finally { sending.current = false }
   }
-  const consumedRerun = useRef<number | undefined>(undefined)
-  useEffect(() => {
-    if (session.status === "running" || !rerunRequest || consumedRerun.current === rerunRequest.token || currentRun?.id !== rerunRequest.runId) return
-    consumedRerun.current = rerunRequest.token
-    onRerunConsumed()
-    void submit(rerunRequest.text).catch(() => {})
-  }, [rerunRequest, session.status])
   return <section aria-hidden={hidden} inert={hidden} data-collapsed={hidden || undefined} className="eval-native-session @container" aria-label="开发会话">
     <div className="flex-1 min-h-0 overflow-hidden">
-      <MessageTimeline session={session} messages={messages} />
+      <MessageTimeline session={session} messages={messages} titleActions={<Button variant="ghost" className="eval-session-action" icon="play-circle" disabled={session.status === "running"} onClick={onNewConversation} aria-label="新建评测会话">新建会话</Button>} />
     </div>
     <SessionPromptDock>
       {error && <p role="alert" className="eval-field-error">{error}</p>}

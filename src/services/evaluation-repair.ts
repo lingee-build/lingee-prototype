@@ -7,7 +7,7 @@ import { useEvaluation, failedRunResults, evaluationObjectUnavailable, verdictLa
 export type EvaluationRepairTarget = { objectType: "skill" | "agent"; objectId: string; runId: string; resultId?: string }
 type StoredRepairTarget = EvaluationRepairTarget | { skillId: string; runId: string }
 
-export const useEvaluationRepairs = create<{ links: Record<string, string>; items: Record<string, { session: Session; messages: Message[]; draft: string; owned?: boolean; target?: StoredRepairTarget }> }>()(persist(() => ({ links: {}, items: {} }), { name: "lingee.evaluation-repairs.v1", storage: createJSONStorage(() => ({ getItem: key => localStorage.getItem(key), setItem: (key, value) => localStorage.setItem(key, value), removeItem: key => localStorage.removeItem(key) })) }))
+export const useEvaluationRepairs = create<{ links: Record<string, string>; items: Record<string, { session: Session; messages: Message[]; draft: string; runIds?: string[]; owned?: boolean; target?: StoredRepairTarget }> }>()(persist(() => ({ links: {}, items: {} }), { name: "lingee.evaluation-repairs.v1", storage: createJSONStorage(() => ({ getItem: key => localStorage.getItem(key), setItem: (key, value) => localStorage.setItem(key, value), removeItem: key => localStorage.removeItem(key) })) }))
 
 /** 复用原对象的开发入口，不按显示名称查找或回退到其他项目。 */
 export function evaluationRepairObject(key: string) {
@@ -20,7 +20,7 @@ export function evaluationRepairObject(key: string) {
 
 export function registerEvaluationRepair(session: Session, draft: string, target: EvaluationRepairTarget, owned = true) {
   useEvaluationRepairs.setState(s => ({
-    items: { ...s.items, [session.id]: { session, messages: s.items[session.id]?.messages || [], draft, target, owned } },
+    items: { ...s.items, [session.id]: { session, messages: s.items[session.id]?.messages || [], draft, target, owned, runIds: [...new Set([...(s.items[session.id]?.runIds || []), ...(s.items[session.id]?.target ? [evaluationRepairTarget(session.id)!.runId] : []), target.runId])] } },
     links: { ...s.links, [session.id]: `/dev/${target.objectType}/${encodeURIComponent(target.objectId)}/evaluation?view=report&run=${encodeURIComponent(target.runId)}${target.resultId ? `&focusCase=${encodeURIComponent(target.resultId)}` : ""}` },
   }))
 }
@@ -80,4 +80,15 @@ export function evaluationRepairEvidence(target: EvaluationRepairTarget, project
   const run = useEvaluation.getState().runs[key]?.find(r => r.id === target.runId)
   if (!object || object.projectId !== projectId || !run || repairDisabledReason(key, run, true)) return undefined
   return { object, run, failures: failedRunResults(run) }
+}
+
+/** Only an explicit rerun chain continues a repair; an independent run starts separately. */
+export function findRepairSession(objectId: string, run: EvalRun) {
+  const records = Object.values(useEvaluationRepairs.getState().items).filter(item => {
+    const target = evaluationRepairTarget(item.session.id)
+    return target && `${target.objectType}:${target.objectId}` === objectId
+  })
+  const direct = records.find(item => (item.runIds || [evaluationRepairTarget(item.session.id)?.runId]).includes(run.id))
+  if (direct) return direct
+  return run.sourceRunId ? records.find(item => (item.runIds || [evaluationRepairTarget(item.session.id)?.runId]).includes(run.sourceRunId!)) : undefined
 }

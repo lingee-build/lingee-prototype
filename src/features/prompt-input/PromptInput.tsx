@@ -19,6 +19,8 @@ export interface PromptDraft { text?: string; files?: File[] }
 export interface PromptInputProps {
   /** 可选的视图草稿容器，由工作区持有；不写入服务器或浏览器持久存储。 */
   viewDraft?: PromptDraft
+  contextSlot?: import("react").ReactNode
+  onDraftChange?: (hasContent: boolean) => void
   /** 所在项目；新会话时在输入框下方展示项目选择 */
   projectId: string
   /** 有值表示在已有会话中（外框变细、下拉向上展开） */
@@ -78,6 +80,7 @@ export function PromptInput(props: PromptInputProps) {
   }, [])
   useEffect(() => {
     if (props.viewDraft) props.viewDraft.files = attachments.map(item => item.file)
+    props.onDraftChange?.(!!props.viewDraft?.text?.trim() || attachments.length > 0)
   }, [attachments, props.viewDraft])
 
   // 外部来源写入的草稿：推荐卡片、技能入口发给新任务页；开发页的「编辑」发给刚建好的那个会话
@@ -199,6 +202,7 @@ export function PromptInput(props: PromptInputProps) {
                 if (item?.url) URL.revokeObjectURL(item.url)
                 setAttachments((items) => items.filter((item) => item.id !== id))
               }} />
+              {props.contextSlot}
               <div className="relative">
                 <Editor
                   ref={editor}
@@ -213,6 +217,7 @@ export function PromptInput(props: PromptInputProps) {
                   onKeyIntercept={completion.intercept}
                   onChange={(state) => {
                     if (props.viewDraft) props.viewDraft.text = state.text
+                    props.onDraftChange?.(!state.empty || attachmentsRef.current.length > 0)
                     setEmpty(state.empty)
                     setSkillWidth(state.skillWidth)
                     props.onSkillChange?.(state.skill)

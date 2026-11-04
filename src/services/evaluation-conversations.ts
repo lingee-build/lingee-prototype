@@ -4,6 +4,8 @@ import type { Message, Session } from "@/mock/types"
 import { caseValidation, evaluationObjectUnavailable, saveCases, useEvaluation, type EvalAttachment, type EvalCase } from "./evaluation"
 
 export interface EvaluationConversation {
+  lastView?: string
+  lastVisited?: number
   repair?: { runId: string; focus: string; stage: "planned" | "completed"; summary: string }
   /** 仅兼容旧记录，不再作为会话绑定依据。 */
   runId?: string

@@ -13,6 +13,7 @@ interface PanelState {
   /** 右侧预览面板当前显示的视图；几种视图互斥，undefined 表示面板收起 */
   view?: PreviewView
   drawer?: DrawerTarget
+  evaluationReport?: { objectId: string; runId: string; requestId: number }
   /** 会话区是否被折叠（预览面板占满整行） */
   sessionCollapsed: boolean
   fileTreeWidth: number
@@ -39,6 +40,7 @@ interface PanelState {
 const initial = {
   view: undefined as PreviewView | undefined,
   drawer: undefined as DrawerTarget | undefined,
+  evaluationReport: undefined as PanelState["evaluationReport"],
   sessionCollapsed: false,
   treeHidden: false,
   files: [] as string[],

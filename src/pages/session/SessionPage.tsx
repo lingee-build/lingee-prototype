@@ -2,7 +2,7 @@ import { SessionPromptDock } from "./composer/SessionPromptDock"
 import { useEvaluation } from "@/services/evaluation"
 import { evaluationRepairTarget, useEvaluationRepairs } from "@/services/evaluation-repair"
 import { useNavigate } from "react-router"
-import { RenderCard } from "@/ui"
+import { RenderCard, Button } from "@/ui"
 import { EvaluationSession } from "@/features/evaluation/EvaluationSession"
 import { useEvaluationConversations } from "@/services/evaluation-conversations"
 import { procurementPrompt } from "@/services/procurement"
@@ -41,9 +41,22 @@ export function Component() {
   const evaluationSessions = useEvaluationConversations(s => s.items)
   const t = useT()
   const { projectId = "", sessionId } = useParams()
+  const repairItems = useEvaluationRepairs(s => s.items)
   const repairTarget = sessionId ? evaluationRepairTarget(sessionId) : undefined
   const repairRun = useEvaluation(s => repairTarget ? s.runs[`${repairTarget.objectType}:${repairTarget.objectId}`]?.find(r => r.id === repairTarget.runId) : undefined)
   const [search] = useSearchParams()
+  const returnParam = search.get("returnTo")
+  const validReturn = repairTarget && returnParam?.startsWith(`/dev/${repairTarget.objectType}/${encodeURIComponent(repairTarget.objectId)}/evaluation?`) ? returnParam : undefined
+  const returnUrl = validReturn || (sessionId ? repairLinks[sessionId] : undefined)
+  const openRepairReport = () => {
+    if (!repairTarget || !repairRun) return
+    usePanel.setState({
+      view: "drawer",
+      drawer: { kind: repairTarget.objectType === "skill" ? "kdskill" : "agentConfig", id: repairTarget.objectId, title: repairRun.name },
+      evaluationReport: { objectId: `${repairTarget.objectType}:${repairTarget.objectId}`, runId: repairRun.id, requestId: Date.now() },
+    })
+  }
+  const retestUrl = returnUrl ? `${returnUrl}&action=retest` : undefined
   const editing = { kdskill: search.get("kdskill"), agent: search.get("agent"), mcpapp: search.get("mcpapp") }
   const { ready, projects, sessions, messages, loadMessages } = useSync()
   const setDraft = usePrompt((s) => s.setDraft)
@@ -59,11 +72,6 @@ export function Component() {
     const ids = [...(legacySessions[sessionId ?? ""] ?? []), editing.agent ?? "", editing.kdskill ?? ""]
     guardUpgrade(ids, () => {})
   }, [sessionId, editing.agent, editing.kdskill, upgraded])
-  useEffect(() => {
-    if (!sessionId) return
-    const item = useEvaluationRepairs.getState().items[sessionId]
-    if (item && !item.messages.length && !usePrompt.getState().draft.text) setDraft(item.draft, sessionId)
-  }, [sessionId, setDraft])
   useEffect(() => {
     if (!sessionId || !session || !messages[sessionId]) return
     const item = useEvaluationRepairs.getState().items[sessionId]
@@ -119,11 +127,13 @@ export function Component() {
           <div className={cx("min-h-0 relative", sessionId ? "flex-1 overflow-hidden" : "w-full shrink-0 overflow-visible")}>
             {session ? (
               loaded ? (
-                <MessageTimeline session={session} messages={loaded} footer={
-                  repairLinks[session.id] && session.status === "idle" && loaded.at(-1)?.role === "assistant" && loaded.at(-1)?.time.completed ? (
-                    <RenderCard kind="evaluation-run" config={{ title: `返回评测报告 ${repairRun?.code || ""}`, desc: "检查修改后手动复测，修复效果以新运行结果为准" }} onCardClick={() => navigate(repairLinks[session.id])} />
-                  ) : undefined
-                } />
+                <MessageTimeline session={session} messages={loaded}
+                  titleActions={repairTarget ? <div className={previewOpen ? "" : "pr-28"}><Button variant="ghost" className="eval-session-action" icon="arrow-left" onClick={() => returnUrl && navigate(returnUrl)}>返回评测</Button></div> : undefined}
+                  titleDescription={repairTarget ? <div className="eval-repair-reference">
+                    <span>本次修复依据：{repairRun ? <button type="button" className="text-text-brand hover:underline cursor-pointer" onClick={openRepairReport} aria-label={`查看报告 ${repairRun.code}`}>{repairRun.code}</button> : "报告不可用"}</span>
+                    {(repairItems[sessionId!]?.runIds || []).filter(id => id !== repairTarget.runId).length > 0 && <span>此前依据：{(repairItems[sessionId!]?.runIds || []).filter(id => id !== repairTarget.runId).map(id => useEvaluation.getState().runs[`${repairTarget.objectType}:${repairTarget.objectId}`]?.find(r => r.id === id)?.code || "报告不可用").join("、")}</span>}
+                  </div> : undefined}
+                />
               ) : (
                 <div className="size-full flex items-center justify-center" role="status" aria-label={t("session.messages.loading")}>
                   <div className="session-loading-logo" />
@@ -137,6 +147,8 @@ export function Component() {
           <SessionPromptDock inSession={!!sessionId}>
               {sessionId ? (
                 <Composer
+                  defaultSkill={repairTarget?.objectType === "skill" ? "skill-builder" : repairTarget?.objectType === "agent" ? "agent-builder" : undefined}
+                  placeholder={repairTarget ? "分析失败原因，或补充你的修复要求…" : undefined}
                   projectId={projectId}
                   sessionId={sessionId}
                   working={session?.status === "running"}

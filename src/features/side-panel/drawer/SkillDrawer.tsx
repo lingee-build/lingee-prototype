@@ -1,5 +1,8 @@
+import { usePanel } from "@/stores/panel"
+import { useParams } from "react-router"
+import { evaluationRepairTarget } from "@/services/evaluation-repair"
 import { ObjectEvaluationReport } from "@/features/evaluation/ObjectEvaluationReport"
-import { useMemo, useState, type CSSProperties } from "react"
+import { useEffect, useMemo, useState, type CSSProperties } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { BrandButton, CapsuleTag, ConfirmDialog, DropdownMenu, Empty, Icon, IconButton, Markdown, SegmentedControl, Tag, Tooltip, showToast, useDialog } from "@/ui"
 import { useLocaleStore, useT } from "@/i18n"
@@ -63,7 +66,13 @@ export function SkillDrawer(props: { id: string; working: boolean }) {
   const dialog = useDialog()
   const locale = useLocaleStore((s) => s.locale)
   const startSession = useStartSession()
-  const [tab, setTab] = useState<Tab>("overview")
+  const { sessionId: repairSessionId } = useParams()
+  const repairTarget = repairSessionId ? evaluationRepairTarget(repairSessionId) : undefined
+  const [tab, setTab] = useState<Tab>(() => repairTarget?.objectType === "skill" && repairTarget.objectId === props.id ? "evaluation" : "overview")
+  const reportRequest = usePanel(s => s.evaluationReport)
+  useEffect(() => {
+    if (reportRequest?.objectId === `skill:${props.id}`) setTab("evaluation")
+  }, [reportRequest, props.id])
   const [busy, setBusy] = useState<"test" | "withdraw">()
   const query = useQuery({ queryKey: ["skill", props.id, props.working], queryFn: () => skillService.get(props.id), staleTime: 0, placeholderData: (prev) => prev })
   const skill = query.data

@@ -1,8 +1,8 @@
 import { db } from "@/mock/db"
 import type { Message } from "@/mock/types"
 import type { PromptDraft } from "@/features/prompt-input/PromptInput"
-import { useEditSession } from "@/features/dev-page/use-edit-session"
-import { reportRerunPrompt } from "./conversation-context"
+import { createEditSession } from "@/features/dev-page/use-edit-session"
+import { usePrompt } from "@/stores/prompt"
 import { formatEvaluationTime as runTitle } from "./format-time"
 import { EvaluationSplitter, useEvaluationSplit } from "./EvaluationSplitter"
 import { sessionService } from "@/services/session"
@@ -12,12 +12,12 @@ import { DatePicker } from "@/ui/date-picker/DatePicker"
 import { basicEvaluationSample, completeEvaluationSample } from "@/services/evaluation-samples"
 import { runPoints, pointsText, resumeRunPoints, updateAutomaticPoints } from "@/services/evaluation-points"
 import { devStore } from "@/mock/dev-store"
-import { evaluationRepairObject, repairDisabledReason, repairPrompt, registerEvaluationRepair } from "@/services/evaluation-repair"
+import { evaluationRepairObject, repairDisabledReason, repairPrompt, registerEvaluationRepair, findRepairSession, useEvaluationRepairs } from "@/services/evaluation-repair"
 import { EvaluationSelect } from "./EvaluationSelect"
 import { RunEvaluationDialog } from "./RunEvaluationDialog"
 import { ImportCases } from "./ImportCases"
 import { resolveRerunModels, defaultJudgingModelId, evaluationExecutionDefault, evaluationModelText, initialEvaluationModelIds, type EvalModelIds, type EvalRunModels } from "@/services/evaluation-models"
-import { useBlocker, useSearchParams } from "react-router"
+import { useBlocker, useSearchParams, useNavigate, createSearchParams, type SetURLSearchParams } from "react-router"
 import { EvaluationChat } from "./EvaluationChat"
 import { ControlledConfirmDialog } from "@/ui/dialog/ConfirmDialog"
 import { useSync } from "@/stores/sync"
@@ -70,14 +70,15 @@ function runFileTime(time: number) {
   const pad = (part: number, width = 2) => String(part).padStart(width, "0")
   return `${pad(value.getFullYear(), 4)}${pad(value.getMonth() + 1)}${pad(value.getDate())}-${pad(value.getHours())}${pad(value.getMinutes())}${pad(value.getSeconds())}-${pad(value.getMilliseconds(), 3)}`
 }
+const evaluationDrafts = new Map<string, PromptDraft>()
 const sources: Source[] = ["none", "tenant", "thirdParty", "personal"]
-export function EvaluationPanel({ objectId, name, heading, onEnvironmentChange }: { objectId: string; name: string; heading?: ReactNode; onEnvironmentChange?: (environment: EvalEnvironment | undefined) => void }) {
+export function EvaluationPanel({ objectId, name, heading, onEnvironmentChange, embedded }: { embedded?: { initialRunId?: string; repairSessionId?: string }; objectId: string; name: string; heading?: ReactNode; onEnvironmentChange?: (environment: EvalEnvironment | undefined) => void }) {
   const split = useEvaluationSplit()
-  const chatDrafts = useRef(new Map<string, PromptDraft>())
-  const [rerunRequest, setRerunRequest] = useState<{ runId: string; token: number; text: string }>()
-  const editSession = useEditSession()
+  const chatDrafts = useRef(evaluationDrafts)
+  const navigate = useNavigate()
   const [openingRepair, setOpeningRepair] = useState(false)
   const repairOpening = useRef(false)
+  useEvaluationRepairs(s => s.items) // 关联新修复会话后，列表与详情同步更新入口文案。
   async function repair(run: EvalRun) {
     const target = evaluationRepairObject(objectId)
     if (!target || repairOpening.current || repairDisabledReason(objectId, run, true)) return
@@ -85,9 +86,30 @@ export function EvaluationPanel({ objectId, name, heading, onEnvironmentChange }
     setOpeningRepair(true)
     try {
       const draft = repairPrompt(objectId, run)
-      const session = await editSession({ title: `修复 ${name}`, draft, projectId: target.projectId, target: target.editTarget, requireProject: true })
+      const existing = findRepairSession(objectId, run)
+      if (embedded?.repairSessionId && existing?.session.id === embedded.repairSessionId) {
+        if (useSync.getState().sessions.find(s => s.id === existing.session.id)?.status === "running") { setNotice("请先完成或停止当前修复分析。"); return }
+        if (existing.target?.runId !== run.id) {
+          registerEvaluationRepair(existing.session, draft, { objectType: target.objectType, objectId: target.objectId, runId: run.id })
+          sessionService.prompt(existing.session.id, draft, useSync.getState().apply, usePrompt.getState().modelId)
+        } else {
+          document.querySelector<HTMLElement>('[data-component="prompt-input"][role="textbox"]')?.focus()
+        }
+        return
+      }
+      if (existing && useSync.getState().sessions.find(s => s.id === existing.session.id)?.status === "running" && existing.target?.runId !== run.id) { setNotice("修复会话仍在处理上一轮，请先完成或停止后继续。"); return }
+      const session = existing?.session || await createEditSession({ title: `修复 ${name}`, draft: "", projectId: target.projectId, target: target.editTarget, requireProject: true })
       if (!session) { setNotice("对象所属项目不可用，无法打开开发对话"); return }
+      const needsAnalysis = !existing || existing.target?.runId !== run.id
       registerEvaluationRepair(session, draft, { objectType: target.objectType, objectId: target.objectId, runId: run.id })
+      useSync.getState().apply({ type: "session.updated", session })
+      if (!existing) useSync.setState(s => ({ messages: { ...s.messages, [session.id]: [] } }))
+      const back = new URLSearchParams({ view: "report", run: run.id })
+      if (conversationId) back.set("conversation", conversationId)
+      const returnTo = `/dev/${target.objectType}/${encodeURIComponent(target.objectId)}/evaluation?${back}`
+      const query = new URLSearchParams({ [target.objectType === "skill" ? "kdskill" : "agent"]: target.objectId, returnTo })
+      navigate(`/p/${session.projectId}/session/${session.id}?${query}`)
+      if (needsAnalysis) sessionService.prompt(session.id, draft, useSync.getState().apply, usePrompt.getState().modelId)
     } catch (error) { setNotice(error instanceof Error ? error.message : "打开开发对话失败，请重试") }
     finally { repairOpening.current = false; setOpeningRepair(false) }
   }
@@ -97,7 +119,10 @@ export function EvaluationPanel({ objectId, name, heading, onEnvironmentChange }
   const dialog = useDialog()
   const currentCases = state.cases[objectId] || []
   const runs = state.runs[objectId] || []
-  const [searchParams, setSearchParams] = useSearchParams()
+  const [routeParams, setRouteParams] = useSearchParams()
+  const [localParams, setLocalParams] = useState(() => new URLSearchParams(embedded?.initialRunId ? { run: embedded.initialRunId, view: "report" } : { tab: "reports" }))
+  const searchParams = embedded ? localParams : routeParams
+  const setSearchParams: SetURLSearchParams = embedded ? (next) => setLocalParams(previous => createSearchParams(typeof next === "function" ? next(previous) : next)) : setRouteParams
   const versionId = searchParams.get("caseRun") || searchParams.get("version")
   const historicalRun = runs.find(r => r.id === versionId)
   const historical = !!versionId
@@ -105,10 +130,30 @@ export function EvaluationPanel({ objectId, name, heading, onEnvironmentChange }
   const [chatPreference, setChatPreference] = useState<boolean>()
   const requestedConversationId = searchParams.get("conversation") || undefined
   const conversations = useEvaluationConversations(s => s.items)
-  const conversationRecord = requestedConversationId ? conversations[requestedConversationId] : undefined
-  // 评测入口开启新会话；仅显式历史会话链接恢复消息。
-  const conversationId = conversationRecord?.objectId === objectId ? requestedConversationId : undefined
+  const restoredConversation = Object.values(conversations).filter(c => c.objectId === objectId).sort((a, b) => (b.lastVisited || b.session.time.updated) - (a.lastVisited || a.session.time.updated))[0]
+  const conversationRecord = requestedConversationId ? conversations[requestedConversationId] : restoredConversation
+  const conversationId = conversationRecord?.objectId === objectId ? conversationRecord.session.id : undefined
+  useEffect(() => {
+    if (!conversationId || embedded) return
+    const record = useEvaluationConversations.getState().items[conversationId]
+    if (record) useEvaluationConversations.getState().put({ ...record, lastVisited: Date.now() })
+    if (!requestedConversationId) setConversation(conversationId)
+  }, [conversationId])
+  async function newConversation() {
+    if (unsaved) { setNotice("请先保存或取消右侧编辑。"); return }
+    const target = evaluationRepairObject(objectId)
+    if (!target) return
+    const session = await sessionService.create(target.projectId, `评测 ${name}`)
+    saveEvaluationConversation({ session, objectId, objectName: name, messages: [], request: "", rule: "", files: [], drafts: [], adopted: {}, lastVisited: Date.now() })
+    useSync.getState().apply({ type: "session.updated", session })
+    setConversation(session.id)
+    setNotice("已开启新评测会话，原会话草稿、用例和报告均已保留。", true)
+  }
   function setConversation(id?: string) {
+    if (id && !conversationId) {
+      const initial = chatDrafts.current.get(`${objectId}:initial`)
+      if (initial) chatDrafts.current.set(`${objectId}:${id}`, initial)
+    }
     setSearchParams(previous => { const next = new URLSearchParams(previous); if (id) next.set("conversation", id); else next.delete("conversation"); return next }, { replace: true })
   }
   function viewRunCases(id: string, origin: "list" | "report" | "run") {
@@ -127,9 +172,15 @@ export function EvaluationPanel({ objectId, name, heading, onEnvironmentChange }
   const resultId = searchParams.get("case") || undefined
   const reportRequested = searchParams.get("view") === "report"
   const section = historical || runId || resultId || reportRequested || ["runs", "reports"].includes(searchParams.get("tab") || "") ? "runs" : "cases"
-  const draftKey = objectId
+  useEffect(() => {
+    if (!conversationId || embedded) return
+    const record = useEvaluationConversations.getState().items[conversationId]
+    const query = searchParams.toString()
+    if (record && record.lastView !== query) useEvaluationConversations.getState().put({ ...record, lastView: query })
+  }, [conversationId, searchParams.toString()])
+  const draftKey = `${objectId}:${conversationId || "initial"}`
   if (!chatDrafts.current.has(draftKey)) chatDrafts.current.set(draftKey, {})
-  const chatOpen = chatPreference ?? true
+  const chatOpen = !embedded && (chatPreference ?? true)
   function openView(view: { section: "cases" | "runs" | "reports"; runId?: string; resultId?: string; report?: boolean; conversationId?: string }) {
     const next = new URLSearchParams(searchParams)
     for (const key of ["tab", "run", "case", "view", "focusCase", "version", "scopeRun", "caseRun", "caseFrom"]) next.delete(key)
@@ -223,7 +274,6 @@ export function EvaluationPanel({ objectId, name, heading, onEnvironmentChange }
     : runId && !current ? "指定运行记录不存在或已不可访问，请通过“评测报告”页签查看运行记录。"
     : resultId && !result ? "本次运行中不存在指定用例结果，请通过“评测报告”页签重新选择报告。"
     : ""
-  const repairReason = openingRepair ? "正在打开开发会话" : current ? repairDisabledReason(objectId, current, !!evaluationRepairObject(objectId)) : ""
   const selectedCases = cases.filter((c) => selected.includes(c.id))
   const selectedOutsideSearch = selectedCases.filter(c => !filteredCases.some(item => item.id === c.id)).length
   const selectionDetails = selectedOutsideSearch ? `搜索结果外 ${selectedOutsideSearch} 条` : ""
@@ -261,15 +311,21 @@ export function EvaluationPanel({ objectId, name, heading, onEnvironmentChange }
     if (list.some(item => !item)) throw new Error(tr("models.casesChanged"))
     const target = evaluationRepairObject(objectId)
     if (!target) throw new Error("评测对象不可用")
+    if (embedded) {
+      const id = startRun(objectId, name, list as EvalCase[], currentEvaluationEnvironment, models, setup.original?.id)
+      if (!id) throw new Error("评测启动失败，请重试。")
+      setRunSetup(undefined)
+      openView({ section: "runs", runId: id, report: true })
+      return
+    }
     const candidate = useEvaluationConversations.getState().items[setup.conversationSessionId || conversationId || ""]
     const existing = candidate?.objectId === objectId ? candidate : undefined
     const session = existing?.session || await sessionService.create(target.projectId, `评测 ${name}`)
     const conversation = existing || { session, objectId, objectName: name, messages: [], request: "", rule: "", files: [], drafts: [], adopted: {} }
     const scopeText = setup.original ? `报告 ${setup.original.code || setup.original.id} 保存的${tr(`models.${setup.scope}`)}` : tr(`models.${setup.scope}`)
-    const instruction = `请运行「${name}」的${scopeText}，共 ${list.length} 条用例。使用${setup.original ? "来源报告保存的" : "当前"}用例和最新已保存的对象内容，执行模型：${evaluationModelText(models.execution)}，判定模型：${evaluationModelText(models.judging)}。`
     const message = (role: Message["role"], text: string): Message => ({ id: crypto.randomUUID(), sessionId: session.id, role, time: { created: Date.now(), completed: Date.now() }, parts: [{ id: crypto.randomUUID(), type: "text", text }] })
-    // 确认运行即提交一条用户指令；取消弹窗不会产生消息。
-    const userMessage = message("user", instruction)
+    // 确认后留存操作记录，不替用户伪造聊天指令。
+    const userMessage = message("assistant", `已确认运行：${scopeText}，共 ${list.length} 条。`)
     const next = { ...conversation, messages: [...(useSync.getState().messages[session.id] || conversation.messages), userMessage] }
     const publish = () => {
       saveEvaluationConversation(next)
@@ -300,6 +356,12 @@ export function EvaluationPanel({ objectId, name, heading, onEnvironmentChange }
     if (!ids.length || busy) return
     configureRun(snapshotRunCases(run, ids), scope, run, 0, conversationSessionId)
   }
+  useEffect(() => {
+    if (searchParams.get("action") !== "retest" || !current) return
+    const next = new URLSearchParams(searchParams); next.delete("action"); setSearchParams(next, { replace: true })
+    const ids = unsuccessfulRunResults(current).map(c => c.id)
+    rerun(current, ids.length ? ids : current.results.map(c => c.id), ids.length ? "unsuccessful" : "rerunAll")
+  }, [current?.id, searchParams.get("action")])
   function removeCases(ids: string[]) {
     dialog.show(() => <ConfirmDialog title={ids.length > 1 ? `删除所选 ${ids.length} 条用例？` : "删除这条用例？"}
       description="删除后无法恢复，已有运行记录和报告保留" cancelText="取消" confirmText="删除" variant="danger"
@@ -338,10 +400,8 @@ export function EvaluationPanel({ objectId, name, heading, onEnvironmentChange }
     </span>
   )
   function requestRerun(run: EvalRun, unsuccessful = false) {
-    if (busy || rerunRequest) return
-    openView({ section: "runs", runId: run.id, report: true })
-    setChatPreference(true)
-    setRerunRequest({ runId: run.id, token: Date.now(), text: reportRerunPrompt(run, unsuccessful) })
+    if (busy) return
+    rerun(run, (unsuccessful ? unsuccessfulRunResults(run) : run.results).map(c => c.id), unsuccessful ? "unsuccessful" : "rerunAll")
   }
   function rerunMenu(run: EvalRun, primary = false, outlined = false) {
     const unsuccessful = unsuccessfulRunResults(run)
@@ -356,17 +416,24 @@ export function EvaluationPanel({ objectId, name, heading, onEnvironmentChange }
       </DropdownMenu.Content></DropdownMenu.Portal>
     </DropdownMenu>
   }
+  function repairAction(run: EvalRun, variant: "ghost" | "secondary") {
+    if (repairDisabledReason(objectId, run, !!evaluationRepairObject(objectId))) return null
+    return <Tooltip value={openingRepair ? "正在打开开发会话" : "先分析问题与修复方案，确认后修改原对象，再手动复测"}>
+      <Button variant={variant} className="eval-repair-action" disabled={openingRepair} onClick={() => void repair(run)}>{findRepairSession(objectId, run) ? "继续修复" : "分析并修复"}</Button>
+    </Tooltip>
+  }
   const currentActions = current && (
                 <div className="eval-actions eval-current-actions">
-                  {report && <Button variant="secondary" onClick={() => viewRunCases(current.id, "report")}>查看用例</Button>}
-                  {<Tooltip value={repairReason || "先分析问题与修复方案，确认后修改原对象，再手动复测"}>
-                    <Button variant="secondary" className="eval-repair-action" aria-disabled={!!repairReason} onClick={() => { if (!repairReason) void repair(current) }}>前往修复</Button>
-                  </Tooltip>}
+                  <DropdownMenu placement="bottom-end"><DropdownMenu.Trigger asChild><Button variant="ghost">更多 <Icon name="chevron-down" size="small" /></Button></DropdownMenu.Trigger><DropdownMenu.Portal><DropdownMenu.Content>
+                    <DropdownMenu.Item onSelect={() => viewRunCases(current.id, "report")}>查看用例</DropdownMenu.Item>
+                    <DropdownMenu.Item disabled={isActiveRun(current)} onSelect={() => exportReport(current)}>下载报告</DropdownMenu.Item>
+                  </DropdownMenu.Content></DropdownMenu.Portal></DropdownMenu>
+                  {repairAction(current, "secondary")}
                   {isActiveRun(current) ? (
                     <Button variant="secondary" disabled={["stopping", "stop_unconfirmed"].includes(current.status)} onClick={() => requestCancelRun(objectId, current.id)}>{["stopping", "stop_unconfirmed"].includes(current.status) ? "停止处理中…" : tr("stop")}</Button>
                   ) : (
                     <>
-                      <Button variant="secondary" onClick={() => exportReport(current)}>下载报告</Button>
+
                       {rerunMenu(current, true)}
                     </>
                   )}
@@ -374,9 +441,8 @@ export function EvaluationPanel({ objectId, name, heading, onEnvironmentChange }
   )
 
   return (
-    <div ref={split.container} className="eval-workbench" data-chat-open={chatOpen || undefined} data-resizing={split.dragging || undefined} style={{ "--eval-chat-width": `${split.width}px` } as CSSProperties}>
-      {<EvaluationChat viewDraft={chatDrafts.current.get(draftKey)!} hidden={!chatOpen} objectId={objectId} name={name} key={draftKey} sessionId={conversationId} operation={section} currentRun={historicalRun || current} onSession={setConversation}
-        rerunRequest={rerunRequest?.runId === current?.id ? rerunRequest : undefined} onRerunConsumed={() => setRerunRequest(undefined)}
+    <div ref={split.container} className={`eval-workbench${embedded ? " eval-embedded-report" : ""}`} data-chat-open={chatOpen || undefined} data-resizing={split.dragging || undefined} style={{ "--eval-chat-width": `${split.width}px` } as CSSProperties}>
+      {!embedded && <EvaluationChat onNewConversation={() => void newConversation()} viewDraft={chatDrafts.current.get(draftKey)!} hidden={!chatOpen} objectId={objectId} name={name} key={draftKey} sessionId={conversationId} operation={section} currentRun={historicalRun || current} onSession={setConversation}
         onRepair={repair}
         readOnly={historical} disabled={!!(editorOpen && draft) || importOpen}
         onRerun={(run, ids, sessionId) => {
@@ -386,12 +452,13 @@ export function EvaluationPanel({ objectId, name, heading, onEnvironmentChange }
         }} onLocate={(run, id) => openView({ section: "runs", runId: run.id, resultId: id })}
         onReports={() => openView({ section: "reports" })} onRun={(all, ids, sessionId) => {
           const saved = useEvaluation.getState().cases[objectId] || []
-          const scope = ids || (!all && selected.length ? selected : undefined)
+          const scope = ids
           configureRun(scope ? saved.filter(c => scope.includes(c.id)) : saved, scope ? "selected" : "all", undefined, 0, sessionId)
         }} onViewRun={run => openView({ section: "runs", runId: run.id, report: !isActiveRun(run) })} />}
     {chatOpen && <EvaluationSplitter {...split.splitter} />}
     <section className="eval-panel" data-view={section} aria-label={tr("title")}>
-      <header className="eval-panel-header"><SessionToggleButton collapsed={!chatOpen} onToggle={() => setChatPreference(!chatOpen)} />{heading || <span>{name}</span>}</header>
+      {activeRun && <div className="eval-context-strip" role="status">{activeRun.code} 正在运行 <Button variant="ghost" onClick={() => openView({ section: "runs", runId: activeRun.id, report: true })}>查看进度</Button></div>}
+      {!embedded && <header className="eval-panel-header"><SessionToggleButton collapsed={!chatOpen} onToggle={() => setChatPreference(!chatOpen)} />{heading || <span>{name}</span>}</header>}
       {runSetup && <RunEvaluationDialog name={name} count={runSetup.cases.length} scope={tr(`models.${runSetup.scope}`)}
         breakdown={runSetup.original && runSetup.scope === "unsuccessful" ? `不通过 ${runSetup.original.results.filter(c => runSetup.cases.some(item => item.id === c.id) && verdictLabel(c) === "不通过").length} 条，无法判定 ${runSetup.original.results.filter(c => runSetup.cases.some(item => item.id === c.id) && verdictLabel(c) === "无法判定").length} 条` : undefined}
         version={runSetup.original ? `${caseVersionLabel(runSetup.original)} · 来源报告 ${runSetup.original.code || runTitle(runSetup.original.started)}` : "当前用例"}
@@ -404,7 +471,7 @@ export function EvaluationPanel({ objectId, name, heading, onEnvironmentChange }
       <div aria-live="polite" className="eval-muted">
         {notice.text}
       </div>
-          <nav className="eval-tabs light-segmented" aria-label={tr("title")}>
+          {!embedded && <nav className="eval-tabs light-segmented" aria-label={tr("title")}>
             <SegmentedControl
               value={section}
               onChange={value => {
@@ -416,7 +483,7 @@ export function EvaluationPanel({ objectId, name, heading, onEnvironmentChange }
                 label: `${value === "cases" ? "评测用例" : "评测报告"} (${value === "cases" ? currentCases.length : runs.length})`,
               }))}
             />
-          </nav>
+          </nav>}
       {importOpen ? <ImportCases objectId={objectId} close={() => { setImportOpen(false); setNotice("导入已结束，请查看用例列表", true) }} /> : locationError ? (
         <div className="eval-empty"><p role="alert">{locationError}</p></div>
       ) : editorOpen && draft && section === "cases" ? (
@@ -561,7 +628,7 @@ export function EvaluationPanel({ objectId, name, heading, onEnvironmentChange }
               {visibleRuns.map((run) => (
                 <div className="eval-row eval-run-row eval-report-card" key={run.id}>
                   <div className="eval-report-heading">
-                    <button className="eval-title eval-list-name" onClick={e => { if (e.detail > 0 && hasSelectedText(e.currentTarget)) return; openView({ section: "runs", runId: run.id, report: !isActiveRun(run) }) }}>{run.code || runTitle(run.started)}</button>
+                    <span className="eval-report-code" style={{ userSelect: "text", WebkitUserSelect: "text" }}>{run.code || runTitle(run.started)}</span>
                     <span className="eval-report-state">{status(run.status)}</span>
                     {run.id === runs.find(r => !isActiveRun(r))?.id && <span className="eval-report-latest">最新</span>}
                   </div>
@@ -583,12 +650,7 @@ export function EvaluationPanel({ objectId, name, heading, onEnvironmentChange }
                   <div className="eval-run-actions eval-report-secondary">
                   <Button variant="ghost" onClick={() => viewRunCases(run.id, "list")}>查看用例</Button>
                   {!isActiveRun(run) && rerunMenu(run)}
-                  {(() => {
-                    const reason = openingRepair ? "正在打开开发会话" : repairDisabledReason(objectId, run, !!evaluationRepairObject(objectId))
-                    return <Tooltip value={reason || "先分析问题与修复方案，确认后修改原对象，再手动复测"}>
-                      <Button variant="ghost" className="eval-repair-action" aria-disabled={!!reason} onClick={() => { if (!reason) void repair(run) }}>前往修复</Button>
-                    </Tooltip>
-                  })()}
+                  {repairAction(run, "ghost")}
 
                   </div>
                 </div>

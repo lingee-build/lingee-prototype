@@ -22,6 +22,8 @@ export function resolveReportContext(text: string, runs: EvalRun[], currentId?: 
     return { runs: sorted.slice(0, amount), source: '最近报告' }
   }
   if (/当前(?:打开的)?报告|右侧(?:这份)?报告/.test(text)) return currentId ? select([currentId], '当前页面') : { runs: [], source: '当前页面', error: '当前未打开具体报告，请指定 ER 编码或打开一份报告。' }
+  if (currentId) return select([currentId], '当前页面')
+  if (/重跑|重新运行|运行|停止|修复/.test(text)) return { runs: [], source: '未指定', error: '请打开或指定要操作的报告（ER 编码）。' }
   if (/这份|这次|该报告|它|刚才|上述|这些|这几份|两份|两次|它们|继续/.test(text) && previousIds.length) {
     if (previousIds.length > 1 && /这份|该报告|它(?!们)/.test(text)) return { runs: [], source: '连续追问', error: '刚才讨论了多份报告，请指定你指的是哪一份（ER 编码）。' }
     return select(previousIds, '连续追问')

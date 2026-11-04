@@ -151,7 +151,7 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor(prop
       el.current?.replaceChildren(createSkillPill(props.defaultSkill, notify), document.createTextNode(" "))
     }
     notify()
-  }, [])
+  }, [props.defaultSkill])
 
   return (
     <div

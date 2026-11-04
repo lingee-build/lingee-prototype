@@ -15,7 +15,7 @@ function toTurns(messages: Message[]) {
 }
 
 /** 会话时间线：固定标题 + 可滚动的消息区；流式输出时若用户停在底部则自动跟随 */
-export function MessageTimeline(props: { session: Session; messages: Message[]; footer?: ReactNode; onCardClick?: CardClick }) {
+export function MessageTimeline(props: { session: Session; messages: Message[]; footer?: ReactNode; titleActions?: ReactNode; titleDescription?: ReactNode; onCardClick?: CardClick }) {
   const scroller = useRef<HTMLDivElement>(null)
   const stick = useRef(true)
   const turns = useMemo(() => toTurns(props.messages), [props.messages])
@@ -94,7 +94,9 @@ export function MessageTimeline(props: { session: Session; messages: Message[]; 
                 </div>
               </div>
             </div>
+            {props.titleActions && <div className="shrink-0 flex items-center gap-2">{props.titleActions}</div>}
           </div>
+          {props.titleDescription}
         </div>
       </div>
       <div

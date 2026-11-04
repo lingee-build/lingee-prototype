@@ -1,3 +1,6 @@
+import { usePanel } from "@/stores/panel"
+import { useParams } from "react-router"
+import { evaluationRepairTarget } from "@/services/evaluation-repair"
 import { ControlledConfirmDialog } from "@/ui/dialog/ConfirmDialog"
 import { useNavigate } from "react-router"
 import { ObjectEvaluationReport } from "@/features/evaluation/ObjectEvaluationReport"
@@ -51,7 +54,13 @@ export const AgentConfigPanel = forwardRef<AgentConfigHandle, Props>(function Ag
     dialog.close()
     navigate(evaluationUrl || `/dev/agent/${encodeURIComponent(props.agent.id)}/evaluation`)
   }
-  const [tab, setTab] = useState<ConfigTab>("basic")
+  const { sessionId: repairSessionId } = useParams()
+  const repairTarget = repairSessionId ? evaluationRepairTarget(repairSessionId) : undefined
+  const [tab, setTab] = useState<ConfigTab>(() => repairTarget?.objectType === "agent" && repairTarget.objectId === props.agent.id ? "evaluation" : "basic")
+  const reportRequest = usePanel(s => s.evaluationReport)
+  useEffect(() => {
+    if (reportRequest?.objectId === `agent:${props.agent.id}`) setTab("evaluation")
+  }, [reportRequest, props.agent.id])
   const [form, setForm] = useState<AgentForm>(() => formOf(props.agent))
   // 上一次落盘的内容：用来判断有没有未保存的改动、生成改动摘要
   const saved = useRef(formOf(props.agent))
