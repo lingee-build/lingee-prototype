@@ -14,7 +14,7 @@ export interface SlashCommand {
 }
 
 export const slashCommands: SlashCommand[] = [
-  { id: "evaluation-case-designer", title: "/评测用例设计", description: "根据业务场景设计和完善评测用例", kind: "skill", scope: "builtin" },
+  { id: "evaluation-builder", title: "/evaluation-builder", description: "设计和完善用例、引导运行评测、分析评测报告", kind: "skill", scope: "builtin" },
   { id: "kingdee-skill-creator", title: "/skill-builder", description: "创建或优化技能", kind: "skill", scope: "builtin" },
   { id: "ai-partner-creator", title: "/agent-builder", description: "创建或配置智能体", kind: "skill", scope: "builtin" },
   { id: "kingdee-design", title: "/prototype-builder", description: "探索应用原型", kind: "skill", scope: "builtin" },

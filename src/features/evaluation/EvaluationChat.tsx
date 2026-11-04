@@ -1,4 +1,6 @@
+import { evaluationRepairObject, repairDisabledReason } from "@/services/evaluation-repair"
 import { SessionPromptDock } from "@/pages/session/composer/SessionPromptDock"
+import type { PromptDraft } from "@/features/prompt-input/PromptInput"
 import { evaluationIntent, reportConversationText, reportRerunIds } from "./conversation-context"
 import { useEffect, useRef, useState } from "react"
 import { devStore } from "@/mock/dev-store"
@@ -16,13 +18,15 @@ import type { Session, SyncEvent } from "@/mock/types"
 import { respondToEvaluation } from "./conversation-response"
 
 /** 评测只绑定对象和右侧内容；消息、输入、附件、模型及流式反馈复用开发会话。 */
-export function EvaluationChat({ objectId, name, sessionId, operation, currentRun, rerunRequest, onRerunConsumed, onRepair, onSession, onRun, onRerun, onLocate, onViewRun, onReports, readOnly, disabled, hidden }: {
+export function EvaluationChat({ objectId, name, sessionId, operation, currentRun, rerunRequest, onRerunConsumed, onRepair, onSession, onRun, onRerun, onLocate, onViewRun, onReports, readOnly, disabled, hidden, viewDraft }: {
+  viewDraft: PromptDraft
   rerunRequest?: { runId: string; token: number; text: string }; onRerunConsumed: () => void
   onRepair: (run: EvalRun) => void | Promise<void>
   objectId: string; name: string; sessionId?: string; operation: "cases" | "runs"; currentRun?: EvalRun; onSession: (id?: string) => void
   onRerun: (run: EvalRun, ids?: string[], sessionId?: string) => void; onLocate: (run: EvalRun, id: string) => void
   onReports: () => void; onRun: (all: boolean, ids?: string[], sessionId?: string) => void; onViewRun: (run: EvalRun) => void; readOnly: boolean; disabled: boolean; hidden?: boolean
 }) {
+  const hasCases = useEvaluation(s => !!s.cases[objectId]?.length)
   const saved = useEvaluationConversations(s => sessionId ? s.items[sessionId] : undefined)
   const conversation = saved?.objectId === objectId ? saved : undefined
   const liveSession = useSync(s => s.sessions.find(item => item.id === conversation?.session.id))
@@ -35,16 +39,20 @@ export function EvaluationChat({ objectId, name, sessionId, operation, currentRu
   const session: Session = liveSession || conversation?.session || { id: `evaluation-${objectId}`, projectId, title: `评测 ${name}`, status: "idle", time: { created: 0, updated: 0 } }
   const messages = liveMessages || conversation?.messages || []
   async function submit(text: string, files: File[] = []) {
+    text = text.replace(/^\/(?:evaluation-builder|evaluation-assistant|evaluation-case-designer)\s*/, "").trim()
+    const selectedRun = /最新|最近|上次/.test(text)
+      ? [...(useEvaluation.getState().runs[objectId] || [])].sort((a, b) => b.started - a.started)[0]
+      : currentRun
     if (sending.current) throw new Error("正在保存")
     if (readOnly || disabled) { setError(readOnly ? "请返回当前用例后继续修改。" : "请先保存或取消右侧编辑，再继续对话。"); throw new Error("当前不可修改") }
-    if (operation === "runs" && !currentRun && !/ER-\d+/i.test(text)) { setError("请先在右侧选择一次评测运行或报告。"); throw new Error("未选择运行") }
+    if (operation === "runs" && !selectedRun && !/ER-\d+/i.test(text)) { setError("请先在右侧选择一次评测运行或报告。"); throw new Error("未选择运行") }
     sending.current = true; setError("")
     try {
       if (!target || !useSync.getState().projects.some(p => p.id === projectId)) throw new Error("对象所属项目不可用，请恢复后重试。")
-      const reusable = operation === "cases" || conversation?.runId === currentRun?.id ? conversation : undefined
-      const active = reusable?.session || await sessionService.create(projectId, operation === "runs" ? `评测报告 ${name}${currentRun ? ` · ${currentRun.code || new Date(currentRun.started).toLocaleString("zh-CN")}` : ""}` : `评测 ${name}`)
+      const reusable = operation === "cases" || conversation?.runId === selectedRun?.id ? conversation : undefined
+      const active = reusable?.session || await sessionService.create(projectId, operation === "runs" ? `评测报告 ${name}${selectedRun ? ` · ${selectedRun.code || new Date(selectedRun.started).toLocaleString("zh-CN")}` : ""}` : `评测 ${name}`)
       const next: EvaluationConversation = structuredClone(reusable || { session: active, objectId, objectName: name, messages: [], request: "", rule: "", files: [], drafts: [], adopted: {} })
-      if (operation === "runs" && !reusable) next.runId = currentRun?.id
+      if (operation === "runs" && !reusable) next.runId = selectedRun?.id
       next.drafts = structuredClone(useEvaluation.getState().cases[objectId] || [])
       next.adopted = {}; next.files = []
       for (const file of files) next.files.push(await saveAttachment(file))
@@ -53,7 +61,7 @@ export function EvaluationChat({ objectId, name, sessionId, operation, currentRu
       const reportCodes = [...new Set((text.match(/ER-\d+/gi) || []).map(code => `ER-${String(Number(code.slice(3))).padStart(4, "0")}`))]
       const referencedRun = reportCodes.length === 1 ? useEvaluation.getState().runs[objectId]?.find(run => run.code === reportCodes[0]) : undefined
       const reportError = reportCodes.length > 1 ? "请一次引用一份评测报告。" : reportCodes.length && !referencedRun ? `未找到评测报告 ${reportCodes[0]}，请确认当前对象中的编码。` : undefined
-      const reportRun = referencedRun || currentRun || (intent === "rerun" && /上次|最近/.test(text) ? useEvaluation.getState().runs[objectId]?.find(run => !isActiveRun(run)) : undefined)
+      const reportRun = referencedRun || selectedRun || (intent === "rerun" && /上次|最近/.test(text) ? useEvaluation.getState().runs[objectId]?.find(run => !isActiveRun(run)) : undefined)
       const reportIntent = operation === "runs" || intent === "report" || reportCodes.length > 0
       const codes = [...new Set((text.match(/EC-\d+/gi) || []).map(code => `EC-${String(Number(code.slice(3))).padStart(4, "0")}`))]
       const scope = reportIntent ? reportRun?.results || [] : next.drafts
@@ -69,7 +77,11 @@ export function EvaluationChat({ objectId, name, sessionId, operation, currentRu
       if (referenceError) response = reply(referenceError)
       else if (intent === 'help') response = reply('本次未执行操作。可以查询进度、打开报告、停止运行、修复问题或重新运行；请明确要执行的操作。')
       else if (intent === 'repairStatus') response = reply(next.repair?.runId === reportRun?.id ? next.repair!.summary : '本次尚未发起修复，可以说“修复这次评测发现的问题”。')
-      else if (intent === 'repair' || intent === 'confirmRepair' || (next.repair?.stage === 'planned' && intent === 'cases')) { response = reply('请在对象开发对话中查看修复方案，确认后再修改文件。'); if (reportRun) action = () => { void onRepair(reportRun) } }
+      else if (intent === 'repair' || intent === 'confirmRepair' || (next.repair?.stage === 'planned' && intent === 'cases')) {
+        const reason = reportRun ? repairDisabledReason(objectId, reportRun, !!evaluationRepairObject(objectId)) : '请先选择要修复的来源报告。'
+        response = reply(reason || '修复请求已准备，请在新会话发送后开始分析。确认方案后才修改对象。')
+        if (!reason && reportRun) action = () => { void onRepair(reportRun) }
+      }
       else if (intent === 'stop') {
         if (!reportRun) response = reply('请先选择要停止的运行。')
         else {
@@ -123,7 +135,7 @@ export function EvaluationChat({ objectId, name, sessionId, operation, currentRu
       }
       sessionService.prompt(active.id, text, emit, usePrompt.getState().modelId, {
         todos: [], pacing: { textChunk: 12, textDelayMs: 16, textHoldMs: 0, toolDelayMs: 0, stepPauseMs: 0 },
-        steps: [{ ...(runIntent || reportIntent ? {} : { tools: [{ tool: "skill", title: "evaluation-case-designer", detail: `评测对象：${name}`, output: response.changed ? "用例已保存到当前列表" : "等待补充评测需求" }] }), text: response.text }],
+        steps: [{ tools: [{ tool: "skill", title: "evaluation-builder", detail: `评测对象：${name}`, output: response.changed ? "用例已保存到当前列表" : runIntent ? "运行请求已处理" : reportIntent ? "已读取评测结果" : "等待补充评测需求" }], text: response.text }],
       })
       action?.()
     } catch (e) { setError(e instanceof Error ? e.message : "保存失败，请重试。"); throw e }
@@ -143,7 +155,9 @@ export function EvaluationChat({ objectId, name, sessionId, operation, currentRu
     <SessionPromptDock>
       {error && <p role="alert" className="eval-field-error">{error}</p>}
       {(readOnly || disabled) && <p role="status" className="eval-muted">{readOnly ? "历史用例只读，返回当前用例后可继续修改。" : "请先完成右侧编辑或导入。"}</p>}
-      <Composer key={`${objectId}:${session.id}:${operation}`} initialText={operation === "cases" && !messages.length && !conversation?.request && !readOnly && !hidden ? `/evaluation-case-designer 为「${name}」生成评测用例` : undefined} projectId={projectId} sessionId={session.id} working={session.status === "running"} onSubmit={submit} onAbort={() => { if (sessionId) sessionService.abort(sessionId) }} onCreateProject={() => void actions.createProject()} />
+      <Composer viewDraft={viewDraft} key={`${objectId}:${session.id}:${operation}`} defaultSkill="evaluation-builder" placeholder={operation === "cases"
+        ? hasCases ? "描述你想修改或补充的评测用例…" : "描述业务场景，生成评测用例…"
+        : currentRun ? "针对当前报告提问，例如：哪些用例未通过？" : "描述你想了解的评测结果，例如：分析最新报告"} projectId={projectId} sessionId={session.id} working={session.status === "running"} onSubmit={submit} onAbort={() => { if (sessionId) sessionService.abort(sessionId) }} onCreateProject={() => void actions.createProject()} />
     </SessionPromptDock>
   </section>
 }

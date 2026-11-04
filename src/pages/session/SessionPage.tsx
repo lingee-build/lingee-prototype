@@ -1,6 +1,6 @@
 import { SessionPromptDock } from "./composer/SessionPromptDock"
 import { useEvaluation } from "@/services/evaluation"
-import { useEvaluationRepairs } from "@/services/evaluation-repair"
+import { evaluationRepairTarget, useEvaluationRepairs } from "@/services/evaluation-repair"
 import { useNavigate } from "react-router"
 import { RenderCard } from "@/ui"
 import { EvaluationSession } from "@/features/evaluation/EvaluationSession"
@@ -41,6 +41,8 @@ export function Component() {
   const evaluationSessions = useEvaluationConversations(s => s.items)
   const t = useT()
   const { projectId = "", sessionId } = useParams()
+  const repairTarget = sessionId ? evaluationRepairTarget(sessionId) : undefined
+  const repairRun = useEvaluation(s => repairTarget ? s.runs[`${repairTarget.objectType}:${repairTarget.objectId}`]?.find(r => r.id === repairTarget.runId) : undefined)
   const [search] = useSearchParams()
   const editing = { kdskill: search.get("kdskill"), agent: search.get("agent"), mcpapp: search.get("mcpapp") }
   const { ready, projects, sessions, messages, loadMessages } = useSync()
@@ -119,7 +121,7 @@ export function Component() {
               loaded ? (
                 <MessageTimeline session={session} messages={loaded} footer={
                   repairLinks[session.id] && session.status === "idle" && loaded.at(-1)?.role === "assistant" && loaded.at(-1)?.time.completed ? (
-                    <RenderCard kind="evaluation-run" config={{ title: "返回来源报告", desc: "检查修改后手动复测，修复效果以新运行结果为准" }} onCardClick={() => navigate(repairLinks[session.id])} />
+                    <RenderCard kind="evaluation-run" config={{ title: `返回评测报告 ${repairRun?.code || ""}`, desc: "检查修改后手动复测，修复效果以新运行结果为准" }} onCardClick={() => navigate(repairLinks[session.id])} />
                   ) : undefined
                 } />
               ) : (

@@ -1,7 +1,7 @@
 import { finishedCaseCount, isActiveRun, verdictLabel, unsuccessfulRunResults, type EvalRun } from '@/services/evaluation'
 
 export function evaluationIntent(raw: string) {
-  const text = raw.trim()
+  const text = raw.replace(/^\/(?:evaluation-builder|evaluation-assistant|evaluation-case-designer)\s*/, "").trim()
   // 否定或咨询不触发写操作。
   if (/不要|不用|先别|暂不|如何|怎么(?:运行|停止|修复)/.test(text)) return 'help'
   if (/修到哪|修复进度|改了什么|修改了什么|修复结果/.test(text)) return 'repairStatus'
@@ -9,7 +9,7 @@ export function evaluationIntent(raw: string) {
   if (/修复|优先解决|先解决/.test(text)) return 'repair'
   if (/停止|终止|取消.*(?:运行|评测)/.test(text)) return 'stop'
   if (/再跑|重跑|重新(?:运行|评测)|只跑/.test(text)) return 'rerun'
-  if (/查看.*报告|打开.*报告|看看.*(?:结果|用例)|评测报告|报告.*(结论|结果|怎么样)|进度|跑到哪|还有.*条|为什么.*久|异常|第\s*[一二三四五六七八九十\d]+\s*条.*结果/.test(text)) return 'report'
+  if (/分析.*报告|报告.*分析|查看.*报告|打开.*报告|看看.*(?:结果|用例)|评测报告|报告.*(结论|结果|怎么样)|进度|跑到哪|还有.*条|为什么.*久|异常|第\s*[一二三四五六七八九十\d]+\s*条.*结果/.test(text)) return 'report'
   if (/^(?:请|帮我)?(?:开始|发起|运行|执行)(评测|运行|执行|全部|选中|用例|测试|这|这些|当前|\s|$)/.test(text)) return 'run'
   return 'cases'
 }

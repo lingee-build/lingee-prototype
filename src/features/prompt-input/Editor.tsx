@@ -24,10 +24,11 @@ export interface EditorHandle {
 
 interface EditorProps {
   placeholder: string
+  defaultSkill?: string
   newSession: boolean
   hasAttachments?: boolean
   enhancing?: boolean
-  onChange: (state: { empty: boolean; skill?: string }) => void
+  onChange: (state: { empty: boolean; skill?: string; text: string; skillWidth: number }) => void
   onTrigger: (trigger: Trigger | null) => void
   /** 补全弹层打开时由它优先处理方向键 / 回车 / Esc；返回 true 表示已处理 */
   onKeyIntercept: (event: KeyboardEvent<HTMLDivElement>) => boolean
@@ -67,7 +68,8 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor(prop
     if (!node.textContent && !node.querySelector("[data-type]")) node.replaceChildren()
     const pill = node.querySelector<HTMLElement>("[data-type=agent]")
     setHasSkill(!!pill)
-    latest.current.onChange({ empty: readText(node).trim() === "", skill: pill?.dataset.name })
+    const text = readText(node)
+    latest.current.onChange({ empty: (pill ? text.replace(pill.dataset.content || "", "") : text).trim() === "", skill: pill?.dataset.name, text, skillWidth: pill ? pill.getBoundingClientRect().width + 8 : 0 })
   }
 
   /** 光标移动不产生 input 事件，所以输入、按键抬起、鼠标抬起后都要重新探测一次触发词 */
@@ -122,14 +124,16 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor(prop
   useImperativeHandle(ref, () => ({
     focus: caretToEnd,
     clear() {
-      el.current?.replaceChildren()
+      el.current?.replaceChildren(...(latest.current.defaultSkill ? [createSkillPill(latest.current.defaultSkill, notify), document.createTextNode(" ")] : []))
       latest.current.onTrigger(null)
       notify()
     },
     set(text) {
       const node = el.current
       if (!node) return
-      const { skill, body } = parseSlash(text)
+      const parsed = parseSlash(text)
+      const skill = parsed.skill || latest.current.defaultSkill
+      const body = parsed.body
       node.replaceChildren(
         ...(skill ? [createSkillPill(skill, notify), document.createTextNode(` ${body}`)] : [document.createTextNode(body)]),
       )
@@ -142,7 +146,12 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor(prop
     completeText: (text) => complete(document.createTextNode(text)),
   }))
 
-  useEffect(notify, [])
+  useEffect(() => {
+    if (props.defaultSkill && !el.current?.textContent) {
+      el.current?.replaceChildren(createSkillPill(props.defaultSkill, notify), document.createTextNode(" "))
+    }
+    notify()
+  }, [])
 
   return (
     <div

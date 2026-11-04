@@ -1,3 +1,4 @@
+import type { PromptDraft } from "@/features/prompt-input/PromptInput"
 import { useEditSession } from "@/features/dev-page/use-edit-session"
 import { reportRerunPrompt } from "./conversation-context"
 import { formatEvaluationTime as runTitle } from "./format-time"
@@ -70,6 +71,7 @@ function runFileTime(time: number) {
 const sources: Source[] = ["none", "tenant", "thirdParty", "personal"]
 export function EvaluationPanel({ objectId, name, heading, onEnvironmentChange }: { objectId: string; name: string; heading?: ReactNode; onEnvironmentChange?: (environment: EvalEnvironment | undefined) => void }) {
   const split = useEvaluationSplit()
+  const chatDrafts = useRef(new Map<string, PromptDraft>())
   const [rerunRequest, setRerunRequest] = useState<{ runId: string; token: number; text: string }>()
   const editSession = useEditSession()
   const [openingRepair, setOpeningRepair] = useState(false)
@@ -122,11 +124,12 @@ export function EvaluationPanel({ objectId, name, heading, onEnvironmentChange }
   const resultId = searchParams.get("case") || undefined
   const reportRequested = searchParams.get("view") === "report"
   const section = historical || runId || resultId || reportRequested || ["runs", "reports"].includes(searchParams.get("tab") || "") ? "runs" : "cases"
-  const chatOpen = chatPreference ?? (section === "cases" || !!runId)
+  const draftKey = `${objectId}:${historical ? "snapshot" : section}:${historicalRun?.id || runId || "list"}`
+  if (!chatDrafts.current.has(draftKey)) chatDrafts.current.set(draftKey, {})
+  const chatOpen = chatPreference ?? true
   function openView(view: { section: "cases" | "runs" | "reports"; runId?: string; resultId?: string; report?: boolean }) {
     const next = new URLSearchParams(searchParams)
     for (const key of ["tab", "run", "case", "view", "focusCase", "version", "scopeRun", "caseRun", "caseFrom"]) next.delete(key)
-    setChatPreference(undefined)
     if (view.section !== "cases") next.set("tab", view.section)
     if (view.runId) {
       next.set("run", view.runId)
@@ -331,7 +334,7 @@ export function EvaluationPanel({ objectId, name, heading, onEnvironmentChange }
                 <div className="eval-actions eval-current-actions">
                   {report && <Button variant="secondary" onClick={() => viewRunCases(current.id, "report")}>查看用例</Button>}
                   {<Tooltip value={repairReason || "先分析问题与修复方案，确认后修改原对象，再手动复测"}>
-                    <Button variant="secondary" className="eval-repair-action" aria-disabled={!!repairReason} onClick={() => { if (!repairReason) void repair(current) }}>修复问题</Button>
+                    <Button variant="secondary" className="eval-repair-action" aria-disabled={!!repairReason} onClick={() => { if (!repairReason) void repair(current) }}>前往修复</Button>
                   </Tooltip>}
                   {isActiveRun(current) ? (
                     <Button variant="secondary" disabled={["stopping", "stop_unconfirmed"].includes(current.status)} onClick={() => requestCancelRun(objectId, current.id)}>{["stopping", "stop_unconfirmed"].includes(current.status) ? "停止处理中…" : tr("stop")}</Button>
@@ -346,7 +349,7 @@ export function EvaluationPanel({ objectId, name, heading, onEnvironmentChange }
 
   return (
     <div ref={split.container} className="eval-workbench" data-chat-open={chatOpen || undefined} data-resizing={split.dragging || undefined} style={{ "--eval-chat-width": `${split.width}px` } as CSSProperties}>
-      {<EvaluationChat hidden={!chatOpen} objectId={objectId} name={name} key={`${objectId}:${section}:${current?.id || "cases"}`} sessionId={section === "cases" ? (conversationRecord?.runId ? undefined : conversationId) : (current ? Object.values(conversations).find(c => c.objectId === objectId && c.runId === current.id)?.session.id || current.conversationId : undefined)} operation={section} currentRun={historicalRun || current} onSession={setConversation}
+      {<EvaluationChat viewDraft={chatDrafts.current.get(draftKey)!} hidden={!chatOpen} objectId={objectId} name={name} key={draftKey} sessionId={section === "cases" ? (conversationRecord?.runId ? undefined : conversationId) : (current ? Object.values(conversations).find(c => c.objectId === objectId && c.runId === current.id)?.session.id || current.conversationId : undefined)} operation={section} currentRun={historicalRun || current} onSession={setConversation}
         rerunRequest={rerunRequest?.runId === current?.id ? rerunRequest : undefined} onRerunConsumed={() => setRerunRequest(undefined)}
         onRepair={repair}
         readOnly={historical} disabled={!!(editorOpen && draft) || importOpen}
@@ -557,7 +560,7 @@ export function EvaluationPanel({ objectId, name, heading, onEnvironmentChange }
                   {(() => {
                     const reason = openingRepair ? "正在打开开发会话" : repairDisabledReason(objectId, run, !!evaluationRepairObject(objectId))
                     return <Tooltip value={reason || "先分析问题与修复方案，确认后修改原对象，再手动复测"}>
-                      <Button variant="ghost" className="eval-repair-action" aria-disabled={!!reason} onClick={() => { if (!reason) void repair(run) }}>修复问题</Button>
+                      <Button variant="ghost" className="eval-repair-action" aria-disabled={!!reason} onClick={() => { if (!reason) void repair(run) }}>前往修复</Button>
                     </Tooltip>
                   })()}
 

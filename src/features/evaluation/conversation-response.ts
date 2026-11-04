@@ -6,7 +6,7 @@ const scenarios = (text: string) => ['正常查询', '信息缺失', '记录不�
 
 /** 本地交互演示：按明确意图推进，不将无关回复解释为新增用例 */
 export function respondToEvaluation(next: EvaluationConversation, raw: string): { text: string; changed: boolean } {
-  const text = raw.replace(/^\/evaluation-case-designer\s*/, '').trim()
+  const text = raw.replace(/^\/(?:evaluation-builder|evaluation-assistant|evaluation-case-designer)\s*/, '').trim()
   const choices = '可以补充要覆盖的业务场景和预期结果，例如“正常查询返回单据明细，缺少组织时先询问”'
   if (/^\d+$/.test(text) || text.length < 2) return { text: `还不确定你想调整哪部分。${choices}；修改已有用例时，可以说“第 1 条改成多轮查询”`, changed: false }
   const codes = [...new Set((text.match(/EC-\d+/gi) || []).map(code => `EC-${String(Number(code.slice(3))).padStart(4, '0')}`))]
