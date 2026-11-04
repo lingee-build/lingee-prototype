@@ -1,4 +1,4 @@
-import { clarificationResponses } from "@/services/evaluation"
+import { ClarificationReplies } from "./ClarificationReplies"
 import { useState } from "react"
 import { BrandButton, Button } from "@/ui"
 import { checkKind, checkDescription, checkOperators, checksOf, turnsOf, type EvalCase, type EvalCheck } from "@/services/evaluation"
@@ -28,10 +28,7 @@ export function CaseDetail({ value, embedded = false, edit, editLabel = "编辑"
     <div className="eval-toolbar"><h3>对话轮次（{rounds.length}）</h3>{rounds.length > 1 && <Button variant="ghost" onClick={() => setCollapsed(allOpen ? rounds.map(r => r.id) : [])}>{allOpen ? "全部折叠" : "全部展开"}</Button>}</div>
     {rounds.map((turn, i) => <TurnCard key={turn.id} turnId={turn.id} number={i + 1} input={turn.input} meta="" status={null} open={!collapsed.includes(turn.id)} toggle={() => setCollapsed(ids => ids.includes(turn.id) ? ids.filter(id => id !== turn.id) : [...ids, turn.id])}>
       <div className="eval-input-group"><div className="eval-message"><strong>用户输入</strong><p>{turn.input}</p></div><Files files={turn.attachments} label="附件" /></div>
-      {!!turn.rules.length && <section><h3 className="eval-section-title">澄清回复 <span className="eval-section-count">（{turn.rules.length}）</span></h3><div className="eval-result-reply-list">
-        <div className="eval-result-reply-columns" aria-hidden="true"><span /><span>预期追问</span><span>自动回复</span></div>
-        {turn.rules.map((rule, ri) => <div className="eval-result-reply-row" key={rule.id}><span className="eval-result-number">{ri + 1}</span><div><span className="eval-result-mobile-label">预期追问</span><p>{rule.match}</p></div><div><span className="eval-result-mobile-label">自动回复</span><p>{clarificationResponses(rule.responses)}</p></div></div>)}
-      </div></section>}
+      {!!turn.rules.length && <section><h3 className="eval-section-title">澄清回复 <span className="eval-section-count">（{turn.rules.length}）</span></h3><ClarificationReplies rules={turn.rules} /></section>}
       <Standards label={rounds.length > 1 ? "本轮评测标准" : "评测标准"} checks={[...checksOf(turn), ...(rounds.length === 1 ? value.checks || [] : [])]} />
     </TurnCard>)}
     {rounds.length > 1 && <Standards label="整体验收标准" checks={value.checks || []} />}

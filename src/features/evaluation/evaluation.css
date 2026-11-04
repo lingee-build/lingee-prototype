@@ -496,18 +496,20 @@
 .eval-conversation .eval-section-count { font-size: 12px; font-weight: 400; color: var(--text-weak); }
 .eval-conversation .eval-result-standard > p > strong { font-weight: 400; color: var(--text-weak); }
 .eval-conversation > .eval-check-results { margin: 0; }
-.eval-result-reply-list { container-type: inline-size; display: grid; gap: 8px; margin-top: 8px; }
+.eval-result-reply-list { container: clarification-replies / inline-size; display: grid; gap: 12px; min-width: 0; margin-top: 8px; }
 .eval-result-reply-columns, .eval-result-reply-row { display: grid; grid-template-columns: 20px minmax(0, 1fr) minmax(0, 1fr); gap: 12px; align-items: start; }
 .eval-result-reply-columns { font-size: 14px; font-weight: 400; }
+.eval-result-reply-row { grid-template-areas: "number prompt answer"; }
+.eval-result-reply-row > .eval-result-number { grid-area: number; white-space: nowrap; }
+.eval-result-reply-prompt { grid-area: prompt; }
+.eval-result-reply-answer { grid-area: answer; }
 .eval-result-reply-row > div { min-width: 0; }
 .eval-result-reply-row p { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
 .eval-result-mobile-label { display: none; font-weight: 400; color: var(--text-weak); }
-@container (max-width: 560px) {
+@container clarification-replies (max-width: 560px) {
   .eval-result-reply-columns { display: none; }
-  .eval-result-reply-row { grid-template-columns: 20px minmax(0, 1fr); gap: 6px 10px; }
-  .eval-result-reply-answer { grid-column: 2; }
+  .eval-result-reply-row { grid-template-columns: 20px minmax(0, 1fr); grid-template-areas: "number prompt" ". answer"; gap: 8px 10px; }
   .eval-result-mobile-label { display: block; }
-  .eval-result-reply-list { gap: 12px; }
 }
 
 /* Prompt heading and upload share a normal grid row. */

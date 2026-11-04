@@ -1,3 +1,4 @@
+import { ClarificationReplies } from "./ClarificationReplies"
 import { clarificationResponses } from "@/services/evaluation"
 import { CheckTypeIcon } from "./CheckTypeIcon"
 import { sessionAttachmentTip } from "./attachment-help"
@@ -70,14 +71,7 @@ export function RoundResults({ result }: { result: EvalResult }) {
       <div className="eval-input-group"><div className="eval-message"><strong>用户输入</strong><p>{turn.input}</p></div>
       <Files files={turn.attachments} label="附件" /></div>
       {!!turn.rules.length && <details className="eval-result-rules"><summary className="eval-section-title">澄清回复配置 <span className="eval-section-count">（{turn.rules.length}）</span></summary>
-        <div className="eval-result-reply-list">
-          <div className="eval-result-reply-columns" aria-hidden="true"><span /><span>预期追问</span><span>自动回复</span></div>
-          {turn.rules.map((r, ri) => <div className="eval-result-reply-row" key={r.id} aria-label={`澄清回复配置 ${ri + 1}`}>
-            <span className="eval-result-number">{ri + 1}</span>
-            <div><span className="eval-result-mobile-label">预期追问</span><p>{r.match}</p></div>
-            <div className="eval-result-reply-answer"><span className="eval-result-mobile-label">自动回复</span><p>{r.responses.join("\n")}</p></div>
-          </div>)}
-        </div>
+        <ClarificationReplies rules={turn.rules} />
       </details>}
       <details className="eval-message" open><summary>本次澄清过程</summary><p>{clarificationText(turn)}</p></details>
       {"issue" in turn && turn.issue && <div className="eval-message"><strong>执行异常</strong><dl className="eval-result-evidence"><dt>发生阶段</dt><dd>{executionIssues[turn.issue].stage}</dd><dt>原因</dt><dd>{executionIssues[turn.issue].reason}</dd><dt>处理建议</dt><dd>{executionIssues[turn.issue].action}</dd></dl></div>}

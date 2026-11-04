@@ -1179,7 +1179,7 @@ test("统一报告支持运行中进度，单轮直显、多轮折叠，技能�
     expect(activeHtml.match(/class="progress-segment"/g)?.length).toBe(2)
     expect(activeHtml).not.toContain("<progress")
     const unknownHtml = buildReportDocument({ ...run, status: "completed", results: run.results.map(r => ({ ...r, status: "blocked", verdict: "unknown", judging: false })) })
-    expect(unknownHtml).toContain("通过率：0%</p>")
+    expect(unknownHtml).toContain('通过率 0% <span class="muted">· 共 2 条用例</span>')
     expect(unknownHtml).toContain('class="metric-unknown"><strong>2</strong>无法判定')
     expect(unknownHtml).toContain('class="metric-zero"><strong>0</strong>不通过')
     expect(activeHtml).toContain('class="round single-round"')

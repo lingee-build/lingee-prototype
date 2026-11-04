@@ -146,14 +146,14 @@ test("最终报告区分已停止、执行异常、无法判定与仍在判定",
   const unknown = { ...run, results: run.results.map(c => ({ ...c, verdict: "unknown" as const, judging: false })) }
   for (const status of ["completed", "cancelled", "error"] as const) {
     const html = buildReportDocument({ ...unknown, status })
-    expect(html).toContain("本次所有用例均无法判定")
+    expect(html).toContain("暂不能据此判断对象是否满足要求")
     expect(html).not.toContain("部分用例尚未完成判定")
     expect(html).not.toContain("运行尚未全部完成")
     expect(html).not.toContain("结果仍在更新")
   }
   expect(buildReportDocument({ ...unknown, status: "cancelled" })).toContain("运行已停止")
   expect(buildReportDocument({ ...unknown, status: "error" })).toContain("运行因执行异常结束")
-  expect(buildReportDocument({ ...unknown, status: "judging" })).toContain("运行尚未结束，结果仍在更新")
+  expect(buildReportDocument({ ...unknown, status: "judging" })).toContain("最终结论待生成")
 })
 
 test("报告只展示运行总点数和状态，缺失判定消耗不能当作完整总量", async () => {
@@ -194,20 +194,23 @@ test("报告标题和元信息位于目录之前，正文无重复统计总结",
   expect(html).not.toContain('本次评测包含')
 })
 
-test("结论区分全未知、混合失败和全失败，分母常驻且活动状态不提前定论", () => {
+test("结论精简统计，保留未知提示、总数及活动状态", () => {
   const base = structuredClone(run)
   const result = base.results[0]
   const unknown = { ...result, status: "failed" as const, verdict: "unknown" as const, judging: false }
   const failed = { ...unknown, verdict: "failed" as const }
   const value = { ...base, status: "completed" as const, results: [unknown, unknown] }
   let html = buildReportDocument(value)
-  expect(html).toContain('class="conclusion-lead conclusion-unknown">本次所有用例均无法判定')
+  expect(html).toContain("通过率 0%")
   expect(html).toContain("暂不能据此判断对象是否满足要求")
-  expect(html).toContain('<p class="muted">通过 0 / 全部 2 条，包含 2 条无法判定</p>')
+  expect(html).toContain("· 共 2 条用例")
+  expect(html).not.toContain("本次评测已结束")
+  expect(html).not.toContain("包含 2 条无法判定")
   html = buildReportDocument({ ...value, results: [failed, unknown] })
-  expect(html).toContain("1 条用例不通过，1 条无法判定")
+  expect(html).toContain("建议先排查无法判定的原因，再处理未通过用例。")
+  expect(html).not.toContain("1 条用例不通过，1 条无法判定")
   expect(html).not.toContain('class="conclusion-lead conclusion-unknown"')
-  expect(buildReportDocument({ ...value, results: [failed, failed] })).toContain("全部 2 条用例不通过")
+  expect(buildReportDocument({ ...value, results: [failed, failed] })).toContain("建议查看失败证据并分析修复方案。")
   expect(buildReportDocument({ ...value, status: "judging" })).not.toContain("本次所有用例均无法判定")
   expect(buildReportDocument({ ...value, results: [] })).toContain("本次没有用例结果")
 })

@@ -1,3 +1,4 @@
+import { resolveReportContext, compareReportText, reportEvidence } from "./report-context"
 import { evaluationRepairObject, repairDisabledReason } from "@/services/evaluation-repair"
 import { SessionPromptDock } from "@/pages/session/composer/SessionPromptDock"
 import type { PromptDraft } from "@/features/prompt-input/PromptInput"
@@ -40,29 +41,28 @@ export function EvaluationChat({ objectId, name, sessionId, operation, currentRu
   const messages = liveMessages || conversation?.messages || []
   async function submit(text: string, files: File[] = []) {
     text = text.replace(/^\/(?:evaluation-builder|evaluation-assistant|evaluation-case-designer)\s*/, "").trim()
-    const selectedRun = /最新|最近|上次/.test(text)
-      ? [...(useEvaluation.getState().runs[objectId] || [])].sort((a, b) => b.started - a.started)[0]
-      : currentRun
-    if (sending.current) throw new Error("正在保存")
-    if (readOnly || disabled) { setError(readOnly ? "请返回当前用例后继续修改。" : "请先保存或取消右侧编辑，再继续对话。"); throw new Error("当前不可修改") }
-    if (operation === "runs" && !selectedRun && !/ER-\d+/i.test(text)) { setError("请先在右侧选择一次评测运行或报告。"); throw new Error("未选择运行") }
+    if (sending.current || session.status === "running") throw new Error("正在回复，请稍后再发送")
+    if (disabled) { setError("请先保存或取消右侧编辑，再继续对话。"); throw new Error("当前不可修改") }
     sending.current = true; setError("")
     try {
       if (!target || !useSync.getState().projects.some(p => p.id === projectId)) throw new Error("对象所属项目不可用，请恢复后重试。")
-      const reusable = operation === "cases" || conversation?.runId === selectedRun?.id ? conversation : undefined
-      const active = reusable?.session || await sessionService.create(projectId, operation === "runs" ? `评测报告 ${name}${selectedRun ? ` · ${selectedRun.code || new Date(selectedRun.started).toLocaleString("zh-CN")}` : ""}` : `评测 ${name}`)
-      const next: EvaluationConversation = structuredClone(reusable || { session: active, objectId, objectName: name, messages: [], request: "", rule: "", files: [], drafts: [], adopted: {} })
-      if (operation === "runs" && !reusable) next.runId = selectedRun?.id
+      const active = conversation?.session || await sessionService.create(projectId, `评测 ${name}`)
+      const next: EvaluationConversation = structuredClone(conversation || { session: active, objectId, objectName: name, messages: [], request: "", rule: "", files: [], drafts: [], adopted: {} })
+      delete next.runId
       next.drafts = structuredClone(useEvaluation.getState().cases[objectId] || [])
       next.adopted = {}; next.files = []
       for (const file of files) next.files.push(await saveAttachment(file))
       const intent = evaluationIntent(text)
       const runIntent = intent === "run" || intent === "rerun"
-      const reportCodes = [...new Set((text.match(/ER-\d+/gi) || []).map(code => `ER-${String(Number(code.slice(3))).padStart(4, "0")}`))]
-      const referencedRun = reportCodes.length === 1 ? useEvaluation.getState().runs[objectId]?.find(run => run.code === reportCodes[0]) : undefined
-      const reportError = reportCodes.length > 1 ? "请一次引用一份评测报告。" : reportCodes.length && !referencedRun ? `未找到评测报告 ${reportCodes[0]}，请确认当前对象中的编码。` : undefined
-      const reportRun = referencedRun || selectedRun || (intent === "rerun" && /上次|最近/.test(text) ? useEvaluation.getState().runs[objectId]?.find(run => !isActiveRun(run)) : undefined)
-      const reportIntent = operation === "runs" || intent === "report" || reportCodes.length > 0
+      const context = resolveReportContext(text, useEvaluation.getState().runs[objectId] || [], currentRun?.id, conversation?.reportContext || [])
+      const caseRequest = /(?:生成|新增|修改|改名|补充|设计|添加|删除).*(?:用例|标准|输入|轮次)|(?:用例|标准|输入|轮次).*(?:改为|改成|修改|补充)/.test(text) && intent === "cases"
+      const wantsNewRun = intent === "run" && !/ER-\d+|报告/.test(text)
+      const reportIntent = !caseRequest && !wantsNewRun && (operation === "runs" || intent === "report" || /ER-\d+|报告|对比|比较/.test(text) || !!conversation?.reportContext?.length)
+      const needsReport = reportIntent || ['rerun', 'stop', 'repair', 'confirmRepair', 'repairStatus'].includes(intent)
+      const reportRuns = needsReport ? context.runs : []
+      const reportRun = reportRuns.length === 1 ? reportRuns[0] : undefined
+      const reportError = needsReport ? context.error : undefined
+      const actionAmbiguous = ['rerun', 'stop', 'repair', 'confirmRepair', 'run'].includes(intent) && reportRuns.length > 1
       const codes = [...new Set((text.match(/EC-\d+/gi) || []).map(code => `EC-${String(Number(code.slice(3))).padStart(4, "0")}`))]
       const scope = reportIntent ? reportRun?.results || [] : next.drafts
       const referenced = scope.filter(item => codes.includes(item.code || ""))
@@ -74,7 +74,11 @@ export function EvaluationChat({ objectId, name, sessionId, operation, currentRu
       const ordinal = text.match(/第\s*([一二三四五六七八九十]|\d+)\s*条/)
       const index = ordinal ? (/^\d+$/.test(ordinal[1]) ? Number(ordinal[1]) : '一二三四五六七八九十'.indexOf(ordinal[1]) + 1) - 1 : -1
       const located = codes.length ? referenced[0] : reportRun?.results[index]
-      if (referenceError) response = reply(referenceError)
+      if (reportError) response = reply(reportError)
+      else if (actionAmbiguous) response = reply('当前涉及多份报告，请指定要操作的一份报告（ER 编码）及范围，本次未执行操作。')
+      else if (readOnly && caseRequest) response = reply('历史用例快照不可修改，请返回评测用例页修改当前用例。')
+      else if (reportRuns.length > 1 && reportIntent && !runIntent && intent !== 'help') response = reply(compareReportText(reportRuns))
+      else if (referenceError) response = reply(referenceError)
       else if (intent === 'help') response = reply('本次未执行操作。可以查询进度、打开报告、停止运行、修复问题或重新运行；请明确要执行的操作。')
       else if (intent === 'repairStatus') response = reply(next.repair?.runId === reportRun?.id ? next.repair!.summary : '本次尚未发起修复，可以说“修复这次评测发现的问题”。')
       else if (intent === 'repair' || intent === 'confirmRepair' || (next.repair?.stage === 'planned' && intent === 'cases')) {
@@ -114,6 +118,14 @@ export function EvaluationChat({ objectId, name, sessionId, operation, currentRu
           else if (!reportRun) action = onReports
         }
       } else response = respondToEvaluation(next, text)
+      if (needsReport || runIntent) {
+        const cited = !reportError && !actionAmbiguous ? reportRuns : []
+        if (cited.length) {
+          next.reportContext = cited.map(run => run.id)
+          response.text = `引用报告：${cited.map(run => run.code || run.id).join('、')}。\n\n${response.text}`
+        }
+        next.reportTurns = [...(next.reportTurns || []), { id: crypto.randomUUID(), createdAt: Date.now(), prompt: text, source: context.source, reportIds: cited.map(run => run.id), reports: cited.map(reportEvidence), response: response.text }]
+      } else if (caseRequest) next.reportContext = []
       saveEvaluationConversation(next, response.changed ? next.drafts : undefined)
       if (response.changed) {
         const savedCases = useEvaluation.getState().cases[objectId] || []
@@ -143,21 +155,21 @@ export function EvaluationChat({ objectId, name, sessionId, operation, currentRu
   }
   const consumedRerun = useRef<number | undefined>(undefined)
   useEffect(() => {
-    if (!rerunRequest || consumedRerun.current === rerunRequest.token || currentRun?.id !== rerunRequest.runId) return
+    if (session.status === "running" || !rerunRequest || consumedRerun.current === rerunRequest.token || currentRun?.id !== rerunRequest.runId) return
     consumedRerun.current = rerunRequest.token
     onRerunConsumed()
     void submit(rerunRequest.text).catch(() => {})
-  }, [rerunRequest])
+  }, [rerunRequest, session.status])
   return <section aria-hidden={hidden} inert={hidden} data-collapsed={hidden || undefined} className="eval-native-session @container" aria-label="开发会话">
     <div className="flex-1 min-h-0 overflow-hidden">
       <MessageTimeline session={session} messages={messages} />
     </div>
     <SessionPromptDock>
       {error && <p role="alert" className="eval-field-error">{error}</p>}
-      {(readOnly || disabled) && <p role="status" className="eval-muted">{readOnly ? "历史用例只读，返回当前用例后可继续修改。" : "请先完成右侧编辑或导入。"}</p>}
-      <Composer viewDraft={viewDraft} key={`${objectId}:${session.id}:${operation}`} defaultSkill="evaluation-builder" placeholder={operation === "cases"
+      {(readOnly || disabled) && <p role="status" className="eval-muted">{disabled ? "请先完成右侧编辑或导入。" : "当前为历史用例快照，可继续分析报告；修改用例请返回当前用例页。"}</p>}
+      <Composer viewDraft={viewDraft} key={objectId} defaultSkill="evaluation-builder" placeholder={operation === "cases"
         ? hasCases ? "描述你想修改或补充的评测用例…" : "描述业务场景，生成评测用例…"
-        : currentRun ? "针对当前报告提问，例如：哪些用例未通过？" : "描述你想了解的评测结果，例如：分析最新报告"} projectId={projectId} sessionId={session.id} working={session.status === "running"} onSubmit={submit} onAbort={() => { if (sessionId) sessionService.abort(sessionId) }} onCreateProject={() => void actions.createProject()} />
+        : currentRun ? "针对当前报告提问，例如：哪些用例未通过？" : "描述你想了解的评测结果，例如：对比最近两次报告"} projectId={projectId} sessionId={session.id} working={session.status === "running"} onSubmit={submit} onAbort={() => { if (sessionId) sessionService.abort(sessionId) }} onCreateProject={() => void actions.createProject()} />
     </SessionPromptDock>
   </section>
 }

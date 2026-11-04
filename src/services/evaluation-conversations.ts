@@ -5,7 +5,10 @@ import { caseValidation, evaluationObjectUnavailable, saveCases, useEvaluation, 
 
 export interface EvaluationConversation {
   repair?: { runId: string; focus: string; stage: "planned" | "completed"; summary: string }
+  /** 仅兼容旧记录，不再作为会话绑定依据。 */
   runId?: string
+  reportContext?: string[]
+  reportTurns?: { id: string; createdAt: number; prompt: string; source: string; reportIds: string[]; reports: ReturnType<typeof import('@/features/evaluation/report-context').reportEvidence>[]; response: string }[]
   session: Session
   objectId: string
   objectName: string

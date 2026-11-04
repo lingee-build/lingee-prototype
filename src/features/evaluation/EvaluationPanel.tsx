@@ -1,3 +1,5 @@
+import { db } from "@/mock/db"
+import type { Message } from "@/mock/types"
 import type { PromptDraft } from "@/features/prompt-input/PromptInput"
 import { useEditSession } from "@/features/dev-page/use-edit-session"
 import { reportRerunPrompt } from "./conversation-context"
@@ -104,6 +106,7 @@ export function EvaluationPanel({ objectId, name, heading, onEnvironmentChange }
   const requestedConversationId = searchParams.get("conversation") || undefined
   const conversations = useEvaluationConversations(s => s.items)
   const conversationRecord = requestedConversationId ? conversations[requestedConversationId] : undefined
+  // 评测入口开启新会话；仅显式历史会话链接恢复消息。
   const conversationId = conversationRecord?.objectId === objectId ? requestedConversationId : undefined
   function setConversation(id?: string) {
     setSearchParams(previous => { const next = new URLSearchParams(previous); if (id) next.set("conversation", id); else next.delete("conversation"); return next }, { replace: true })
@@ -124,12 +127,13 @@ export function EvaluationPanel({ objectId, name, heading, onEnvironmentChange }
   const resultId = searchParams.get("case") || undefined
   const reportRequested = searchParams.get("view") === "report"
   const section = historical || runId || resultId || reportRequested || ["runs", "reports"].includes(searchParams.get("tab") || "") ? "runs" : "cases"
-  const draftKey = `${objectId}:${historical ? "snapshot" : section}:${historicalRun?.id || runId || "list"}`
+  const draftKey = objectId
   if (!chatDrafts.current.has(draftKey)) chatDrafts.current.set(draftKey, {})
   const chatOpen = chatPreference ?? true
-  function openView(view: { section: "cases" | "runs" | "reports"; runId?: string; resultId?: string; report?: boolean }) {
+  function openView(view: { section: "cases" | "runs" | "reports"; runId?: string; resultId?: string; report?: boolean; conversationId?: string }) {
     const next = new URLSearchParams(searchParams)
     for (const key of ["tab", "run", "case", "view", "focusCase", "version", "scopeRun", "caseRun", "caseFrom"]) next.delete(key)
+    if (view.conversationId) next.set("conversation", view.conversationId)
     if (view.section !== "cases") next.set("tab", view.section)
     if (view.runId) {
       next.set("run", view.runId)
@@ -257,17 +261,39 @@ export function EvaluationPanel({ objectId, name, heading, onEnvironmentChange }
     if (list.some(item => !item)) throw new Error(tr("models.casesChanged"))
     const target = evaluationRepairObject(objectId)
     if (!target) throw new Error("评测对象不可用")
-    const existing = (setup.conversationSessionId ? useEvaluationConversations.getState().items[setup.conversationSessionId] : undefined) || (setup.original ? Object.values(useEvaluationConversations.getState().items).find(item => item.objectId === objectId && item.runId === setup.original?.id) : undefined)
+    const candidate = useEvaluationConversations.getState().items[setup.conversationSessionId || conversationId || ""]
+    const existing = candidate?.objectId === objectId ? candidate : undefined
     const session = existing?.session || await sessionService.create(target.projectId, `评测 ${name}`)
     const conversation = existing || { session, objectId, objectName: name, messages: [], request: "", rule: "", files: [], drafts: [], adopted: {} }
-    saveEvaluationConversation(conversation)
+    const scopeText = setup.original ? `报告 ${setup.original.code || setup.original.id} 保存的${tr(`models.${setup.scope}`)}` : tr(`models.${setup.scope}`)
+    const instruction = `请运行「${name}」的${scopeText}，共 ${list.length} 条用例。使用${setup.original ? "来源报告保存的" : "当前"}用例和最新已保存的对象内容，执行模型：${evaluationModelText(models.execution)}，判定模型：${evaluationModelText(models.judging)}。`
+    const message = (role: Message["role"], text: string): Message => ({ id: crypto.randomUUID(), sessionId: session.id, role, time: { created: Date.now(), completed: Date.now() }, parts: [{ id: crypto.randomUUID(), type: "text", text }] })
+    // 确认运行即提交一条用户指令；取消弹窗不会产生消息。
+    const userMessage = message("user", instruction)
+    const next = { ...conversation, messages: [...(useSync.getState().messages[session.id] || conversation.messages), userMessage] }
+    const publish = () => {
+      saveEvaluationConversation(next)
+      for (const item of next.messages) if (!db.messages.some(m => m.id === item.id)) db.messages.push(structuredClone(item))
+      useSync.getState().apply({ type: "session.updated", session })
+      useSync.setState(s => ({ messages: { ...s.messages, [session.id]: next.messages } }))
+    }
+    publish()
+    setChatPreference(true)
+    setConversation(session.id)
     const id = startRun(objectId, name, list as EvalCase[], currentEvaluationEnvironment, models, setup.original?.id, session.id)
-    if (!id) throw new Error(tr(useEvaluation.getState().error ? "models.storageFailed" : "models.startFailed"))
-    saveEvaluationConversation({ ...conversation, runId: id })
-    useSync.getState().apply({ type: "session.updated", session })
+    if (!id) {
+      next.messages = [...next.messages, message("assistant", "本次评测未能启动，请检查运行条件后重试。")]
+      publish()
+      throw new Error(tr(useEvaluation.getState().error ? "models.storageFailed" : "models.startFailed"))
+    }
+    const run = useEvaluation.getState().runs[objectId]?.find(r => r.id === id)
+    next.runId = undefined
+    next.reportContext = [id]
+    next.messages = [...next.messages, message("assistant", `已开始评测，共 ${list.length} 条用例，报告 ${run?.code || id}。可在右侧查看运行进度和评测结果。`)]
+    publish()
     setRunSetup(undefined)
     setRunPage(1)
-    openView({ section: "runs", runId: id })
+    openView({ section: "runs", runId: id, conversationId: session.id })
     } finally { startingRun.current = false }
   }
   function rerun(run: EvalRun, ids = run.results.map(c => c.id), scope = "rerunAll", conversationSessionId?: string) {
@@ -349,7 +375,7 @@ export function EvaluationPanel({ objectId, name, heading, onEnvironmentChange }
 
   return (
     <div ref={split.container} className="eval-workbench" data-chat-open={chatOpen || undefined} data-resizing={split.dragging || undefined} style={{ "--eval-chat-width": `${split.width}px` } as CSSProperties}>
-      {<EvaluationChat viewDraft={chatDrafts.current.get(draftKey)!} hidden={!chatOpen} objectId={objectId} name={name} key={draftKey} sessionId={section === "cases" ? (conversationRecord?.runId ? undefined : conversationId) : (current ? Object.values(conversations).find(c => c.objectId === objectId && c.runId === current.id)?.session.id || current.conversationId : undefined)} operation={section} currentRun={historicalRun || current} onSession={setConversation}
+      {<EvaluationChat viewDraft={chatDrafts.current.get(draftKey)!} hidden={!chatOpen} objectId={objectId} name={name} key={draftKey} sessionId={conversationId} operation={section} currentRun={historicalRun || current} onSession={setConversation}
         rerunRequest={rerunRequest?.runId === current?.id ? rerunRequest : undefined} onRerunConsumed={() => setRerunRequest(undefined)}
         onRepair={repair}
         readOnly={historical} disabled={!!(editorOpen && draft) || importOpen}
@@ -536,8 +562,8 @@ export function EvaluationPanel({ objectId, name, heading, onEnvironmentChange }
                 <div className="eval-row eval-run-row eval-report-card" key={run.id}>
                   <div className="eval-report-heading">
                     <button className="eval-title eval-list-name" onClick={e => { if (e.detail > 0 && hasSelectedText(e.currentTarget)) return; openView({ section: "runs", runId: run.id, report: !isActiveRun(run) }) }}>{run.code || runTitle(run.started)}</button>
-                    {run.id === runs.find(r => !isActiveRun(r))?.id && <span className="eval-report-latest">最新</span>}
                     <span className="eval-report-state">{status(run.status)}</span>
+                    {run.id === runs.find(r => !isActiveRun(r))?.id && <span className="eval-report-latest">最新</span>}
                   </div>
                   <Button variant="ghost" className="eval-report-primary" onClick={() => openView({ section: "runs", runId: run.id, report: !isActiveRun(run) })}>
                     {isActiveRun(run) ? "查看进度" : "查看报告"}

@@ -44,7 +44,7 @@ try {
     selection.setBaseAndExtent(window.savedEvidence, 1, window.savedEvidence, 7)
     window.refreshReport(true)
   })
-  await frame.locator(".conclusion-lead").filter({ hasText: "全部 2 条用例不通过" }).waitFor()
+  await frame.locator(".conclusion-lead").filter({ hasText: "通过率 0%" }).waitFor()
   assert.deepEqual(await check(), expected, "终态及插入工具证据不替换既有回复节点")
   assert.equal(await frame.locator('#case-0-round-0 [data-report-key="field-工具返回"] p').textContent(), "新增工具结果")
   await page.locator(".eval-report-metadata summary").focus()
