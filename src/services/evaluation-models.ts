@@ -14,8 +14,9 @@ export function evaluationExecutionDefault(catalog: readonly Model[]): string {
   return catalog[0]?.id ?? ""
 }
 
-export function initialEvaluationModelIds(defaults: EvalModelIds, _latest?: { models?: EvalRunModels }, _original?: { models?: EvalRunModels }): EvalModelIds {
-  // 每次发起默认取当前目录第一项；历史模型快照仅用于展示，不改变新运行默认值。
+export function initialEvaluationModelIds(defaults: EvalModelIds, _latest?: { models?: EvalRunModels }, original?: { models?: EvalRunModels }): EvalModelIds {
+  // 新运行使用默认值；重跑锁定来源报告，缺失记录不能回退默认模型。
+  if (original) return { execution: original.models?.execution.id || "", judging: original.models?.judging.id || "" }
   return { ...defaults }
 }
 
@@ -30,4 +31,10 @@ export function resolveEvaluationModels(ids: EvalModelIds, catalog: readonly Mod
 export function evaluationModelText(model?: EvalModelSnapshot, missing = "未记录") {
   if (!model) return missing
   return `${model.name}${model.version ? ` · ${model.version}` : ""}`
+}
+
+/** 重跑保留来源模型身份与版本；目录不可用时禁止静默替换。 */
+export function resolveRerunModels(original: EvalRunModels | undefined, catalog: readonly Model[]): EvalRunModels | undefined {
+  if (!original || ![original.execution, original.judging].every(saved => saved?.id && saved.name && saved.provider && catalog.some(model => model.id === saved.id && model.provider === saved.provider && model.version === saved.version))) return undefined
+  return structuredClone(original)
 }

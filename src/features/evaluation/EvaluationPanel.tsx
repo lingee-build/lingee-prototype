@@ -1,3 +1,4 @@
+import { useEditSession } from "@/features/dev-page/use-edit-session"
 import { reportRerunPrompt } from "./conversation-context"
 import { formatEvaluationTime as runTitle } from "./format-time"
 import { EvaluationSplitter, useEvaluationSplit } from "./EvaluationSplitter"
@@ -8,11 +9,11 @@ import { DatePicker } from "@/ui/date-picker/DatePicker"
 import { basicEvaluationSample, completeEvaluationSample } from "@/services/evaluation-samples"
 import { runPoints, pointsText, resumeRunPoints, updateAutomaticPoints } from "@/services/evaluation-points"
 import { devStore } from "@/mock/dev-store"
-import { evaluationRepairObject, repairDisabledReason } from "@/services/evaluation-repair"
+import { evaluationRepairObject, repairDisabledReason, repairPrompt, registerEvaluationRepair } from "@/services/evaluation-repair"
 import { EvaluationSelect } from "./EvaluationSelect"
 import { RunEvaluationDialog } from "./RunEvaluationDialog"
 import { ImportCases } from "./ImportCases"
-import { resolveEvaluationModels, defaultJudgingModelId, evaluationExecutionDefault, evaluationModelText, initialEvaluationModelIds, type EvalModelIds, type EvalRunModels } from "@/services/evaluation-models"
+import { resolveRerunModels, defaultJudgingModelId, evaluationExecutionDefault, evaluationModelText, initialEvaluationModelIds, type EvalModelIds, type EvalRunModels } from "@/services/evaluation-models"
 import { useBlocker, useSearchParams } from "react-router"
 import { EvaluationChat } from "./EvaluationChat"
 import { ControlledConfirmDialog } from "@/ui/dialog/ConfirmDialog"
@@ -29,7 +30,7 @@ import { Empty, SegmentedControl, BrandButton, Button, ConfirmDialog, Tooltip, D
 import { useT } from "@/i18n"
 import {
   turnsOf,
-  runCases, snapshotRunCases,
+  runCases, snapshotRunCases, caseVersionLabel,
   unsuccessfulRunResults,
   currentEvaluationEnvironment,
   environmentLabel,
@@ -70,13 +71,21 @@ const sources: Source[] = ["none", "tenant", "thirdParty", "personal"]
 export function EvaluationPanel({ objectId, name, heading, onEnvironmentChange }: { objectId: string; name: string; heading?: ReactNode; onEnvironmentChange?: (environment: EvalEnvironment | undefined) => void }) {
   const split = useEvaluationSplit()
   const [rerunRequest, setRerunRequest] = useState<{ runId: string; token: number; text: string }>()
-  const [repairRequest, setRepairRequest] = useState<{ runId: string; token: number }>()
-  const openingRepair = false
-  function repair(run: EvalRun) {
-    if (repairDisabledReason(objectId, run, !!evaluationRepairObject(objectId))) return
-    openView({ section: "runs", runId: run.id, report: true })
-    setChatPreference(true)
-    setRepairRequest({ runId: run.id, token: Date.now() })
+  const editSession = useEditSession()
+  const [openingRepair, setOpeningRepair] = useState(false)
+  const repairOpening = useRef(false)
+  async function repair(run: EvalRun) {
+    const target = evaluationRepairObject(objectId)
+    if (!target || repairOpening.current || repairDisabledReason(objectId, run, true)) return
+    repairOpening.current = true
+    setOpeningRepair(true)
+    try {
+      const draft = repairPrompt(objectId, run)
+      const session = await editSession({ title: `修复 ${name}`, draft, projectId: target.projectId, target: target.editTarget, requireProject: true })
+      if (!session) { setNotice("对象所属项目不可用，无法打开开发对话"); return }
+      registerEvaluationRepair(session, draft, { objectType: target.objectType, objectId: target.objectId, runId: run.id })
+    } catch (error) { setNotice(error instanceof Error ? error.message : "打开开发对话失败，请重试") }
+    finally { repairOpening.current = false; setOpeningRepair(false) }
   }
   const startingRun = useRef(false)
   const t = useT()
@@ -227,16 +236,19 @@ export function EvaluationPanel({ objectId, name, heading, onEnvironmentChange }
   function configureRun(list: EvalCase[], scope: string, original?: EvalRun, missingCount = 0, conversationSessionId?: string) {
     if (!list.length || busy) return
     const defaults = { execution: evaluationExecutionDefault(useSync.getState().models), judging: defaultJudgingModelId(useSync.getState().models) }
-    const setup = { cases: structuredClone(list), scope, original, defaults, missingCount, conversationSessionId, initial: initialEvaluationModelIds(defaults) }
-    const models = useSync.getState().ready && resolveEvaluationModels(setup.initial, useSync.getState().models)
-    if (models && (!original || conversationSessionId)) void begin(models, setup).catch(error => setNotice(error instanceof Error ? error.message : "启动失败，请重试"))
-    else setRunSetup(setup)
+    const setup = { cases: structuredClone(list), scope, original, defaults, missingCount, conversationSessionId, initial: initialEvaluationModelIds(defaults, undefined, original) }
+    setRunSetup(setup)
   }
   async function begin(models: EvalRunModels, setup = runSetup) {
     if (!setup || startingRun.current) return
     startingRun.current = true
     try {
     if (useEvaluation.getState().runs[objectId]?.some(isActiveRun)) throw new Error(tr("models.busy"))
+    if (setup.original) {
+      const locked = resolveRerunModels(setup.original.models, useSync.getState().models)
+      if (!locked) throw new Error("来源报告模型未记录或已不可用，请从当前用例新建运行")
+      models = locked
+    }
     const saved = useEvaluation.getState().cases[objectId] || []
     const list = setup.original ? setup.cases : setup.cases.map(item => saved.find(c => c.id === item.id))
     if (list.some(item => !item)) throw new Error(tr("models.casesChanged"))
@@ -336,9 +348,13 @@ export function EvaluationPanel({ objectId, name, heading, onEnvironmentChange }
     <div ref={split.container} className="eval-workbench" data-chat-open={chatOpen || undefined} data-resizing={split.dragging || undefined} style={{ "--eval-chat-width": `${split.width}px` } as CSSProperties}>
       {<EvaluationChat hidden={!chatOpen} objectId={objectId} name={name} key={`${objectId}:${section}:${current?.id || "cases"}`} sessionId={section === "cases" ? (conversationRecord?.runId ? undefined : conversationId) : (current ? Object.values(conversations).find(c => c.objectId === objectId && c.runId === current.id)?.session.id || current.conversationId : undefined)} operation={section} currentRun={historicalRun || current} onSession={setConversation}
         rerunRequest={rerunRequest?.runId === current?.id ? rerunRequest : undefined} onRerunConsumed={() => setRerunRequest(undefined)}
-        repairRequest={repairRequest?.runId === current?.id ? repairRequest?.token : undefined} onRepairConsumed={() => setRepairRequest(undefined)}
+        onRepair={repair}
         readOnly={historical} disabled={!!(editorOpen && draft) || importOpen}
-        onRerun={(run, ids, sessionId) => rerun(run, ids, "rerunAll", sessionId)} onLocate={(run, id) => openView({ section: "runs", runId: run.id, resultId: id })}
+        onRerun={(run, ids, sessionId) => {
+          const unsuccessful = unsuccessfulRunResults(run)
+          const scope = !ids ? "rerunAll" : ids.length === unsuccessful.length && unsuccessful.every(item => ids.includes(item.id)) ? "unsuccessful" : "selected"
+          rerun(run, ids, scope, sessionId)
+        }} onLocate={(run, id) => openView({ section: "runs", runId: run.id, resultId: id })}
         onReports={() => openView({ section: "reports" })} onRun={(all, ids, sessionId) => {
           const saved = useEvaluation.getState().cases[objectId] || []
           const scope = ids || (!all && selected.length ? selected : undefined)
@@ -349,8 +365,8 @@ export function EvaluationPanel({ objectId, name, heading, onEnvironmentChange }
       <header className="eval-panel-header"><SessionToggleButton collapsed={!chatOpen} onToggle={() => setChatPreference(!chatOpen)} />{heading || <span>{name}</span>}</header>
       {runSetup && <RunEvaluationDialog name={name} count={runSetup.cases.length} scope={tr(`models.${runSetup.scope}`)}
         breakdown={runSetup.original && runSetup.scope === "unsuccessful" ? `不通过 ${runSetup.original.results.filter(c => runSetup.cases.some(item => item.id === c.id) && verdictLabel(c) === "不通过").length} 条，无法判定 ${runSetup.original.results.filter(c => runSetup.cases.some(item => item.id === c.id) && verdictLabel(c) === "无法判定").length} 条` : undefined}
-        version={runSetup.original ? `报告 ${runSetup.original.code || runTitle(runSetup.original.started)} 的用例` : "当前用例"}
-        initial={runSetup.initial} defaults={runSetup.defaults} rerun={!!runSetup.original} missingCount={runSetup.missingCount}
+        version={runSetup.original ? `${caseVersionLabel(runSetup.original)} · 来源报告 ${runSetup.original.code || runTitle(runSetup.original.started)}` : "当前用例"}
+        originalModels={runSetup.original?.models} initial={runSetup.initial} defaults={runSetup.defaults} rerun={!!runSetup.original} missingCount={runSetup.missingCount}
         onClose={() => setRunSetup(undefined)} onStart={begin} />}
       <ControlledConfirmDialog open={blocker.state === "blocked"} title="放弃本次修改？" description="离开后，本次未保存的用例修改将被丢弃" confirmText="放弃并离开" cancelText="继续编辑" variant="danger"
         onConfirm={() => { if (blocker.state === "blocked") { setDraft(undefined); setImportOpen(false); blocker.proceed() } }}

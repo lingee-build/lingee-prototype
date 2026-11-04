@@ -57,12 +57,12 @@ test("运行持久化两个模型，重载与重跑不修改原运行或开发�
   expect(useEvaluation.getState().runs[key][0].models).toEqual(snapshot)
   const defaults = { execution: "execution-a", judging: "execution-a" }
   const ids = initialEvaluationModelIds(defaults, undefined, original)
-  expect(ids).toEqual(defaults)
+  expect(ids).toEqual(selected)
   saveCases(key, [{ ...sample, input: "最新输入" }])
   const { snapshotRunCases } = await import("../src/services/evaluation")
   startRun(key, "Skill", snapshotRunCases(original), "sandbox", resolveEvaluationModels(ids, catalog))
   const rerun = useEvaluation.getState().runs[key][0]
-  expect(rerun.models).toEqual(resolveEvaluationModels(defaults, catalog))
+  expect(rerun.models).toEqual(snapshot)
   expect(rerun.results[0].input).toBe("Request")
   expect(useEvaluation.getState().runs[key][1]).toEqual(original)
   expect(usePrompt.getState().modelId).toBe(conversationModel)

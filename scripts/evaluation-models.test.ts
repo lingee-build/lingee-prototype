@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { defaultJudgingModelId, evaluationExecutionDefault, evaluationModelText, initialEvaluationModelIds, resolveEvaluationModels } from "../src/services/evaluation-models"
+import { defaultJudgingModelId, evaluationExecutionDefault, evaluationModelText, initialEvaluationModelIds, resolveEvaluationModels, resolveRerunModels } from "../src/services/evaluation-models"
 import type { Model } from "../src/mock/types"
 
 const catalog: Model[] = [
@@ -8,14 +8,14 @@ const catalog: Model[] = [
 ]
 const defaults = { execution: "exec", judging: "judge" }
 
-test("每次新测和历史重跑均采用当前列表默认首项，不继承历史", () => {
+test("新测采用默认模型，重跑锁定来源报告且缺失记录不回退默认值", () => {
   const first = initialEvaluationModelIds(defaults)
   expect(first).toEqual(defaults)
   const original = { models: resolveEvaluationModels(defaults, catalog)! }
   const latest = { models: resolveEvaluationModels({ execution: "judge", judging: "exec" }, catalog)! }
   expect(initialEvaluationModelIds(defaults, latest)).toEqual(defaults)
   expect(initialEvaluationModelIds(defaults, latest, original)).toEqual(defaults)
-  expect(initialEvaluationModelIds(defaults, latest, {})).toEqual(defaults)
+  expect(initialEvaluationModelIds(defaults, latest, {})).toEqual({ execution: "", judging: "" })
   expect(defaults).toEqual({ execution: "exec", judging: "judge" })
 })
 
@@ -50,5 +50,19 @@ test("默认判定模型始终取列表首项，空列表不伪造模型", () =>
   expect(defaultJudgingModelId([{ ...first, id: "lingee-expert" }])).toBe("lingee-expert")
   const original = { models: resolveEvaluationModels(defaults, catalog)! }
   const updatedDefaults = { execution: first.id, judging: defaultJudgingModelId([first, deep, expert]) }
-  expect(initialEvaluationModelIds(updatedDefaults, undefined, original)).toEqual(updatedDefaults)
+  expect(initialEvaluationModelIds(updatedDefaults, undefined, original)).toEqual(defaults)
+})
+
+test("重跑保留模型快照，下线、供应方或版本变化时不可启动", () => {
+  const original = resolveEvaluationModels(defaults, catalog)!
+  const changedDefaults = { execution: "judge", judging: "exec" }
+  expect(initialEvaluationModelIds(changedDefaults, undefined, { models: original })).toEqual(defaults)
+  const resolved = resolveRerunModels(original, [...catalog].reverse())!
+  expect(resolved).toEqual(original)
+  resolved.execution.name = "不能改写来源"
+  expect(original.execution.name).toBe("执行 A")
+  expect(resolveRerunModels(undefined, catalog)).toBeUndefined()
+  expect(resolveRerunModels(original, catalog.slice(1))).toBeUndefined()
+  expect(resolveRerunModels(original, catalog.map(m => ({ ...m, version: "v2" })))).toBeUndefined()
+  expect(resolveRerunModels(original, catalog.map(m => ({ ...m, provider: "other" })))).toBeUndefined()
 })

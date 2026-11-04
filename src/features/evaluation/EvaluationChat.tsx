@@ -1,4 +1,3 @@
-import { respondToRepair } from "./conversation-repair"
 import { SessionPromptDock } from "@/pages/session/composer/SessionPromptDock"
 import { evaluationIntent, reportConversationText, reportRerunIds } from "./conversation-context"
 import { useEffect, useRef, useState } from "react"
@@ -17,9 +16,9 @@ import type { Session, SyncEvent } from "@/mock/types"
 import { respondToEvaluation } from "./conversation-response"
 
 /** 评测只绑定对象和右侧内容；消息、输入、附件、模型及流式反馈复用开发会话。 */
-export function EvaluationChat({ objectId, name, sessionId, operation, currentRun, rerunRequest, onRerunConsumed, repairRequest, onRepairConsumed, onSession, onRun, onRerun, onLocate, onViewRun, onReports, readOnly, disabled, hidden }: {
+export function EvaluationChat({ objectId, name, sessionId, operation, currentRun, rerunRequest, onRerunConsumed, onRepair, onSession, onRun, onRerun, onLocate, onViewRun, onReports, readOnly, disabled, hidden }: {
   rerunRequest?: { runId: string; token: number; text: string }; onRerunConsumed: () => void
-  repairRequest?: number; onRepairConsumed: () => void
+  onRepair: (run: EvalRun) => void | Promise<void>
   objectId: string; name: string; sessionId?: string; operation: "cases" | "runs"; currentRun?: EvalRun; onSession: (id?: string) => void
   onRerun: (run: EvalRun, ids?: string[], sessionId?: string) => void; onLocate: (run: EvalRun, id: string) => void
   onReports: () => void; onRun: (all: boolean, ids?: string[], sessionId?: string) => void; onViewRun: (run: EvalRun) => void; readOnly: boolean; disabled: boolean; hidden?: boolean
@@ -70,7 +69,7 @@ export function EvaluationChat({ objectId, name, sessionId, operation, currentRu
       if (referenceError) response = reply(referenceError)
       else if (intent === 'help') response = reply('本次未执行操作。可以查询进度、打开报告、停止运行、修复问题或重新运行；请明确要执行的操作。')
       else if (intent === 'repairStatus') response = reply(next.repair?.runId === reportRun?.id ? next.repair!.summary : '本次尚未发起修复，可以说“修复这次评测发现的问题”。')
-      else if (intent === 'repair' || intent === 'confirmRepair' || (next.repair?.stage === 'planned' && intent === 'cases')) response = reply(respondToRepair(next, reportRun, text, intent === 'confirmRepair'))
+      else if (intent === 'repair' || intent === 'confirmRepair' || (next.repair?.stage === 'planned' && intent === 'cases')) { response = reply('请在对象开发对话中查看修复方案，确认后再修改文件。'); if (reportRun) action = () => { void onRepair(reportRun) } }
       else if (intent === 'stop') {
         if (!reportRun) response = reply('请先选择要停止的运行。')
         else {
@@ -84,9 +83,9 @@ export function EvaluationChat({ objectId, name, sessionId, operation, currentRu
         if (busy) response = reply('当前有评测正在运行，请等待结束或先停止本次运行。')
         else if ((intent === 'rerun' || failedOnly) && !reportRun) response = reply('请先选择要重新运行的来源报告。')
         else if (ids && !ids.length) response = reply('所选范围没有可运行的用例，本次未新建运行。')
-        else if (reportRun) { response = reply('正在以本报告的用例和最新对象内容发起新运行，原报告保留。'); action = () => onRerun(reportRun, ids, active.id) }
+        else if (reportRun) { response = reply('请确认重跑范围、用例版本及来源报告模型；确认后使用最新对象内容运行，原报告保留。'); action = () => onRerun(reportRun, ids, active.id) }
         else if (!next.drafts.length) response = reply('当前没有用例，请先生成或导入。')
-        else { response = reply('正在启动评测；配置不完整时请补充右侧运行设置。'); action = () => onRun(/全部/.test(text), ids, active.id) }
+        else { response = reply('请在运行设置中选择执行模型和判定模型，确认后启动评测。'); action = () => onRun(/全部/.test(text), ids, active.id) }
       } else if (reportIntent) {
         if ((ordinal || codes.length) && !located) response = reply('本次报告中没有找到指定用例，请确认序号或编码。')
         else if (located && reportRun) {
@@ -137,13 +136,6 @@ export function EvaluationChat({ objectId, name, sessionId, operation, currentRu
     onRerunConsumed()
     void submit(rerunRequest.text).catch(() => {})
   }, [rerunRequest])
-  const consumedRepair = useRef<number | undefined>(undefined)
-  useEffect(() => {
-    if (!repairRequest || consumedRepair.current === repairRequest) return
-    consumedRepair.current = repairRequest
-    onRepairConsumed()
-    void submit('修复这次评测发现的问题').catch(() => {})
-  }, [repairRequest])
   return <section aria-hidden={hidden} inert={hidden} data-collapsed={hidden || undefined} className="eval-native-session @container" aria-label="开发会话">
     <div className="flex-1 min-h-0 overflow-hidden">
       <MessageTimeline session={session} messages={messages} />
