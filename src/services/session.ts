@@ -1,3 +1,4 @@
+import type { Scenario } from "@/mock/scenarios/types"
 import { useEvaluationRepairs } from "./evaluation-repair"
 import { useEvaluationConversations } from "./evaluation-conversations"
 import { db } from "@/mock/db"
@@ -45,7 +46,7 @@ export const sessionService = {
   },
 
   /** 发送一条用户消息，随后由回放引擎持续推送助手回复事件 */
-  prompt(sessionId: string, text: string, emit: (event: SyncEvent) => void, model?: string) {
+  prompt(sessionId: string, text: string, emit: (event: SyncEvent) => void, model?: string, scenario?: Scenario) {
     const now = Date.now()
     const message: Message = {
       id: uid("msg"),
@@ -59,7 +60,7 @@ export const sessionService = {
     if (session) session.time.updated = now
     emit({ type: "message.updated", message: structuredClone(message) })
     if (session) emit({ type: "session.updated", session: structuredClone(session) })
-    void runAssistantStream(sessionId, text, emit, model)
+    void runAssistantStream(sessionId, text, emit, model, scenario)
   },
 
   abort: abortStream,

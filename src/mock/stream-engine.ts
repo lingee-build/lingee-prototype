@@ -1,3 +1,4 @@
+import type { Scenario } from "./scenarios/types"
 import { conversationRepairScenario } from "./scenarios/evaluation-repair-dialog"
 import { evaluationRepairTarget } from "@/services/evaluation-repair"
 import { db } from "./db"
@@ -31,15 +32,15 @@ export function resumeStream(sessionId: string, value: string[][] | PermissionRe
  * 把剧本回放成一串事件：待办 → 推理 → 工具调用 → 提问 / 权限 → 正文逐字输出 → 产物卡片。
  * 事件形状与真实后端的 SSE 对齐，页面只认事件，不关心来源。
  */
-export async function runAssistantStream(sessionId: string, prompt: string, emit: Emit, model?: string) {
+export async function runAssistantStream(sessionId: string, prompt: string, emit: Emit, model?: string, override?: Scenario) {
   const run: Run = { controller: new AbortController() }
   runs.set(sessionId, run)
   const aborted = () => run.controller.signal.aborted
   const session = db.sessions.find(x => x.id === sessionId)
   const bound = evaluationRepairTarget(sessionId)
-  const scenario = session && !bound && /评测|报告/.test(prompt) && /修复|修改|改进/.test(prompt)
+  const scenario = override ?? (session && !bound && /评测|报告/.test(prompt) && /修复|修改|改进/.test(prompt)
     ? conversationRepairScenario(session, prompt)
-    : pickScenario({ prompt, repairTarget: bound, projectId: session?.projectId ?? "" })
+    : pickScenario({ prompt, repairTarget: bound, projectId: session?.projectId ?? "" }))
 
   const pause = (ms: number) => sleep(ms, run.controller.signal)
   const pacing = scenario.pacing
@@ -120,6 +121,10 @@ export async function runAssistantStream(sessionId: string, prompt: string, emit
       if (aborted()) break
       push({ ...part, state: "completed" })
     }
+    if (step.text && !aborted()) {
+      await typewrite({ id: uid("prt"), type: "text", text: "" }, step.text, pacing?.textChunk ?? 4, pacing?.textDelayMs ?? 24)
+      if (pacing) await pause(pacing.textHoldMs)
+    }
     if (step.question && !aborted()) {
       const tool: Part = { id: uid("prt"), type: "tool", tool: "question", title: step.question[0].question, state: "running" }
       push(tool)
@@ -129,10 +134,6 @@ export async function runAssistantStream(sessionId: string, prompt: string, emit
       emit({ type: "question.replied", sessionId })
       const summary = (answers ?? []).map((x) => x.join("、")).filter(Boolean)
       push({ ...tool, state: "completed", detail: summary.join("；") || "已跳过", output: summary.join("\n") || undefined, questionAnswers: step.question.map((question, i) => ({ question: question.question, answers: answers?.[i] ?? [] })) })
-    }
-    if (step.text && !aborted()) {
-      await typewrite({ id: uid("prt"), type: "text", text: "" }, step.text, pacing?.textChunk ?? 4, pacing?.textDelayMs ?? 24)
-      if (pacing) await pause(pacing.textHoldMs)
     }
     if (step.plan && !aborted()) push({ id: uid("prt"), type: "execution-plan", stages: step.plan })
     if (step.card && !aborted()) {

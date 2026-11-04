@@ -29,6 +29,7 @@ export function turnsOf(c: EvalCase): EvalTurn[] {
   return c.turns?.length ? c.turns : [{ id: c.id + "-turn", input: c.input, expected: c.expected, attachments: [], rules: [] }]
 }
 export interface EvalCase {
+  code?: string
   demoEvidence?: { turns: DemoTurnEvidence[]; overall: DemoJudgment[] }
   demoJudgingFailure?: "timeout" | "invalid"
   demoJudgingDelayMs?: number
@@ -81,7 +82,12 @@ export interface EvalResult extends EvalCase {
   evidence: string
   tool: string
 }
+export interface CaseSnapshot { version: string; capturedAt: number; cases: EvalCase[] }
 export interface EvalRun {
+  code?: string
+  conversationId?: string
+  caseSnapshot?: CaseSnapshot
+  sourceRunId?: string
   hardRuleStop?: boolean
   models?: EvalRunModels
   pointsQuery?: { status: PointsStatus; queriedAt?: number; valueComplete?: boolean; amount?: PointsAmount }
@@ -103,11 +109,56 @@ export interface EvalRun {
 export const deletingEvaluationObjects = new Set<string>()
 export const evaluationObjectUnavailable = (key: string) => deletingEvaluationObjects.has(key) || !!useEvaluation.getState().deletedObjects?.[key]
 interface State {
+  reportSequences?: Record<string, number>
+  caseCodes?: Record<string, Record<string, string>>
   deletedObjects?: Record<string, true>
   drafts: Record<string, EvalCase | undefined>
   cases: Record<string, EvalCase[]>
   runs: Record<string, EvalRun[]>
   error: boolean
+}
+/** 字段顺序不影响内容；用例顺序保留，运行结果字段不参与版本比较。 */
+export function caseContentKey(cases: EvalCase[]): string {
+  const canonical = (value: unknown): unknown => Array.isArray(value) ? value.map(canonical)
+    : value && typeof value === "object" ? Object.fromEntries(Object.entries(value).filter(([key, v]) => v !== undefined && key !== "outcome" && key !== "code").sort(([a], [b]) => a.localeCompare(b)).map(([key, v]) => [key, canonical(v)])) : value
+  return JSON.stringify(canonical(cases))
+}
+/** 内存中共享不可变快照，旧记录按内容合并，报告编号及结果不变。 */
+export function normalizeCaseVersions(runs: Record<string, EvalRun[]>): Record<string, EvalRun[]> {
+  return Object.fromEntries(Object.entries(runs).map(([key, records]) => {
+    const versions = new Map<string, CaseSnapshot>()
+    const snapshots = new Map<string, CaseSnapshot>()
+    for (const run of [...records].sort((a, b) => a.started - b.started || (Number(a.caseSnapshot?.version.slice(1)) || 0) - (Number(b.caseSnapshot?.version.slice(1)) || 0))) {
+      if (!run.caseSnapshot) continue
+      const content = caseContentKey(run.caseSnapshot.cases)
+      let snapshot = versions.get(content)
+      if (!snapshot) {
+        snapshot = { ...run.caseSnapshot, version: `V${versions.size + 1}` }
+        versions.set(content, snapshot)
+      }
+      snapshots.set(run.id, snapshot)
+    }
+    return [key, records.map(run => snapshots.has(run.id) ? { ...run, caseSnapshot: snapshots.get(run.id) } : run)]
+  }))
+}
+/** 持久化仅保存一份版本内容，运行通过引用关联；兼容旧的内嵌快照。 */
+export function packCaseVersions(runs: Record<string, EvalRun[]>) {
+  const snapshots: Record<string, CaseSnapshot> = {}
+  const packed = Object.fromEntries(Object.entries(runs).map(([key, records]) => [key, records.map(run => {
+    if (!run.caseSnapshot) return run
+    const ref = JSON.stringify([key, run.caseSnapshot.version])
+    snapshots[ref] = run.caseSnapshot
+    const { caseSnapshot: _snapshot, ...rest } = run
+    return { ...rest, caseSnapshotRef: ref }
+  })]))
+  return { runs: packed, snapshots }
+}
+export function unpackCaseVersions(runs: Record<string, EvalRun[]>, snapshots: Record<string, CaseSnapshot> = {}) {
+  const restored = Object.fromEntries(Object.entries(runs).map(([key, records]) => [key, records.map(record => {
+    const { caseSnapshotRef, ...run } = record as EvalRun & { caseSnapshotRef?: string }
+    return caseSnapshotRef && snapshots[caseSnapshotRef] ? { ...run, caseSnapshot: snapshots[caseSnapshotRef] } : run
+  })]))
+  return normalizeCaseVersions(restored)
 }
 let storageWriteSucceeded = true
 export const isActiveRun = (run: EvalRun) => ["running", "judging", "stopping", "stop_unconfirmed"].includes(run.status)
@@ -124,17 +175,43 @@ export function restorePointQueries(runs: State["runs"]): State["runs"] {
         roundResults: c.roundResults?.map(t => ({ ...t, pointsStatus: status })) })) }
   })]))
 }
+// 本地原型按用户要求一次性清空既有运行；新运行及当前用例继续保留。
+const localRunReset = "20261104-clear-runs-1"
+const isLocalPrototype = () => typeof window !== "undefined" && ["127.0.0.1", "localhost", "[::1]"].includes(window.location.hostname)
 export const useEvaluation = create<State>()(
   persist((): State => ({ drafts: {}, cases: {}, runs: {}, error: false }), {
     name: "lingee.evaluation.v1",
-    partialize: ({ cases, runs, drafts, deletedObjects }) => ({ cases, runs: restorePointQueries(runs), drafts, deletedObjects }),
+    partialize: ({ cases, runs, drafts, deletedObjects, caseCodes, reportSequences }) => ({ reportSequences, caseCodes, cases, ...packCaseVersions(restorePointQueries(runs)), drafts, deletedObjects }),
     storage: {
       getItem: (key) => {
         try {
           const value = localStorage.getItem(key)
           if (!value) return null
           const saved = JSON.parse(value)
-          if (saved.state?.runs) saved.state.runs = restorePointQueries(saved.state.runs)
+          if (isLocalPrototype() && saved.localRunReset !== localRunReset) {
+            saved.state = { ...saved.state, runs: {}, snapshots: {} }
+            saved.localRunReset = localRunReset
+            localStorage.setItem(key, JSON.stringify(saved))
+          }
+          if (saved.state?.runs) saved.state.runs = restorePointQueries(unpackCaseVersions(saved.state.runs, saved.state.snapshots))
+          if (saved.state) {
+            const state = saved.state as State
+            state.caseCodes ||= {}
+            state.reportSequences ||= {}
+            for (const key of new Set([...Object.keys(state.cases || {}), ...Object.keys(state.runs || {})])) {
+              const registry = state.caseCodes[key] ||= {}
+              let sequence = Math.max(state.reportSequences[key] || 0, ...(state.runs[key] || []).map(r => Number(r.code?.slice(3)) || 0))
+              for (const run of [...(state.runs[key] || [])].sort((a, b) => a.started - b.started)) {
+                run.code ||= `ER-${String(++sequence).padStart(4, "0")}`
+              }
+              state.reportSequences[key] = sequence
+              for (const run of [...(state.runs[key] || [])].reverse()) {
+                if (run.caseSnapshot) run.caseSnapshot.cases = assignCaseCodes(run.caseSnapshot.cases, registry)
+                run.results = assignCaseCodes(run.results, registry)
+              }
+              if (state.cases[key]) state.cases[key] = assignCaseCodes(state.cases[key], registry)
+            }
+          }
           return saved
         } catch {
           return null
@@ -142,7 +219,7 @@ export const useEvaluation = create<State>()(
       },
       setItem: (key, value) => {
         try {
-          localStorage.setItem(key, JSON.stringify(value))
+          localStorage.setItem(key, JSON.stringify(isLocalPrototype() ? { ...value, localRunReset } : value))
           storageWriteSucceeded = true
         } catch {
           storageWriteSucceeded = false
@@ -155,12 +232,22 @@ export const useEvaluation = create<State>()(
     },
   }),
 )
+/** 注册表保留已删除 ID，确保编码不会被重新分配。导入携带的编码不作为分配依据。 */
+export function assignCaseCodes<T extends EvalCase>(cases: T[], registry: Record<string, string>): T[] {
+  let sequence = Math.max(0, ...Object.values(registry).map(code => Number(code.slice(3)) || 0))
+  return cases.map(item => {
+    registry[item.id] ||= `EC-${String(++sequence).padStart(4, "0")}`
+    return { ...item, code: registry[item.id] }
+  })
+}
 export function saveCases(key: string, cases: EvalCase[]) {
   if (evaluationObjectUnavailable(key)) return false
-  const previous = useEvaluation.getState().cases
-  useEvaluation.setState((s) => ({ cases: { ...s.cases, [key]: cases } }))
+  const previous = useEvaluation.getState()
+  const registry = { ...previous.caseCodes?.[key] }
+  const assigned = assignCaseCodes(cases, registry)
+  useEvaluation.setState(s => ({ cases: { ...s.cases, [key]: assigned }, caseCodes: { ...s.caseCodes, [key]: registry } }))
   if (!storageWriteSucceeded) {
-    useEvaluation.setState({ cases: previous, error: true })
+    useEvaluation.setState({ cases: previous.cases, caseCodes: previous.caseCodes, error: true })
     return false
   }
   useEvaluation.setState({ error: false })
@@ -169,16 +256,53 @@ export function saveCases(key: string, cases: EvalCase[]) {
 export function failedRunResults(run: EvalRun) {
   return run.results.filter(c => verdictLabel(c) === "不通过")
 }
-export function latestRunCases(key: string, run: EvalRun, resultIds = run.results.map(c => c.id)) {
-  const latest = useEvaluation.getState().cases[key] || []
-  const ids = new Set(resultIds)
-  return { cases: latest.filter(c => ids.has(c.id)), missing: run.results.filter(c => ids.has(c.id) && !latest.some(item => item.id === c.id)) }
+/** 重跑未通过的终态用例；修复仍使用 failedRunResults。 */
+export function unsuccessfulRunResults(run: EvalRun) {
+  return run.results.filter(c => ["不通过", "无法判定"].includes(verdictLabel(c)))
 }
-export function startRun(key: string, name: string, cases: EvalCase[], environment: EvalEnvironment = currentEvaluationEnvironment, models?: EvalRunModels) {
+/** 历史结果保留了输入字段；旧记录可查看，但不虚构版本编号。 */
+export function runCases(run: EvalRun): EvalCase[] {
+  return structuredClone((run.caseSnapshot ? run.results.flatMap(result => run.caseSnapshot!.cases.filter(c => c.id === result.id)) : undefined) ?? run.results.map(c => ({
+    id: c.id, code: c.code, businessId: c.businessId, name: c.name, input: c.input, expected: c.expected,
+    source: c.source, outcome: c.outcome, turns: c.turns, attachments: c.attachments, checks: c.checks,
+    demo: c.demo, demoEvidence: c.demoEvidence, demoFailure: c.demoFailure,
+    demoJudgingFailure: c.demoJudgingFailure, demoJudgingDelayMs: c.demoJudgingDelayMs,
+  })))
+}
+export function caseVersionLabel(run: EvalRun) {
+  return run.caseSnapshot?.version ?? `历史快照 · ${new Date(run.started).toLocaleString("zh-CN")}`
+}
+export function snapshotRunCases(run: EvalRun, ids = run.results.map(c => c.id)) {
+  return runCases(run).filter(c => ids.includes(c.id))
+}
+/** 只展示当前会话发起的运行；旧运行不推断归属。 */
+export function latestConversationRun(runs: EvalRun[], conversationId?: string) {
+  return conversationId ? runs.find(run => run.conversationId === conversationId) : undefined
+}
+export function startRun(key: string, name: string, cases: EvalCase[], environment: EvalEnvironment = currentEvaluationEnvironment, models?: EvalRunModels, sourceRunId?: string, conversationId?: string) {
   if (evaluationObjectUnavailable(key) || environment !== "sandbox" || !cases.length || useEvaluation.getState().runs[key]?.some(isActiveRun)) return undefined
   if (models && [models.execution, models.judging].some(model => !model?.id?.trim() || !model.name?.trim() || !model.provider?.trim())) return undefined
+  const registry = { ...useEvaluation.getState().caseCodes?.[key] }
+  cases = assignCaseCodes(cases, registry)
+  useEvaluation.setState(s => ({ caseCodes: { ...s.caseCodes, [key]: registry } }))
+  const previous = useEvaluation.getState().runs
+  const records = normalizeCaseVersions({ [key]: previous[key] || [] })[key]
+  const source = sourceRunId ? records.find(run => run.id === sourceRunId) : undefined
+  if (sourceRunId && !source) return undefined
+  const candidate = assignCaseCodes(source?.caseSnapshot?.cases ?? (source ? runCases(source) : useEvaluation.getState().cases[key] || cases), registry)
+  // 调用方提供的实际范围必须与所选版本内容一致。
+  const fullCases = cases.every(c => candidate.some(saved => saved.id === c.id && caseContentKey([saved]) === caseContentKey([c]))) ? candidate : cases
+  if (source && fullCases === cases && caseContentKey(cases) !== caseContentKey(candidate.filter(c => cases.some(item => item.id === c.id)))) return undefined
+  const content = caseContentKey(fullCases)
+  const existing = records.find(run => run.caseSnapshot && caseContentKey(run.caseSnapshot.cases) === content)?.caseSnapshot
+  const snapshot = existing ?? { version: `V${Math.max(0, ...records.map(run => Number(run.caseSnapshot?.version.slice(1)) || 0)) + 1}`, capturedAt: Date.now(), cases: structuredClone(fullCases) }
+  const sequence = Math.max(useEvaluation.getState().reportSequences?.[key] || 0, ...records.map(r => Number(r.code?.slice(3)) || 0)) + 1
   const run: EvalRun = {
+    code: `ER-${String(sequence).padStart(4, "0")}`,
     id: crypto.randomUUID(),
+    caseSnapshot: snapshot,
+    sourceRunId,
+    conversationId,
     ...(models ? { models: structuredClone(models) } : {}),
     environment,
     objectType: key.startsWith("agent:") ? "agent" : "skill",
@@ -190,8 +314,7 @@ export function startRun(key: string, name: string, cases: EvalCase[], environme
     status: "running",
     results: cases.map((c) => ({ ...structuredClone(c), timing: {}, overallJudgingPoints: c.demo ? 0 : undefined, verdict: undefined, execution: undefined, checkResults: undefined, roundResults: structuredClone(turnsOf(c)).map((turn, i) => ({ ...turn, points: c.demo ? { execution: 0, judging: 0 } : undefined, checkResults: undefined, expected: i && turn.inherit ? turnsOf(c)[0].expected : turn.expected, status: "pending", responseRecorded: false, response: "", evidence: "", clarification: "" })), status: "pending", responseRecorded: false, response: "", evidence: "", tool: "" })),
   }
-  const previous = useEvaluation.getState().runs
-  useEvaluation.setState((s) => ({ runs: { ...s.runs, [key]: [run, ...(s.runs[key] || [])] } }))
+  useEvaluation.setState((s) => ({ reportSequences: { ...s.reportSequences, [key]: sequence }, runs: { ...s.runs, [key]: [run, ...records] } }))
   if (!storageWriteSucceeded) {
     useEvaluation.setState({ runs: previous, error: true })
     return undefined

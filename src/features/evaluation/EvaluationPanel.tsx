@@ -1,31 +1,36 @@
+import { reportRerunPrompt } from "./conversation-context"
+import { formatEvaluationTime as runTitle } from "./format-time"
+import { EvaluationSplitter, useEvaluationSplit } from "./EvaluationSplitter"
+import { sessionService } from "@/services/session"
+import { saveEvaluationConversation, useEvaluationConversations } from "@/services/evaluation-conversations"
+import { SessionToggleButton } from "@/features/side-panel/SessionToggleButton"
 import { DatePicker } from "@/ui/date-picker/DatePicker"
 import { basicEvaluationSample, completeEvaluationSample } from "@/services/evaluation-samples"
 import { runPoints, pointsText, resumeRunPoints, updateAutomaticPoints } from "@/services/evaluation-points"
-import { useEditSession } from "@/features/dev-page/use-edit-session"
 import { devStore } from "@/mock/dev-store"
-import { evaluationRepairObject, repairPrompt, repairDisabledReason, registerEvaluationRepair } from "@/services/evaluation-repair"
+import { evaluationRepairObject, repairDisabledReason } from "@/services/evaluation-repair"
 import { EvaluationSelect } from "./EvaluationSelect"
 import { RunEvaluationDialog } from "./RunEvaluationDialog"
 import { ImportCases } from "./ImportCases"
-import { defaultJudgingModelId, evaluationExecutionDefault, evaluationModelText, initialEvaluationModelIds, type EvalModelIds, type EvalRunModels } from "@/services/evaluation-models"
-import { useBlocker, useNavigate, useSearchParams } from "react-router"
+import { resolveEvaluationModels, defaultJudgingModelId, evaluationExecutionDefault, evaluationModelText, initialEvaluationModelIds, type EvalModelIds, type EvalRunModels } from "@/services/evaluation-models"
+import { useBlocker, useSearchParams } from "react-router"
+import { EvaluationChat } from "./EvaluationChat"
 import { ControlledConfirmDialog } from "@/ui/dialog/ConfirmDialog"
 import { useSync } from "@/stores/sync"
 import { CaseDetail } from "./CaseDetail"
 import { CaseEditor } from "./CaseEditor"
-import { RoundResults } from "./RoundResults"
-import { RunPointsSummary } from "./RunPointsSummary"
+
 import { EvaluationDuration, useEvaluationClock } from "./EvaluationDuration"
 import { caseDuration, caseDurationNote, runDuration, runDurationNote } from "@/services/evaluation-duration"
 import { ReportPreview } from "./ReportPreview"
 import { buildReportDocument } from "./report-document"
-import { useEffect, useState } from "react"
-import { Empty, SegmentedControl, BrandButton, Button, IconButton, ConfirmDialog, Tooltip, DropdownMenu, Icon, useDialog } from "@/ui"
-import { useT, useLocaleStore } from "@/i18n"
+import { useEffect, useMemo, useRef, useState, type ReactNode, type CSSProperties } from "react"
+import { Empty, SegmentedControl, BrandButton, Button, ConfirmDialog, Tooltip, DropdownMenu, Icon, useDialog } from "@/ui"
+import { useT } from "@/i18n"
 import {
   turnsOf,
-  latestRunCases,
-  failedRunResults,
+  runCases, snapshotRunCases,
+  unsuccessfulRunResults,
   currentEvaluationEnvironment,
   environmentLabel,
   type EvalEnvironment,
@@ -55,37 +60,64 @@ export function EvaluationLabel() {
     </span>
   )
 }
+/** 导出文件名使用无非法字符的时间编码。 */
+function runFileTime(time: number) {
+  const value = new Date(time)
+  const pad = (part: number, width = 2) => String(part).padStart(width, "0")
+  return `${pad(value.getFullYear(), 4)}${pad(value.getMonth() + 1)}${pad(value.getDate())}-${pad(value.getHours())}${pad(value.getMinutes())}${pad(value.getSeconds())}-${pad(value.getMilliseconds(), 3)}`
+}
 const sources: Source[] = ["none", "tenant", "thirdParty", "personal"]
-export function EvaluationPanel({ objectId, name, onEnvironmentChange, onDetailChange }: { objectId: string; name: string; onEnvironmentChange?: (environment: EvalEnvironment | undefined) => void; onDetailChange?: (detail: boolean) => void }) {
-  const editSession = useEditSession()
-  const [openingRepair, setOpeningRepair] = useState(false)
-  async function repair(run: EvalRun, resultId?: string) {
-    const target = evaluationRepairObject(objectId)
-    const draft = repairPrompt(objectId, run, resultId)
-    if (!target || !draft || openingRepair || repairDisabledReason(objectId, run, !!target, resultId)) return
-    setOpeningRepair(true)
-    try {
-      const session = await editSession({ title: `修复评测问题 · ${name}`, draft, projectId: target.projectId, requireProject: true, target: target.editTarget })
-      if (session) registerEvaluationRepair(session, draft, { objectType: target.objectType, objectId: target.objectId, runId: run.id, resultId })
-      else setNotice("评测对象所属项目不存在或不可用，请恢复所属项目后重试")
-    } catch { setNotice(`无法打开${objectId.startsWith("agent:") ? "智能体" : "技能"}开发会话，请重试`) }
-    finally { setOpeningRepair(false) }
+export function EvaluationPanel({ objectId, name, heading, onEnvironmentChange }: { objectId: string; name: string; heading?: ReactNode; onEnvironmentChange?: (environment: EvalEnvironment | undefined) => void }) {
+  const split = useEvaluationSplit()
+  const [rerunRequest, setRerunRequest] = useState<{ runId: string; token: number; text: string }>()
+  const [repairRequest, setRepairRequest] = useState<{ runId: string; token: number }>()
+  const openingRepair = false
+  function repair(run: EvalRun) {
+    if (repairDisabledReason(objectId, run, !!evaluationRepairObject(objectId))) return
+    openView({ section: "runs", runId: run.id, report: true })
+    setChatPreference(true)
+    setRepairRequest({ runId: run.id, token: Date.now() })
   }
+  const startingRun = useRef(false)
   const t = useT()
-  const locale = useLocaleStore((s) => s.locale)
   const state = useEvaluation()
   const dialog = useDialog()
-  const cases = state.cases[objectId] || []
+  const currentCases = state.cases[objectId] || []
   const runs = state.runs[objectId] || []
   const [searchParams, setSearchParams] = useSearchParams()
+  const versionId = searchParams.get("caseRun") || searchParams.get("version")
+  const historicalRun = runs.find(r => r.id === versionId)
+  const historical = !!versionId
+  const cases = historicalRun ? runCases(historicalRun) : historical ? [] : currentCases
+  const [chatPreference, setChatPreference] = useState<boolean>()
+  const requestedConversationId = searchParams.get("conversation") || undefined
+  const conversations = useEvaluationConversations(s => s.items)
+  const conversationRecord = requestedConversationId ? conversations[requestedConversationId] : undefined
+  const conversationId = conversationRecord?.objectId === objectId ? requestedConversationId : undefined
+  function setConversation(id?: string) {
+    setSearchParams(previous => { const next = new URLSearchParams(previous); if (id) next.set("conversation", id); else next.delete("conversation"); return next }, { replace: true })
+  }
+  function viewRunCases(id: string, origin: "list" | "report" | "run") {
+    setCaseSearch(""); setCasePage(1); setSelected([])
+    const next = new URLSearchParams(searchParams)
+    for (const key of ["run", "case", "view", "version", "scopeRun", "caseRun", "caseFrom"]) next.delete(key)
+    next.set("tab", "reports"); next.set("caseRun", id); next.set("caseFrom", origin)
+    setSearchParams(next)
+  }
+  const baseline = useMemo(() => {
+    const map = new Map<string, EvalCase>()
+    for (const run of runs) for (const c of runCases(run)) if (!map.has(c.id)) map.set(c.id, c)
+    return map
+  }, [runs])
   const runId = searchParams.get("run") || undefined
   const resultId = searchParams.get("case") || undefined
-  const reportHome = searchParams.get("tab") === "reports" && !runId
-  const reportRequested = searchParams.get("view") === "report" || reportHome
-  const section = runId || resultId || reportRequested || searchParams.get("tab") === "runs" ? "runs" : "cases"
+  const reportRequested = searchParams.get("view") === "report"
+  const section = historical || runId || resultId || reportRequested || ["runs", "reports"].includes(searchParams.get("tab") || "") ? "runs" : "cases"
+  const chatOpen = chatPreference ?? (section === "cases" || !!runId)
   function openView(view: { section: "cases" | "runs" | "reports"; runId?: string; resultId?: string; report?: boolean }) {
     const next = new URLSearchParams(searchParams)
-    for (const key of ["tab", "run", "case", "view", "focusCase"]) next.delete(key)
+    for (const key of ["tab", "run", "case", "view", "focusCase", "version", "scopeRun", "caseRun", "caseFrom"]) next.delete(key)
+    setChatPreference(undefined)
     if (view.section !== "cases") next.set("tab", view.section)
     if (view.runId) {
       next.set("run", view.runId)
@@ -129,27 +161,13 @@ export function EvaluationPanel({ objectId, name, onEnvironmentChange, onDetailC
   const [caseSearch, setCaseSearch] = useState("")
   const [casePage, setCasePage] = useState(1)
   const casePageSize = 10
-  const filteredCases = cases.filter(c => c.name.toLocaleLowerCase().includes(caseSearch.trim().toLocaleLowerCase()))
+  const filteredCases = cases.filter(c => `${c.code || ""} ${c.name}`.toLocaleLowerCase().includes(caseSearch.trim().toLocaleLowerCase()))
   const casePageCount = Math.max(1, Math.ceil(filteredCases.length / casePageSize))
   const currentCasePage = Math.min(casePage, casePageCount)
   const visibleCases = filteredCases.slice((currentCasePage - 1) * casePageSize, currentCasePage * casePageSize)
   const [selected, setSelected] = useState<string[]>([])
-  const [runSetup, setRunSetup] = useState<{ cases: EvalCase[]; scope: string; original?: EvalRun; initial: EvalModelIds; defaults: EvalModelIds; missingCount: number }>()
-  const [locatedCase, setLocatedCase] = useState<{ id: string }>()
-  useEffect(() => {
-    if (!locatedCase) return
-    const timer = setTimeout(() => setLocatedCase(undefined), 3000)
-    return () => clearTimeout(timer)
-  }, [locatedCase])
-  const navigate = useNavigate()
-  const startGeneration = () => {
-    const target = objectId.startsWith("skill:") ? devStore.skills.find(s => `skill:${s.id}` === objectId) : devStore.agents.find(a => `agent:${a.id}` === objectId)
-    const project = useSync.getState().projects.find(p => p.id === target?.projectId)
-    if (!project) { setNotice("评测对象所属项目不存在或不可用，请先恢复所属项目后重试"); return }
-    navigate(`/p/${project.id}/session?evaluation=${encodeURIComponent(objectId)}`)
-  }
-  const [viewCaseId, setViewCaseId] = useState<string>()
-  const viewCase = cases.find(c => c.id === viewCaseId)
+  const [runSetup, setRunSetup] = useState<{ cases: EvalCase[]; scope: string; original?: EvalRun; initial: EvalModelIds; defaults: EvalModelIds; missingCount: number; conversationSessionId?: string }>()
+  const [expandedCases, setExpandedCases] = useState<string[]>([])
   const [importOpen, setImportOpen] = useState(false)
   const [editorOpen, setEditorOpen] = useState(false)
   const draft = state.drafts[objectId]
@@ -159,41 +177,40 @@ export function EvaluationPanel({ objectId, name, onEnvironmentChange, onDetailC
   }
   const [notice, updateNotice] = useState({ text: "", transient: false })
   function setNotice(text: string, transient = false) { updateNotice({ text, transient }) }
+  function hasSelectedText(element: HTMLElement) {
+    const selection = window.getSelection()
+    return !!selection && !selection.isCollapsed && !!selection.toString()
+      && (element.contains(selection.anchorNode) || element.contains(selection.focusNode))
+  }
+  function caseMeta(c: EvalCase, changed = "") {
+    return <span className="eval-case-meta eval-muted">
+      {c.code && <><span className="eval-case-code">{c.code}</span><span aria-hidden="true">·</span></>}
+      <span>{turnsOf(c).length} 轮对话{changed}</span>
+    </span>
+  }
   useEffect(() => {
     if (!notice.text || !notice.transient) return
     const timer = setTimeout(() => updateNotice({ text: "", transient: false }), 3000)
     return () => clearTimeout(timer)
   }, [notice])
-  const current = reportHome ? runs.find(r => !isActiveRun(r)) : runs.find((r) => r.id === runId)
+  const current = runs.find((r) => r.id === runId)
   const focusCase = searchParams.get("focusCase")
-  useEffect(() => {
-    if (!focusCase || !current || resultId || reportRequested) return
-    const row = document.getElementById(`eval-case-result-${focusCase}`)
-    if (row) {
-      setLocatedCase({ id: focusCase })
-      row.scrollIntoView({ block: "center", behavior: "instant" })
-      row.focus({ preventScroll: true })
-    }
-  }, [focusCase, current?.id, resultId, reportRequested])
   useEffect(() => {
     for (const run of useEvaluation.getState().runs[objectId] || []) resumeRunPoints(objectId, run.id)
     void updateAutomaticPoints()
   }, [objectId, runId])
-  const report = reportRequested && !!current && !isActiveRun(current)
-  const durationNow = useEvaluationClock(section === "runs" && !report && (current ? isActiveRun(current) : visibleRuns.some(isActiveRun)))
+  const report = !!current
+  const durationNow = useEvaluationClock(section === "runs" && (current ? isActiveRun(current) : visibleRuns.some(isActiveRun)))
   useEffect(() => { onEnvironmentChange?.(section === "runs" && current ? current.environment : currentEvaluationEnvironment) }, [section, current?.id, current?.environment, onEnvironmentChange])
-  const detailOpen = section === "cases" ? !!viewCase || !!(editorOpen && draft) : !!current
-  useEffect(() => { onDetailChange?.(detailOpen); return () => onDetailChange?.(false) }, [detailOpen, onDetailChange])
   const result = current?.results.find((c) => c.id === resultId)
-  const locationError = !runId && !reportHome && (resultId || reportRequested) ? "详情链接缺少运行编号，请返回运行记录列表。"
-    : runId && !current ? "指定运行记录不存在或已不可访问，请返回运行记录列表。"
-    : resultId && !result ? "本次运行中不存在指定用例结果，请返回本次运行。"
+  const locationError = historical && !historicalRun ? "该次评测记录不存在，请通过“评测报告”页签重新选择。" : !runId && (resultId || reportRequested) ? "详情链接缺少运行编号，请通过“评测报告”页签查看运行记录。"
+    : runId && !current ? "指定运行记录不存在或已不可访问，请通过“评测报告”页签查看运行记录。"
+    : resultId && !result ? "本次运行中不存在指定用例结果，请通过“评测报告”页签重新选择报告。"
     : ""
-  const repairReason = openingRepair ? "正在打开开发会话" : current ? repairDisabledReason(objectId, current, !!evaluationRepairObject(objectId), result?.id) : ""
+  const repairReason = openingRepair ? "正在打开开发会话" : current ? repairDisabledReason(objectId, current, !!evaluationRepairObject(objectId)) : ""
   const selectedCases = cases.filter((c) => selected.includes(c.id))
   const selectedOutsideSearch = selectedCases.filter(c => !filteredCases.some(item => item.id === c.id)).length
-  const selectedOnOtherPages = selectedCases.filter(c => filteredCases.some(item => item.id === c.id) && !visibleCases.some(item => item.id === c.id)).length
-  const selectionDetails = [selectedOutsideSearch && `搜索结果外 ${selectedOutsideSearch} 条`, selectedOnOtherPages && `其他页 ${selectedOnOtherPages} 条`].filter(Boolean).join("，")
+  const selectionDetails = selectedOutsideSearch ? `搜索结果外 ${selectedOutsideSearch} 条` : ""
   const savedDraft = draft ? cases.find((c) => c.id === draft.id) : undefined
   const draftChanged = !!draft && (savedDraft ? JSON.stringify(draft) !== JSON.stringify(savedDraft) : !!(draft.checks?.length || draft.name.trim() || turnsOf(draft).some(t => t.input.trim() || t.checks?.length || t.expected.trim() || t.attachments.length || t.rules.length) || draft.attachments?.length))
   const unsaved = (editorOpen && draftChanged) || importOpen
@@ -201,40 +218,46 @@ export function EvaluationPanel({ objectId, name, onEnvironmentChange, onDetailC
   const activeRun = runs.find(isActiveRun)
   const busy = !!activeRun
   const tr = (key: string) => t(`proto.eval.${key}`)
-  const date = (time: number) =>
-    new Intl.DateTimeFormat(locale === "zh" ? "zh-CN" : "en-US", { dateStyle: "short", timeStyle: "medium" }).format(time)
   useEffect(() => {
     if (!unsaved) return
     const handler = (event: BeforeUnloadEvent) => event.preventDefault()
     window.addEventListener("beforeunload", handler)
     return () => window.removeEventListener("beforeunload", handler)
   }, [unsaved])
-  function configureRun(list: EvalCase[], scope: string, original?: EvalRun, missingCount = 0) {
+  function configureRun(list: EvalCase[], scope: string, original?: EvalRun, missingCount = 0, conversationSessionId?: string) {
     if (!list.length || busy) return
     const defaults = { execution: evaluationExecutionDefault(useSync.getState().models), judging: defaultJudgingModelId(useSync.getState().models) }
-    const latest = runs.find(run => run.models)
-    setRunSetup({ cases: list, scope, original, defaults, missingCount, initial: initialEvaluationModelIds(defaults, latest, original) })
+    const setup = { cases: structuredClone(list), scope, original, defaults, missingCount, conversationSessionId, initial: initialEvaluationModelIds(defaults) }
+    const models = useSync.getState().ready && resolveEvaluationModels(setup.initial, useSync.getState().models)
+    if (models && (!original || conversationSessionId)) void begin(models, setup).catch(error => setNotice(error instanceof Error ? error.message : "启动失败，请重试"))
+    else setRunSetup(setup)
   }
-  function begin(models: EvalRunModels) {
-    if (!runSetup) return
+  async function begin(models: EvalRunModels, setup = runSetup) {
+    if (!setup || startingRun.current) return
+    startingRun.current = true
+    try {
     if (useEvaluation.getState().runs[objectId]?.some(isActiveRun)) throw new Error(tr("models.busy"))
     const saved = useEvaluation.getState().cases[objectId] || []
-    const list = runSetup.cases.map(item => saved.find(c => c.id === item.id))
+    const list = setup.original ? setup.cases : setup.cases.map(item => saved.find(c => c.id === item.id))
     if (list.some(item => !item)) throw new Error(tr("models.casesChanged"))
-    const id = startRun(objectId, name, list as EvalCase[], currentEvaluationEnvironment, models)
+    const target = evaluationRepairObject(objectId)
+    if (!target) throw new Error("评测对象不可用")
+    const existing = (setup.conversationSessionId ? useEvaluationConversations.getState().items[setup.conversationSessionId] : undefined) || (setup.original ? Object.values(useEvaluationConversations.getState().items).find(item => item.objectId === objectId && item.runId === setup.original?.id) : undefined)
+    const session = existing?.session || await sessionService.create(target.projectId, `评测 ${name}`)
+    const conversation = existing || { session, objectId, objectName: name, messages: [], request: "", rule: "", files: [], drafts: [], adopted: {} }
+    saveEvaluationConversation(conversation)
+    const id = startRun(objectId, name, list as EvalCase[], currentEvaluationEnvironment, models, setup.original?.id, session.id)
     if (!id) throw new Error(tr(useEvaluation.getState().error ? "models.storageFailed" : "models.startFailed"))
+    saveEvaluationConversation({ ...conversation, runId: id })
+    useSync.getState().apply({ type: "session.updated", session })
     setRunSetup(undefined)
     setRunPage(1)
     openView({ section: "runs", runId: id })
+    } finally { startingRun.current = false }
   }
-  function rerun(run: EvalRun, ids = run.results.map(c => c.id), scope = "rerunAll") {
+  function rerun(run: EvalRun, ids = run.results.map(c => c.id), scope = "rerunAll", conversationSessionId?: string) {
     if (!ids.length || busy) return
-    const latest = latestRunCases(objectId, run, ids)
-    if (!latest.cases.length) {
-      dialog.show(() => <ConfirmDialog title="无法重新运行" description="所选范围内的用例已全部删除，请返回用例列表选择用例" confirmText="返回用例列表" cancelText="取消" onConfirm={() => openView({ section: "cases" })} />)
-      return
-    }
-    configureRun(latest.cases, scope, run, latest.missing.length)
+    configureRun(snapshotRunCases(run, ids), scope, run, 0, conversationSessionId)
   }
   function removeCases(ids: string[]) {
     dialog.show(() => <ConfirmDialog title={ids.length > 1 ? `删除所选 ${ids.length} 条用例？` : "删除这条用例？"}
@@ -264,7 +287,7 @@ export function EvaluationPanel({ objectId, name, onEnvironmentChange, onDetailC
     const url = URL.createObjectURL(new Blob([content], { type: "text/html;charset=utf-8" }))
     const a = document.createElement("a")
     a.href = url
-    a.download = `评测报告-${run.id}.html`
+    a.download = `${run.name.replace(/[\\/:*?"<>|\x00-\x1f]/g, "_")}-评测报告-${run.code || runFileTime(run.started)}.html`
     a.click()
     setTimeout(() => URL.revokeObjectURL(url), 1000)
   }
@@ -273,37 +296,60 @@ export function EvaluationPanel({ objectId, name, onEnvironmentChange, onDetailC
       {tr(value)}
     </span>
   )
+  function requestRerun(run: EvalRun, unsuccessful = false) {
+    if (busy || rerunRequest) return
+    openView({ section: "runs", runId: run.id, report: true })
+    setChatPreference(true)
+    setRerunRequest({ runId: run.id, token: Date.now(), text: reportRerunPrompt(run, unsuccessful) })
+  }
+  function rerunMenu(run: EvalRun, primary = false, outlined = false) {
+    const unsuccessful = unsuccessfulRunResults(run)
+    const label = <>重新运行 <Icon name="chevron-down" size="small" /></>
+    return <DropdownMenu placement="bottom-end">
+      <DropdownMenu.Trigger asChild>
+        {primary ? <BrandButton variant="primary" disabled={busy}>{label}</BrandButton> : <Button variant={outlined ? "secondary" : "ghost"} disabled={busy}>{label}</Button>}
+      </DropdownMenu.Trigger>
+      <DropdownMenu.Portal><DropdownMenu.Content>
+        <DropdownMenu.Item onSelect={() => requestRerun(run)}>本次全部用例（{run.results.length}）</DropdownMenu.Item>
+        <DropdownMenu.Item disabled={!unsuccessful.length} onSelect={() => requestRerun(run, true)}>不通过及无法判定用例（{unsuccessful.length}）</DropdownMenu.Item>
+      </DropdownMenu.Content></DropdownMenu.Portal>
+    </DropdownMenu>
+  }
   const currentActions = current && (
-                <div className="eval-actions">
-                  {!result && <Tooltip value={repairReason || "携带失败证据进入原对象开发对话，检查修改后手动复测"}>
+                <div className="eval-actions eval-current-actions">
+                  {report && <Button variant="secondary" onClick={() => viewRunCases(current.id, "report")}>查看用例</Button>}
+                  {<Tooltip value={repairReason || "先分析问题与修复方案，确认后修改原对象，再手动复测"}>
                     <Button variant="secondary" className="eval-repair-action" aria-disabled={!!repairReason} onClick={() => { if (!repairReason) void repair(current) }}>修复问题</Button>
                   </Tooltip>}
                   {isActiveRun(current) ? (
                     <Button variant="secondary" disabled={["stopping", "stop_unconfirmed"].includes(current.status)} onClick={() => requestCancelRun(objectId, current.id)}>{["stopping", "stop_unconfirmed"].includes(current.status) ? "停止处理中…" : tr("stop")}</Button>
                   ) : (
                     <>
-                      {report ? <Button variant="secondary" onClick={() => exportReport(current)}>下载报告</Button> : <Button variant="secondary"
-                        onClick={() => openView({ section: "runs", runId: current.id, report: true })}
-                      >
-                        {tr("report")}
-                      </Button>}
-                      {!result && <DropdownMenu placement="bottom-end">
-                        <DropdownMenu.Trigger asChild>
-                          <BrandButton variant="primary" disabled={busy} title={busy ? "当前对象有活动评测，请等待结束" : "选择范围，使用最新已保存内容运行"}>重新运行 <Icon name="chevron-down" size="small" /></BrandButton>
-                        </DropdownMenu.Trigger>
-                        <DropdownMenu.Portal><DropdownMenu.Content>
-                          <DropdownMenu.Item onSelect={() => rerun(current)}>本次全部用例（{current.results.length}）</DropdownMenu.Item>
-                          <DropdownMenu.Item disabled={!failedRunResults(current).length} onSelect={() => rerun(current, failedRunResults(current).map(c => c.id), "failed")}>不通过用例（{failedRunResults(current).length}）</DropdownMenu.Item>
-                        </DropdownMenu.Content></DropdownMenu.Portal>
-                      </DropdownMenu>}
+                      <Button variant="secondary" onClick={() => exportReport(current)}>下载报告</Button>
+                      {rerunMenu(current, true)}
                     </>
                   )}
                 </div>
   )
 
   return (
+    <div ref={split.container} className="eval-workbench" data-chat-open={chatOpen || undefined} data-resizing={split.dragging || undefined} style={{ "--eval-chat-width": `${split.width}px` } as CSSProperties}>
+      {<EvaluationChat hidden={!chatOpen} objectId={objectId} name={name} key={`${objectId}:${section}:${current?.id || "cases"}`} sessionId={section === "cases" ? (conversationRecord?.runId ? undefined : conversationId) : (current ? Object.values(conversations).find(c => c.objectId === objectId && c.runId === current.id)?.session.id || current.conversationId : undefined)} operation={section} currentRun={historicalRun || current} onSession={setConversation}
+        rerunRequest={rerunRequest?.runId === current?.id ? rerunRequest : undefined} onRerunConsumed={() => setRerunRequest(undefined)}
+        repairRequest={repairRequest?.runId === current?.id ? repairRequest?.token : undefined} onRepairConsumed={() => setRepairRequest(undefined)}
+        readOnly={historical} disabled={!!(editorOpen && draft) || importOpen}
+        onRerun={(run, ids, sessionId) => rerun(run, ids, "rerunAll", sessionId)} onLocate={(run, id) => openView({ section: "runs", runId: run.id, resultId: id })}
+        onReports={() => openView({ section: "reports" })} onRun={(all, ids, sessionId) => {
+          const saved = useEvaluation.getState().cases[objectId] || []
+          const scope = ids || (!all && selected.length ? selected : undefined)
+          configureRun(scope ? saved.filter(c => scope.includes(c.id)) : saved, scope ? "selected" : "all", undefined, 0, sessionId)
+        }} onViewRun={run => openView({ section: "runs", runId: run.id, report: !isActiveRun(run) })} />}
+    {chatOpen && <EvaluationSplitter {...split.splitter} />}
     <section className="eval-panel" data-view={section} aria-label={tr("title")}>
+      <header className="eval-panel-header"><SessionToggleButton collapsed={!chatOpen} onToggle={() => setChatPreference(!chatOpen)} />{heading || <span>{name}</span>}</header>
       {runSetup && <RunEvaluationDialog name={name} count={runSetup.cases.length} scope={tr(`models.${runSetup.scope}`)}
+        breakdown={runSetup.original && runSetup.scope === "unsuccessful" ? `不通过 ${runSetup.original.results.filter(c => runSetup.cases.some(item => item.id === c.id) && verdictLabel(c) === "不通过").length} 条，无法判定 ${runSetup.original.results.filter(c => runSetup.cases.some(item => item.id === c.id) && verdictLabel(c) === "无法判定").length} 条` : undefined}
+        version={runSetup.original ? `报告 ${runSetup.original.code || runTitle(runSetup.original.started)} 的用例` : "当前用例"}
         initial={runSetup.initial} defaults={runSetup.defaults} rerun={!!runSetup.original} missingCount={runSetup.missingCount}
         onClose={() => setRunSetup(undefined)} onStart={begin} />}
       <ControlledConfirmDialog open={blocker.state === "blocked"} title="放弃本次修改？" description="离开后，本次未保存的用例修改将被丢弃" confirmText="放弃并离开" cancelText="继续编辑" variant="danger"
@@ -313,8 +359,21 @@ export function EvaluationPanel({ objectId, name, onEnvironmentChange, onDetailC
       <div aria-live="polite" className="eval-muted">
         {notice.text}
       </div>
+          <nav className="eval-tabs light-segmented" aria-label={tr("title")}>
+            <SegmentedControl
+              value={section}
+              onChange={value => {
+                if (!unsaved) { setDraft(undefined); setImportOpen(false) }
+                openView({ section: value === "runs" ? "reports" : "cases" })
+              }}
+              items={["cases", "runs"].map(value => ({
+                value,
+                label: `${value === "cases" ? "评测用例" : "评测报告"} (${value === "cases" ? currentCases.length : runs.length})`,
+              }))}
+            />
+          </nav>
       {importOpen ? <ImportCases objectId={objectId} close={() => { setImportOpen(false); setNotice("导入已结束，请查看用例列表", true) }} /> : locationError ? (
-        <div className="eval-empty"><p role="alert">{locationError}</p><Button variant="ghost" onClick={() => openView({ section: "runs", runId: current?.id })}>{current ? "返回本次运行" : "返回运行记录"}</Button></div>
+        <div className="eval-empty"><p role="alert">{locationError}</p></div>
       ) : editorOpen && draft && section === "cases" ? (
         <CaseEditor draft={draft} update={setDraft} editing={!!savedDraft} cancel={() => {
           if (!draftChanged) { setDraft(undefined); return }
@@ -323,42 +382,35 @@ export function EvaluationPanel({ objectId, name, onEnvironmentChange, onDetailC
           if (!saveCases(objectId, savedDraft ? cases.map(c => c.id === value.id ? value : c) : [...cases, value])) return
           setDraft(undefined); setNotice(tr("saved"), true)
         }} />
-      ) : viewCase && section === "cases" ? (
-        <CaseDetail value={viewCase} back={() => setViewCaseId(undefined)} edit={() => {
-          setDraft(draft?.id === viewCase.id ? draft : structuredClone(viewCase))
-        }} />
       ) : (
         <>
-          <nav className="eval-tabs light-segmented" aria-label={tr("title")}>
-            <SegmentedControl
-              value={section}
-              onChange={value => openView({ section: value === "runs" ? "reports" : "cases" })}
-              items={["cases", "runs"].map(value => ({
-                value,
-                label: `${value === "cases" ? "评测用例" : "评测报告"} (${value === "cases" ? cases.length : runs.length})`,
-              }))}
-            />
-          </nav>
-          {section === "runs" && <div className="eval-toolbar eval-report-switcher">
-            {reportHome ? <strong>最新报告</strong> : report ? <div className="eval-actions"><Button variant="ghost" onClick={() => openView({ section: "runs" })}>返回历史报告</Button><span>历史报告</span></div> : <strong>历史报告</strong>}
-            <div className="eval-actions"><Button variant="ghost" onClick={() => openView({ section: reportHome ? "runs" : "reports" })}>{reportHome ? "查看历史报告" : "最新报告"}</Button>
+          {section === "runs" && !historical && activeRun && current?.id !== activeRun.id && <div className="eval-toolbar eval-report-switcher">
+            <div className="eval-actions">
             {activeRun && <Button variant="secondary" onClick={() => openView({ section: "runs", runId: activeRun.id })}>查看当前任务进度</Button>}</div>
           </div>}
-          {reportHome && !current && <div className="eval-empty"><p>暂无已结束的评测报告</p><Button onClick={() => openView({ section: "cases" })}>准备并运行用例</Button></div>}
-          {section === "cases" && (
+          {(section === "cases" || historical) && (
             <div className="eval-case-list">
-              {!!cases.length && <><div className="eval-toolbar eval-case-toolbar">
-                  <input className="eval-case-search" type="search" aria-label="搜索用例名称" placeholder="搜索用例名称" value={caseSearch}
-                    onChange={e => { setCaseSearch(e.target.value); setCasePage(1) }} />
+              {historicalRun && <Button variant="ghost" className="eval-return-report" onClick={() => {
+                const origin = searchParams.get("caseFrom")
+                openView(origin === "report" || origin === "run"
+                  ? { section: "reports", runId: historicalRun.id, report: origin === "report" }
+                  : { section: "reports" })
+              }}><Icon name="arrow-left" size="small" />{["report", "run"].includes(searchParams.get("caseFrom") || "") ? `返回报告 ${historicalRun.code || runTitle(historicalRun.started)}` : "返回报告列表"}</Button>}
+              {historical && <div className="eval-toolbar"><h3>本次评测用例（{cases.length}）</h3></div>}
+              <div className="eval-case-controls" data-current={!historical || undefined}>
+              {!!cases.length && !historical && <div className="eval-toolbar eval-case-toolbar">
                 <div className="eval-actions eval-case-toolbar-actions">
-                  <div className="eval-actions eval-case-create-actions"><Button variant="secondary" onClick={startGeneration}>AI生成</Button>
+                  <div className="eval-actions eval-case-create-actions">
                   <Button variant="secondary" onClick={() => setImportOpen(true)}>导入用例</Button>
                   </div>
                   <BrandButton variant="primary" disabled={!busy && !cases.length} onClick={() => { if (activeRun) openView({ section: "runs", runId: activeRun.id }); else configureRun(selectedCases.length ? selectedCases : cases, selectedCases.length ? "selected" : "all") }}>
                     {busy ? "查看当前运行" : selectedCases.length ? `运行选中（${selectedCases.length}）` : `运行全部（${cases.length}）`}
                   </BrandButton>
                 </div>
+              </div>}
+              {!!cases.length && !historical && <input className="eval-case-search" type="search" aria-label="搜索用例名称或编码" placeholder="搜索用例名称或编码" value={caseSearch} onChange={e => { setCaseSearch(e.target.value); setCasePage(1) }} />}
               </div>
+              {!!cases.length && !historical && <>
                   <div className="eval-selection-bar"><label className="eval-check">
                     <input
                       type="checkbox"
@@ -375,32 +427,44 @@ export function EvaluationPanel({ objectId, name, onEnvironmentChange, onDetailC
               </>}{caseSearch.trim() && !!cases.length && !selectedCases.length && !busy && <p className="eval-muted">运行范围包含搜索结果之外的用例，共 {cases.length} 条。</p>}
               {filteredCases.length ? (
                 <>
-                  {visibleCases.map((c) => (
-                    <div className="eval-row" key={c.id}>
-                      <label className="eval-check">
+                  {visibleCases.map((c) => historical ? (
+                    <details className="eval-history-case" key={`${historicalRun?.id}:${c.id}`}>
+                      <summary onClick={e => { if (e.detail > 0 && hasSelectedText(e.currentTarget)) e.preventDefault() }}>
+                        <Icon name="chevron-down-16" size="small" />
+                        <span className="eval-grow"><span className="eval-title eval-case-name" title={c.name}>{c.name}</span>{caseMeta(c)}</span>
+                      </summary>
+                      <div className="eval-history-content"><CaseDetail value={c} embedded /></div>
+                    </details>
+                  ) : (
+                    <div className="eval-current-case" key={c.id}><div className="eval-row">
+                      {!historical && <label className="eval-check">
                         <input
                           type="checkbox"
                           aria-label={`${tr("select")} ${c.name}`}
                           checked={selected.includes(c.id)}
                           onChange={(e) => setSelected(e.target.checked ? [...selected, c.id] : selected.filter((id) => id !== c.id))}
                         />
-                      </label>
+                      </label>}
                       <div className="eval-grow">
-                        <button type="button" className="eval-list-name eval-title" onClick={() => setViewCaseId(c.id)}>{c.name}</button>
-                        <p className="eval-muted">{turnsOf(c).length} 轮对话</p>
+                        <button type="button" className="eval-list-name eval-title eval-case-toggle" aria-expanded={expandedCases.includes(c.id)} aria-controls={`case-content-${c.id}`} onClick={e => { if (e.detail > 0 && hasSelectedText(e.currentTarget)) return; setExpandedCases(ids => ids.includes(c.id) ? ids.filter(id => id !== c.id) : [...ids, c.id]) }}><Icon name="chevron-down-16" size="small" /><span className="eval-case-name" title={c.name}>{c.name}</span></button>
+                        <div className="eval-current-meta">{caseMeta(c, (() => { const previous = baseline.get(c.id); return !previous ? " · 新增" : JSON.stringify(previous) !== JSON.stringify(c) ? " · 已修改" : "" })())}</div>
                       </div>
-                      <Button variant="ghost" onClick={() => setDraft(draft?.id === c.id ? draft : { ...c })}>{tr("edit")}</Button>
-                      <Button variant="ghost" className="eval-danger-action" onClick={() => removeCases([c.id])}>{tr("delete")}</Button>
+                      {!historical && <><Button variant="ghost" onClick={() => setDraft(draft?.id === c.id ? draft : structuredClone(c))}>{tr("edit")}</Button>
+                      <Button variant="ghost" className="eval-danger-action" onClick={() => removeCases([c.id])}>{tr("delete")}</Button></>}
+                    </div>
+                    {expandedCases.includes(c.id) && <div id={`case-content-${c.id}`} className="eval-history-content"><CaseDetail value={c} embedded /></div>}
                     </div>
                   ))}
                 </>
               ) : (
                 <div className="eval-empty">
-                  <Empty description={cases.length ? "未找到匹配的用例" : "还没有评测用例"} />
-                  {!cases.length && <div className="eval-actions eval-empty-actions">
-                    <BrandButton variant="primary" onClick={startGeneration}>AI生成</BrandButton>
-                    <Button variant="secondary" onClick={() => setImportOpen(true)}>导入用例</Button>
-                  </div>}
+                  {!cases.length && !historical ? <>
+                    <Empty description="" />
+                    <p className="eval-empty-description">在左侧对话中描述具体要求，AI 会帮你生成评测用例；也可以导入已有用例。</p>
+                    <div className="eval-actions eval-empty-actions">
+                      <Button variant="secondary" onClick={() => setImportOpen(true)}>导入用例</Button>
+                    </div>
+                  </> : <Empty description={cases.length ? "未找到匹配的用例" : "还没有评测用例"} />}
                 </div>
               )}
 
@@ -412,21 +476,17 @@ export function EvaluationPanel({ objectId, name, onEnvironmentChange, onDetailC
                   <Button variant="ghost" disabled={currentCasePage === casePageCount} onClick={() => setCasePage(currentCasePage + 1)}>下一页</Button>
                 </div>
               </nav>}
-              <details className="eval-prototype-tools" aria-label="原型辅助">
+              {!historical && <details className="eval-prototype-tools" aria-label="原型辅助">
                 <summary>原型演示工具</summary>
                 <Tooltip value="用于演示，不纳入正式功能"><Button variant="ghost" className="eval-prototype-action" onClick={samples}>
                   {tr("samples")}（仅原型）
                 </Button></Tooltip>
-              </details>
+              </details>}
             </div>
           )}
-          {section === "runs" && !current && !reportHome && (
+          {section === "runs" && !historical && !current && (
             <>
               <div className="eval-date-filter" role="group" aria-label="运行记录筛选">
-                <EvaluationSelect id="eval-run-range" title="按运行开始时间筛选" label="运行开始时间" value={runRangePreset} onChange={applyRunRange} options={[
-                  { value: "all", label: "全部时间" }, { value: "today", label: "今天" }, { value: "yesterday", label: "昨天" },
-                  { value: "7", label: "最近 7 天" }, { value: "30", label: "最近 30 天" }, { value: "custom", label: "自定义" },
-                ]} />
                 <EvaluationSelect id="eval-run-status" title="按运行状态筛选" label="运行状态" value={runStatusFilter}
                   onChange={value => { setRunStatusFilter(value); setRunPage(1) }}
                   options={[
@@ -436,6 +496,10 @@ export function EvaluationPanel({ objectId, name, onEnvironmentChange, onDetailC
                     { value: "cancelled", label: "已停止" },
                     { value: "abnormal", label: "异常" },
                   ]} />
+                <EvaluationSelect id="eval-run-range" title="按运行开始时间筛选" label="运行开始时间" value={runRangePreset} onChange={applyRunRange} options={[
+                  { value: "all", label: "全部时间" }, { value: "today", label: "今天" }, { value: "yesterday", label: "昨天" },
+                  { value: "7", label: "最近 7 天" }, { value: "30", label: "最近 30 天" }, { value: "custom", label: "自定义" },
+                ]} />
                 {runRangePreset === "custom" ? <div className="eval-custom-date-range">
                 <DatePicker label="开始日期" value={runStartDate} max={runEndDate || undefined} onChange={value => { setRunStartDate(value); setRunPage(1) }} />
                 <span className="eval-muted">至</span>
@@ -450,22 +514,37 @@ export function EvaluationPanel({ objectId, name, onEnvironmentChange, onDetailC
                 </div>
               )}
               {visibleRuns.map((run) => (
-                <div className="eval-row eval-run-row" key={run.id}>
-                  <div className="eval-grow">
-                    <button className="eval-title eval-list-name" onClick={() => openView({ section: "runs", runId: run.id, report: !isActiveRun(run) })}>{date(run.started)}</button>
-                    <p className="eval-muted eval-meta-line">
-                      <span>{run.results.length} {tr("caseUnit")} · {run.results.filter((c) => verdictLabel(c) === "通过").length} {tr("passed")} · {run.results.filter(c => verdictLabel(c) === "不通过").length} 不通过 · {run.results.filter(c => verdictLabel(c) === "无法判定").length} 无法判定</span>
-                      <span>{pointsText(runPoints(run))}</span>
-                      <EvaluationDuration label="耗时" value={runDuration(run, durationNow)} note={runDurationNote} />
-                    </p>
+                <div className="eval-row eval-run-row eval-report-card" key={run.id}>
+                  <div className="eval-report-heading">
+                    <button className="eval-title eval-list-name" onClick={e => { if (e.detail > 0 && hasSelectedText(e.currentTarget)) return; openView({ section: "runs", runId: run.id, report: !isActiveRun(run) }) }}>{run.code || runTitle(run.started)}</button>
+                    {run.id === runs.find(r => !isActiveRun(r))?.id && <span className="eval-report-latest">最新</span>}
+                    <span className="eval-report-state">{status(run.status)}</span>
                   </div>
-                  <div className="eval-run-actions">
-                  {status(run.status)}
-                  <Button variant="ghost"
-                    onClick={() => openView({ section: "runs", runId: run.id, report: !isActiveRun(run) })}
-                  >
-                    {tr("view")}
+                  <Button variant="ghost" className="eval-report-primary" onClick={() => openView({ section: "runs", runId: run.id, report: !isActiveRun(run) })}>
+                    {isActiveRun(run) ? "查看进度" : "查看报告"}
                   </Button>
+                  <div className="eval-report-metrics">
+                    <span><strong>{run.results.length}</strong> 条用例</span>
+                    {(["通过", "不通过", "无法判定"] as const).map(label => {
+                      const count = run.results.filter(c => verdictLabel(c) === label).length
+                      return <span key={label} className={count ? label === "不通过" ? "eval-metric-failed" : label === "无法判定" ? "eval-metric-unknown" : "" : "eval-metric-zero"}>{label} <strong>{count}</strong></span>
+                    })}
+                  </div>
+                  <div className="eval-muted eval-report-metadata">
+                    <span>{runTitle(run.started)}</span>
+                    <EvaluationDuration label="耗时" value={runDuration(run, durationNow)} note={runDurationNote} />
+                    <span>{pointsText(runPoints(run))}</span>
+                  </div>
+                  <div className="eval-run-actions eval-report-secondary">
+                  <Button variant="ghost" onClick={() => viewRunCases(run.id, "list")}>查看用例</Button>
+                  {!isActiveRun(run) && rerunMenu(run)}
+                  {(() => {
+                    const reason = openingRepair ? "正在打开开发会话" : repairDisabledReason(objectId, run, !!evaluationRepairObject(objectId))
+                    return <Tooltip value={reason || "先分析问题与修复方案，确认后修改原对象，再手动复测"}>
+                      <Button variant="ghost" className="eval-repair-action" aria-disabled={!!reason} onClick={() => { if (!reason) void repair(run) }}>修复问题</Button>
+                    </Tooltip>
+                  })()}
+
                   </div>
                 </div>
               ))}
@@ -481,110 +560,13 @@ export function EvaluationPanel({ objectId, name, onEnvironmentChange, onDetailC
           )}
           {current && section === "runs" && (
             <>
-              <div className="eval-toolbar" hidden={report}>
-                {!reportHome && <IconButton icon="arrow-left" variant="ghost" className="!text-[var(--text-weak)]" iconClass="!text-[var(--text-weak)]"
-                  aria-label={resultId || reportRequested ? "返回本次运行" : "返回运行记录"} title={resultId || reportRequested ? "返回本次运行" : "返回运行记录"}
-                  onClick={() => openView({ section: "runs", runId: resultId || (reportRequested && !reportHome) ? current.id : undefined })}
-                />}
-                {!report && currentActions}
-              </div>
-              {reportRequested && isActiveRun(current) && <p role="status">评测尚未结束，暂不能查看最终报告；当前显示本次运行进度。</p>}
-              {!report && <div className="eval-summary">
-                <div className="eval-toolbar" style={{ margin: 0 }}>
-                  <h3>{date(current.started)}</h3>
-                  <div className="eval-actions">
-                    {status(current.status)}
-                  </div>
-                </div>
-                {current.status === "judging" && <p role="status">业务执行已结束，正在完成标准判定；判定结束前不能重跑或下载最终报告。</p>}
-                {current.status === "stopping" && <p role="status">正在停止执行与判定任务，保留已有证据；确认停止前不能重跑。</p>}
-                {current.stopReason && <p role="status">{current.status === "cancelled" ? "已确认运行停止。" : current.stopReason}</p>}
-                <details className="eval-muted"><summary>运行信息</summary><p>评测时的{current.objectType === "agent" ? "智能体" : "技能"}版本：{current.objectContentSummary || "未记录"}</p>
-                  <p>{tr("models.execution")}：{evaluationModelText(current.models?.execution, tr("models.unrecorded"))}</p>
-                  <p>{tr("models.judging")}：{evaluationModelText(current.models?.judging, tr("models.unrecorded"))}</p>
-                  <p>运行编号：{current.id}</p></details>
-                <p className="eval-muted">{current.objectType === "agent" ? "智能体" : current.objectType === "skill" ? "技能" : "评测对象"} · {current.name} · {environmentLabel(current.environment)}</p>
-                <RunPointsSummary key={current.id} objectId={objectId} run={current} duration={<EvaluationDuration label="耗时" value={runDuration(current, durationNow)} note={runDurationNote} />} />
-                <div className="eval-counts">
-                  {["通过", "不通过", "无法判定"].map((s) => (
-                    <span key={s}>
-                      <strong>{current.results.filter((c) => verdictLabel(c) === s).length}</strong>
-                      {s}
-                    </span>
-                  ))}
-                </div>
-                {!result && current.results.length > 0 && (
-                  <div>
-                    <p aria-live="polite">
-                      {finishedCaseCount(current)} / {current.results.length}{" "}
-                      {tr("completedCases")}
-                    </p>
-                    <nav className="eval-case-progress" aria-label="用例运行进度">
-                      {current.results.map((c, index) => {
-                        const label = ["pending", "running", "cancelled", "skipped"].includes(c.status) ? executionLabel(c) : verdictLabel(c)
-                        const color = ["pending", "running", "cancelled", "skipped"].includes(c.status) ? c.status : c.verdict || (c.status === "blocked" ? "unknown" : c.status)
-                        return <Tooltip key={c.id} className="eval-progress-segment" value={`${c.name} · ${label}`}>
-                          <button type="button" className="eval-progress-link" data-status={color}
-                            aria-label={`定位第 ${index + 1} 条用例：${c.name}，${label}`}
-                            onClick={() => {
-                              setLocatedCase({ id: c.id })
-                              const row = document.getElementById(`eval-case-result-${c.id}`)
-                              row?.scrollIntoView({ block: "center", behavior: "instant" })
-                              row?.focus({ preventScroll: true })
-                            }}><span aria-hidden="true" /></button>
-                        </Tooltip>
-                      })}
-                    </nav>
-                  </div>
-                )}
-              </div>}
-              {report && !isActiveRun(current) && <ReportPreview html={buildReportDocument(current, t)} actions={currentActions} />}
-              {!report && !result &&
-                current.results.map((c) => (
-                  <div key={c.id} id={`eval-case-result-${c.id}`} tabIndex={-1} data-located={locatedCase?.id === c.id || undefined} className="eval-row eval-result-row">
-                    <div className="eval-grow">
-                      <button
-                        className="eval-title"
-                        onClick={() => openView({ section: "runs", runId: current.id, resultId: c.id })}
-                      >
-                        {c.name}
-                      </button>
-                      {resultIssueSummary(c) && <p className="eval-result-summary">{resultIssueSummary(c)}</p>}
-                      <p className="eval-muted"><EvaluationDuration label="耗时" value={caseDuration(c, current, durationNow)} note={caseDurationNote} /></p>
-                    </div>
-                    <div className="eval-result-state">
-                      <span className="eval-status" data-status={c.verdict || c.status}>{verdictLabel(c)}</span>
-                      {executionLabel(c) !== "已完成" && <span className="eval-muted">{executionLabel(c)}</span>}
-                    </div>
-                    <div className="eval-actions eval-result-actions">
-                      <Button variant="ghost" onClick={() => openView({ section: "runs", runId: current.id, resultId: c.id })}>{tr("view")}</Button>
-                      {!isActiveRun(current) && verdictLabel(c) !== "通过" && <Button variant="ghost" disabled={busy} onClick={() => rerun(current, [c.id], "single")} title={busy ? "当前对象有活动评测，请等待结束" : `仅重新运行：${c.name}`}>重新运行</Button>}
-                    </div>
-                  </div>
-                ))}
-              {!report && result && (
-                <>
-                  <div className="eval-toolbar">
-                    <div className="eval-grow">
-                      <h3>{result.name}</h3>
-                      <p className="eval-muted"><EvaluationDuration label="耗时" value={caseDuration(result, current, durationNow)} note={caseDurationNote} /></p>
-                    </div>
-                    <div className="eval-actions">
-                      <span className="eval-status" data-status={result.verdict || result.status}>{verdictLabel(result)}</span>
-                    </div>
-                  </div>
-                  <RoundResults result={result} />
-                </>
-              )}
-              {!report && isActiveRun(current) && <details className="eval-prototype-tools" aria-label="运行状态演示">
-                <summary>运行状态演示（仅原型）</summary>
-                {["running", "judging"].includes(current.status) && <Button variant="ghost" className="eval-prototype-action" onClick={() => requestCancelRun(objectId, current.id, true)}>模拟停止无响应（仅原型）</Button>}
-                {current.status === "stop_unconfirmed" && <><Button variant="ghost" className="eval-prototype-action" onClick={() => cancelRun(objectId, current.id)}>模拟核实已停止（仅原型）</Button><Button variant="ghost" className="eval-prototype-action" onClick={() => cancelRun(objectId, current.id, "error")}>模拟核实运行异常（仅原型）</Button></>}
-              </details>}
+              {<Button variant="ghost" className="eval-return-report" onClick={() => openView({ section: "reports" })}><Icon name="arrow-left" size="small" />返回报告列表</Button>}
+              <ReportPreview key={current.id} html={buildReportDocument(current, t)} actions={currentActions} status={status(current.status)} focusCaseIndex={current.results.findIndex(c => c.id === (resultId || focusCase))} />
             </>
           )}
         </>
       )}
     </section>
+    </div>
   )
 }

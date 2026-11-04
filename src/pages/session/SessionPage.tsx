@@ -1,3 +1,4 @@
+import { SessionPromptDock } from "./composer/SessionPromptDock"
 import { useEvaluation } from "@/services/evaluation"
 import { useEvaluationRepairs } from "@/services/evaluation-repair"
 import { useNavigate } from "react-router"
@@ -131,8 +132,7 @@ export function Component() {
             )}
           </div>
 
-          <div data-component="session-prompt-dock" className="shrink-0 w-full flex flex-col justify-center items-center pointer-events-none">
-            <div className={cx("w-full pointer-events-auto px-6 md:px-0 md:mx-auto", sessionId ? "md:max-w-[800px]" : "md:max-w-[710px]")}>
+          <SessionPromptDock inSession={!!sessionId}>
               {sessionId ? (
                 <Composer
                   projectId={projectId}
@@ -155,8 +155,7 @@ export function Component() {
                   <SkillTabs onPick={(name) => setDraft(`/${name} `)} />
                 </div>
               )}
-            </div>
-          </div>
+          </SessionPromptDock>
 
           {!sessionId && <RecommendationCards skill={skill} onApply={setDraft} />}
           {!sessionId && (

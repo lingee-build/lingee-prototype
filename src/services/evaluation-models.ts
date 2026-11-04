@@ -7,19 +7,15 @@ export interface EvalModelIds { execution: string; judging: string }
 
 // 原型默认判定配置。等级模型保留目录中的等级身份，不猜测背后的具体模型或版本。
 export function defaultJudgingModelId(catalog: readonly Model[]): string {
-  return (catalog.find(model => model.modelLevel === "expert" || model.id === "lingee-expert")
-    ?? catalog.find(model => model.modelLevel === "deep" || model.id === "lingee-deep")
-    ?? catalog[0])?.id ?? ""
+  return catalog[0]?.id ?? ""
 }
 
 export function evaluationExecutionDefault(catalog: readonly Model[]): string {
   return catalog[0]?.id ?? ""
 }
 
-export function initialEvaluationModelIds(defaults: EvalModelIds, latest?: { models?: EvalRunModels }, original?: { models?: EvalRunModels }): EvalModelIds {
-  const source = original ?? latest
-  // 明确指定历史运行时，缺失字段必须由用户补选，不能补写今天的默认值。
-  if (source) return { execution: source.models?.execution?.id ?? "", judging: source.models?.judging?.id ?? "" }
+export function initialEvaluationModelIds(defaults: EvalModelIds, _latest?: { models?: EvalRunModels }, _original?: { models?: EvalRunModels }): EvalModelIds {
+  // 每次发起默认取当前目录第一项；历史模型快照仅用于展示，不改变新运行默认值。
   return { ...defaults }
 }
 

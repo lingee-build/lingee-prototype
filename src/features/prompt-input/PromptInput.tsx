@@ -21,6 +21,8 @@ export interface PromptInputProps {
   /** 有值表示在已有会话中（外框变细、下拉向上展开） */
   sessionId?: string
   working: boolean
+  /** 入口引导，仅在首次可用且输入为空时填入，不自动发送。 */
+  initialText?: string
   onSubmit: (text: string, files?: File[]) => void | Promise<void>
   onAbort: () => void
   onCreateProject: () => void
@@ -34,6 +36,7 @@ export interface PromptInputProps {
 export function PromptInput(props: PromptInputProps) {
   const t = useT()
   const editor = useRef<EditorHandle>(null)
+  const initialTextApplied = useRef(false)
   const [focused, setFocused] = useState(false)
   const [empty, setEmpty] = useState(true)
   const [attachments, setAttachments] = useState<Attachment[]>([])
@@ -66,6 +69,12 @@ export function PromptInput(props: PromptInputProps) {
     const text = takeDraft(props.sessionId)
     if (text !== undefined) editor.current?.set(text)
   }, [draft.seq, props.sessionId])
+
+  useEffect(() => {
+    if (!props.initialText || initialTextApplied.current) return
+    initialTextApplied.current = true
+    if (!editor.current?.value().trim()) editor.current?.set(props.initialText)
+  }, [props.initialText])
 
   // 切换会话 / 项目后把焦点还给输入框
   useEffect(() => {

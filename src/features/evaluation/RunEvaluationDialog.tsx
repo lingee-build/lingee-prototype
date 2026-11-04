@@ -6,8 +6,9 @@ import { useSync } from "@/stores/sync"
 import { EvaluationModelSelect } from "./EvaluationModelSelect"
 import { resolveEvaluationModels, type EvalModelIds, type EvalRunModels } from "@/services/evaluation-models"
 
-export function RunEvaluationDialog({ name, count, scope, initial, defaults, rerun, missingCount, onClose, onStart }: {
+export function RunEvaluationDialog({ name, count, scope, initial, defaults, rerun, missingCount, version, breakdown, onClose, onStart }: {
   name: string; count: number; scope: string; initial: EvalModelIds; defaults: EvalModelIds; rerun: boolean; missingCount: number
+  version?: string; breakdown?: string
   onClose: () => void; onStart: (models: EvalRunModels) => void | Promise<void>
 }) {
   const t = useT()
@@ -47,8 +48,10 @@ export function RunEvaluationDialog({ name, count, scope, initial, defaults, rer
           <dl className="eval-run-context">
             <dt>{t("proto.eval.models.object")}</dt><dd>{name}</dd>
             <dt>{t("proto.eval.models.scope")}</dt><dd>{scope} · {t("proto.eval.models.count", { count })}</dd>
+            {breakdown && <><dt>范围明细</dt><dd>{breakdown}</dd></>}
+            <dt>用例来源</dt><dd>{version || "当前用例"}</dd>
           </dl>
-          {rerun && <p className="eval-run-note">{t("proto.eval.models.latestContent")}</p>}
+          <p className="eval-run-note">{rerun ? "使用来源报告的用例快照与最新已保存的对象内容。当前列表中的修改或删除不会改变本次重跑用例。" : "使用当前用例与最新已保存的对象内容，发起运行时保存本次使用的用例。"}</p>
           {!!missingCount && <p className="eval-run-note" role="status">{t("proto.eval.models.deletedCases", { count: missingCount })}</p>}
           {(["execution", "judging"] as const).map(role => <EvaluationModelSelect key={role}
             label={t(`proto.eval.models.${role}`)} hint={t(`proto.eval.models.${role}Hint`)}

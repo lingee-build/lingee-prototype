@@ -1,21 +1,18 @@
 import { useState } from "react"
 import { currentEvaluationEnvironment, environmentLabel, useEvaluation, type EvalEnvironment } from "@/services/evaluation"
 import { useQuery } from "@tanstack/react-query"
-import { useNavigate, useParams } from "react-router"
+import { useParams } from "react-router"
 import { EvaluationPanel } from "@/features/evaluation/EvaluationPanel"
 import { agentService, skillService } from "@/services"
 import { useT } from "@/i18n"
-import { IconButton } from "@/ui"
 import { useLayout } from "@/stores/layout"
 
 /** 对象评测工作区：独立路由，沿用对象的用例、草稿和运行记录。 */
 export function Component() {
   const { mode, objectId } = useParams()
   const deleted = useEvaluation(s => !!s.deletedObjects?.[`${mode}:${objectId}`])
-  const navigate = useNavigate()
   const t = useT()
   const sidebarOpened = useLayout(s => s.sidebarOpened)
-  const [detailOpen, setDetailOpen] = useState(false)
   const [environment, setEnvironment] = useState<EvalEnvironment | undefined>(currentEvaluationEnvironment)
   const { data: target, isPending } = useQuery({
     queryKey: ["evaluation-target", mode, objectId],
@@ -35,10 +32,10 @@ export function Component() {
   })
 
   return (
-    <section className="eval-workspace flex h-full min-h-0 w-full flex-col bg-background-page" aria-label={t("proto.eval.title")}>
-      <header data-sidebar-collapsed={!sidebarOpened || undefined} className="eval-workspace-header flex shrink-0 items-center gap-3 border-b border-[var(--border-base)]">
-        {!detailOpen && <IconButton icon="arrow-left" variant="ghost" className="!text-[var(--text-weak)]" iconClass="!text-[var(--text-weak)]" aria-label={t("proto.eval.backList")} title={t("proto.eval.backList")} onClick={() => navigate(`/dev/${mode === "agent" ? "agent" : "skill"}`)} />}
-        <h1 className="flex flex-1 min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-[18px] leading-8 font-medium text-text-strong">
+    <section className="eval-workspace flex h-full min-h-0 w-full flex-col bg-background-page" aria-label={t("proto.eval.title")} data-sidebar-collapsed={!sidebarOpened || undefined}>
+      {target && !deleted ? (
+        <EvaluationPanel key={`${mode}:${target.id}`} objectId={`${mode}:${target.id}`} name={target.name} onEnvironmentChange={setEnvironment} heading={<>
+        <h1 className="flex flex-1 min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-[14px] leading-[22px] font-medium text-text-strong">
           {target && <span className="break-words">{target.name}</span>}
           <span>{t("proto.eval.title")}</span>
           <span className="session-title-local-test-badge shrink-0 inline-flex items-center gap-1 h-[18px] px-1 rounded-[4px] text-[12px] font-normal leading-[18px] select-none" aria-label={`运行环境：${environmentLabel(environment)}`}>
@@ -46,9 +43,7 @@ export function Component() {
             <span>{environmentLabel(environment)}</span>
           </span>
         </h1>
-      </header>
-      {target && !deleted ? (
-        <EvaluationPanel key={`${mode}:${target.id}`} objectId={`${mode}:${target.id}`} name={target.name} onEnvironmentChange={setEnvironment} onDetailChange={setDetailOpen} />
+        </>} />
       ) : (
         <p className="p-8 text-text-weak" role="status">{deleted ? "被测对象及其评测数据已删除，无法查看或重新运行。" : t(isPending ? "proto.eval.loading" : "proto.eval.notFound")}</p>
       )}

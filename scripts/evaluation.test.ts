@@ -10,7 +10,7 @@ Object.defineProperty(globalThis, "localStorage", {
   },
   configurable: true,
 })
-const { useEvaluation, saveCases, startRun, cancelRun, advanceRuns } = await import("../src/services/evaluation")
+const { assignCaseCodes, useEvaluation, saveCases, startRun, cancelRun, advanceRuns } = await import("../src/services/evaluation")
 const realNow = Date.now
 let now = 100000
 Date.now = () => now
@@ -19,7 +19,7 @@ afterAll(() => {
 })
 beforeEach(() => {
   now = 100000
-  useEvaluation.setState({ cases: {}, runs: {}, error: false })
+  useEvaluation.setState({ cases: {}, runs: {}, reportSequences: {}, error: false })
 })
 const sample = {
   id: "case-1",
@@ -55,14 +55,15 @@ test("运行持久化两个模型，重载与重跑不修改原运行或开发�
   expect(original.models).toEqual(snapshot)
   await useEvaluation.persist.rehydrate()
   expect(useEvaluation.getState().runs[key][0].models).toEqual(snapshot)
-  const ids = initialEvaluationModelIds({ execution: "other", judging: "other" }, undefined, original)
-  expect(ids).toEqual(selected)
+  const defaults = { execution: "execution-a", judging: "execution-a" }
+  const ids = initialEvaluationModelIds(defaults, undefined, original)
+  expect(ids).toEqual(defaults)
   saveCases(key, [{ ...sample, input: "最新输入" }])
-  const { latestRunCases } = await import("../src/services/evaluation")
-  startRun(key, "Skill", latestRunCases(key, original).cases, "sandbox", resolveEvaluationModels(ids, catalog))
+  const { snapshotRunCases } = await import("../src/services/evaluation")
+  startRun(key, "Skill", snapshotRunCases(original), "sandbox", resolveEvaluationModels(ids, catalog))
   const rerun = useEvaluation.getState().runs[key][0]
-  expect(rerun.models).toEqual(snapshot)
-  expect(rerun.results[0].input).toBe("最新输入")
+  expect(rerun.models).toEqual(resolveEvaluationModels(defaults, catalog))
+  expect(rerun.results[0].input).toBe("Request")
   expect(useEvaluation.getState().runs[key][1]).toEqual(original)
   expect(usePrompt.getState().modelId).toBe(conversationModel)
 })
@@ -233,24 +234,23 @@ test("legacy text checks map by operator without altering historical data", asyn
   expect(checkValidation({ ...legacy, kind: "regex", text: "[" })).toContain("正则")
 })
 
-test("rerun resolves latest selected cases and reports deletions without changing history", async () => {
-  const { latestRunCases } = await import("../src/services/evaluation")
+test("报告重跑使用来源快照，修改和删除当前用例不影响历史", async () => {
+  const { snapshotRunCases } = await import("../src/services/evaluation")
   saveCases("skill:test", [sample, { ...sample, id: "deleted" }])
   startRun("skill:test", "Test", [sample, { ...sample, id: "deleted" }], "sandbox")
   const original = useEvaluation.getState().runs["skill:test"][0]
   cancelRun("skill:test", original.id)
   saveCases("skill:test", [{ ...sample, input: "Updated" }, { ...sample, id: "new" }])
-  const latest = latestRunCases("skill:test", original)
-  expect(latest.cases.map(c => c.id)).toEqual([sample.id])
-  expect(latest.cases[0].input).toBe("Updated")
-  expect(latest.missing.map(c => c.id)).toEqual(["deleted"])
-  startRun("skill:test", "Test", latest.cases, "sandbox")
+  const latest = snapshotRunCases(original)
+  expect(latest.map(c => c.id)).toEqual([sample.id, "deleted"])
+  expect(latest[0].input).toBe("Request")
+  startRun("skill:test", "Test", latest, "sandbox")
   const runs = useEvaluation.getState().runs["skill:test"]
   expect(runs[0].environment).toBe("sandbox")
   expect(runs[1].environment).toBe("sandbox")
   expect(runs[1].results[0].input).toBe("Request")
   saveCases("skill:test", [])
-  expect(latestRunCases("skill:test", original).cases).toHaveLength(0)
+  expect(snapshotRunCases(original)).toHaveLength(2)
 })
 
 test("execution failures stay unknown, stop later rounds and appear in report", async () => {
@@ -298,7 +298,9 @@ test("repair handoff selects failed snapshots and excludes binary attachments", 
   startRun("skill:repair", "技能", [{ ...demoSample("failed"), attachments: [{ id: "a", name: "单据.txt", size: 4, data: "binary-secret" }] }, { ...demoSample("passed"), id: "passed" }])
   now += 6000; advanceRuns()
   const run = useEvaluation.getState().runs["skill:repair"][0]
+  run.code = "ER-0042"
   const prompt = repairPrompt("skill:repair", run)
+  expect(prompt).toContain("评测报告 ER-0042")
   expect(prompt).toContain("/kingdee-skill-creator")
   expect(prompt).not.toContain("单据.txt")
   expect(prompt.length).toBeLessThan(500)
@@ -701,7 +703,7 @@ test("repair context updates original ID even with duplicate names and misleadin
   const { registerEvaluationRepair, evaluationRepairTarget, useEvaluationRepairs } = await import("../src/services/evaluation-repair")
   const { pickScenario } = await import("../src/mock/scenarios")
   const { devStore } = await import("../src/mock/dev-store")
-  const { latestRunCases } = await import("../src/services/evaluation")
+  const { snapshotRunCases } = await import("../src/services/evaluation")
   const originalSkills = structuredClone(devStore.skills)
   try {
     const skill = devStore.skills[0]
@@ -717,6 +719,8 @@ test("repair context updates original ID even with duplicate names and misleadin
     await useEvaluationRepairs.persist.rehydrate()
     expect(evaluationRepairTarget(session.id)).toEqual({ objectType: "skill", objectId: skill.id, runId })
     const scenario = pickScenario({ projectId: skill.projectId, repairTarget: evaluationRepairTarget(session.id), prompt: "/ai-partner-creator 请新建采购价格异常预警，编辑【duplicate-name】" })
+    expect(scenario.steps.at(-1)!.resolve!().card).toBeUndefined()
+    scenario.steps[1].resolve!().onAnswer?.([["确认修复"]])
     const result = scenario.steps.at(-1)!.resolve!()
     expect(devStore.skills).toHaveLength(2)
     expect(devStore.skills.find(s => s.id === skill.id)?.changed).toBe(true)
@@ -724,9 +728,9 @@ test("repair context updates original ID even with duplicate names and misleadin
     expect(result.card!().config.id).toBe(skill.name)
     expect(useEvaluationRepairs.getState().links[session.id]).toBe(`/dev/skill/${encodeURIComponent(skill.id)}/evaluation?view=report&run=${runId}`)
     saveCases(key, [{ ...sample, demo: true, input: "最新内容" }])
-    const nextId = startRun(key, skill.displayName, latestRunCases(key, oldRun).cases)
+    const nextId = startRun(key, skill.displayName, snapshotRunCases(oldRun))
     expect(nextId).not.toBe(runId)
-    expect(useEvaluation.getState().runs[key][0].results[0].input).toBe("最新内容")
+    expect(useEvaluation.getState().runs[key][0].results[0].input).toBe(oldRun.results[0].input)
     expect(useEvaluation.getState().runs[key][1]).toEqual(oldRun)
     expect(useEvaluation.getState().runs[`skill:${duplicate.id}`]).toBeUndefined()
   } finally { devStore.skills = originalSkills }
@@ -743,7 +747,7 @@ test("legacy repair binding restores from original route and missing targets nev
   for (const target of [evaluationRepairTarget("invalid")!, { objectType: "skill" as const, objectId: "missing", runId: "r" }, { objectType: "skill" as const, objectId: before[0].id, runId: "r" }]) {
     const scenario = pickScenario({ prompt: "创建技能", projectId: "wrong-project", repairTarget: target })
     const result = scenario.steps.at(-1)!.resolve!()
-    expect(result.text).toContain("已停止修复")
+    expect(result.text).toContain("未修改对象")
     expect(result.card).toBeUndefined()
     expect(devStore.skills).toEqual(before)
   }
@@ -767,7 +771,7 @@ test("智能体修复选择失败证据、遵循同一可用条件并打开原�
   expect(repairDisabledReason(key, run, true, "passed")).toBe("此用例已通过，无需修复")
   expect(repairDisabledReason(key, { ...run, results: [{ ...run.results[0], verdict: "unknown" }] }, true)).toContain("没有可修复")
   const prompt = repairPrompt(key, run)
-  expect(prompt).toStartWith("/ai-partner-creator 请根据当前关联的评测报告，分析并修复智能体")
+  expect(prompt).toStartWith(`/ai-partner-creator 请根据评测报告 ${run.code}，分析智能体`)
   expect(prompt).toContain(agent.name)
   expect(prompt).not.toContain("业务材料.txt")
   expect(prompt).toContain("2 条不通过用例")
@@ -785,7 +789,7 @@ test("智能体修复恢复后仍只修改原对象，卡片及重跑保持原�
   const { registerEvaluationRepair, evaluationRepairTarget, useEvaluationRepairs } = await import("../src/services/evaluation-repair")
   const { pickScenario } = await import("../src/mock/scenarios")
   const { devStore } = await import("../src/mock/dev-store")
-  const { latestRunCases } = await import("../src/services/evaluation")
+  const { snapshotRunCases } = await import("../src/services/evaluation")
   const originalAgents = structuredClone(devStore.agents)
   const originalSkills = structuredClone(devStore.skills)
   try {
@@ -803,7 +807,10 @@ test("智能体修复恢复后仍只修改原对象，卡片及重跑保持原�
     await useEvaluationRepairs.persist.rehydrate()
     expect(evaluationRepairTarget(session.id)).toEqual(target)
     expect(useEvaluationRepairs.getState().items[session.id].messages).toHaveLength(0)
-    const result = pickScenario({ projectId: agent.projectId, repairTarget: evaluationRepairTarget(session.id), prompt: `/kingdee-skill-creator 新建采购价格异常预警，编辑【${duplicate.name}】` }).steps.at(-1)!.resolve!()
+    const scenario = pickScenario({ projectId: agent.projectId, repairTarget: evaluationRepairTarget(session.id), prompt: `/kingdee-skill-creator 新建采购价格异常预警，编辑【${duplicate.name}】` })
+    expect(scenario.steps.at(-1)!.resolve!().card).toBeUndefined()
+    scenario.steps[1].resolve!().onAnswer!([["确认修复"]])
+    const result = scenario.steps.at(-1)!.resolve!()
     const updated = devStore.agents.find(item => item.id === agent.id)!
     expect(devStore.agents).toHaveLength(2)
     expect(updated.status).toBe("saved")
@@ -819,8 +826,8 @@ test("智能体修复恢复后仍只修改原对象，卡片及重跑保持原�
     expect(result.card!()).toEqual({ kind: "ai-partner", config: { id: agent.id, title: agent.name } })
     expect(useEvaluationRepairs.getState().links[session.id]).toBe(`/dev/agent/${encodeURIComponent(agent.id)}/evaluation?view=report&run=${runId}`)
     saveCases(key, [{ ...sample, demo: true, input: "最新智能体用例输入" }])
-    expect(startRun(key, agent.name, latestRunCases(key, oldRun).cases)).not.toBe(runId)
-    expect(useEvaluation.getState().runs[key][0].results[0].input).toBe("最新智能体用例输入")
+    expect(startRun(key, agent.name, snapshotRunCases(oldRun))).not.toBe(runId)
+    expect(useEvaluation.getState().runs[key][0].results[0].input).toBe(oldRun.results[0].input)
     expect(useEvaluation.getState().runs[key][1]).toEqual(oldRun)
   } finally { devStore.agents = originalAgents }
 })
@@ -837,12 +844,12 @@ test("修复兼容旧技能绑定和两类返回链接，智能体目标失效�
   const before = structuredClone(devStore)
   for (const target of [{ objectId: "missing", runId: "r" }, { objectId: agent.id, runId: "r" }, { objectId: agent.id, runId: "" }]) {
     const result = pickScenario({ projectId: "wrong-project", repairTarget: { objectType: "agent", ...target }, prompt: "/ai-partner-creator 创建智能体" }).steps.at(-1)!.resolve!()
-    expect(result.text).toContain("已停止修复")
+    expect(result.text).toContain("未修改对象")
     expect(result.card).toBeUndefined()
   }
   useEvaluation.setState({ deletedObjects: { [`agent:${agent.id}`]: true } })
   const stopped = pickScenario({ projectId: agent.projectId, repairTarget: { objectType: "agent", objectId: agent.id, runId: "r" }, prompt: "修复" }).steps.at(-1)!.resolve!()
-  expect(stopped.text).toContain("已停止修复")
+  expect(stopped.text).toContain("未修改对象")
   expect(devStore).toEqual(before)
   useEvaluation.setState({ deletedObjects: {} })
 })
@@ -867,8 +874,8 @@ test("三轮用例中断不新建整体判定，保留失败且后续轮次未�
   expect(after.overallJudgingPoints).toBe(0)
 })
 
-test("rerun scopes share repair failures and only detect deletions inside selected scope", async () => {
-  const { latestRunCases, failedRunResults } = await import("../src/services/evaluation")
+test("报告重跑按历史范围选择，当前用例删除不影响任何范围", async () => {
+  const { snapshotRunCases, failedRunResults, unsuccessfulRunResults } = await import("../src/services/evaluation")
   const { repairPrompt, registerEvaluationRepair, useEvaluationRepairs } = await import("../src/services/evaluation-repair")
   const key = "skill:sk_delivery"
   const source = ["passed", "failed", "unknown"].map((verdict, i) => ({ ...sample, id: `scope-${i}`, name: verdict, demo: true }))
@@ -879,16 +886,20 @@ test("rerun scopes share repair failures and only detect deletions inside select
   run.results.forEach((r, i) => { r.status = "passed"; r.verdict = ["passed", "failed", "unknown"][i] as "passed" | "failed" | "unknown" })
   const failures = failedRunResults(run).map(c => c.id)
   expect(failures).toEqual(["scope-1"])
+  const retryIds = unsuccessfulRunResults(run).map(c => c.id)
+  expect(retryIds).toEqual(["scope-1", "scope-2"])
+  expect(unsuccessfulRunResults({ ...run, results: [run.results[0]] })).toHaveLength(0)
+  expect(unsuccessfulRunResults({ ...run, results: [run.results[2]] })).toHaveLength(1)
+  expect(unsuccessfulRunResults({ ...run, results: [{ ...run.results[2], status: "running" }] })).toHaveLength(0)
   expect(repairPrompt(key, run)).toContain("1 条不通过用例")
   expect(repairPrompt(key, run)).not.toContain('"用例编号": "scope-2"')
   saveCases(key, source.slice(1).map(c => ({ ...c, input: "latest" })))
-  expect(latestRunCases(key, run).missing.map(c => c.id)).toEqual(["scope-0"])
-  expect(latestRunCases(key, run, failures).missing).toEqual([])
-  expect(latestRunCases(key, run, failures).cases[0].input).toBe("latest")
-  expect(latestRunCases(key, run, ["scope-2"]).cases.map(c => c.id)).toEqual(["scope-2"])
+  expect(snapshotRunCases(run, failures)[0].input).toBe(sample.input)
+  expect(snapshotRunCases(run, ["scope-2"]).map(c => c.id)).toEqual(["scope-2"])
   saveCases(key, [])
-  expect(latestRunCases(key, run, failures).cases).toEqual([])
-  expect(latestRunCases(key, run, failures).missing).toHaveLength(1)
+  expect(snapshotRunCases(run, failures)).toHaveLength(1)
+  expect(snapshotRunCases(run, retryIds).map(c => c.id)).toEqual(retryIds)
+  expect(snapshotRunCases(run, retryIds).every(c => c.input === sample.input)).toBe(true)
   const session = { id: "single-return", projectId: "project", title: "修复", status: "idle" as const, time: { created: now, updated: now } }
   registerEvaluationRepair(session, "修复", { objectType: "skill", objectId: "sk_delivery", runId: id, resultId: "scope-1" })
   expect(useEvaluationRepairs.getState().links[session.id]).toEndWith(`?view=report&run=${id}&focusCase=scope-1`)
@@ -1009,27 +1020,200 @@ test("首轮多个硬规则失败均留证据，跳过语义、后轮和整体�
   expect(JSON.stringify(useEvaluation.getState().runs["skill:short-circuit"][0])).toBe(snapshot)
 })
 
-test("已有对话修复先确认候选，读取指定旧报告；报告失效不修改", async () => {
+test("旧报告不能修复，最新报告须先确认方案且取消不修改", async () => {
   const { conversationRepairScenario } = await import("../src/mock/scenarios/evaluation-repair-dialog")
-  const { evaluationRepairEvidence, evaluationRepairTarget, useEvaluationRepairs } = await import("../src/services/evaluation-repair")
+  const { repairDisabledReason } = await import("../src/services/evaluation-repair")
   const { devStore } = await import("../src/mock/dev-store")
-  const skill = devStore.skills[0]
-  const key = `skill:${skill.id}`
-  startRun(key, skill.displayName, [demoSample("failed")]); now += 3000; advanceRuns()
-  const oldRun = useEvaluation.getState().runs[key][0]
-  startRun(key, skill.displayName, [demoSample("passed")]); now += 3000; advanceRuns()
-  const session = { id: "existing-repair", projectId: skill.projectId, title: "已有对话", status: "idle" as const, time: { created: now, updated: now } }
-  const scenario = conversationRepairScenario(session, `修复评测 ${skill.id} ${oldRun.id}`)
-  expect(scenario.steps[0].question![0].options).toHaveLength(1)
-  expect(scenario.steps[1].resolve!().card).toBeUndefined()
-  scenario.steps[0].onAnswer!([[scenario.steps[0].question![0].options[0].label]])
-  const changed = skill.changed
+  const skill = devStore.skills[0]; const key = `skill:${skill.id}`
+  const before = structuredClone(devStore.skills)
   try {
-    expect(scenario.steps[1].resolve!().card).toBeDefined()
-    expect(evaluationRepairTarget(session.id)?.runId).toBe(oldRun.id)
-    expect(useEvaluationRepairs.getState().items[session.id].owned).toBe(false)
-    expect(evaluationRepairEvidence(evaluationRepairTarget(session.id)!, skill.projectId)?.failures).toHaveLength(1)
-    useEvaluation.setState({ runs: {} })
-    expect(scenario.steps[1].resolve!().card).toBeUndefined()
-  } finally { devStore.skills = devStore.skills.map(s => s.id === skill.id ? { ...s, changed } : s) }
+    startRun(key, skill.displayName, [demoSample("failed")]); now += 3000; advanceRuns()
+    const old = useEvaluation.getState().runs[key][0]
+    startRun(key, skill.displayName, [demoSample("failed")]); now += 3000; advanceRuns()
+    expect(repairDisabledReason(key, old, true)).toContain("仅最新")
+    const run = useEvaluation.getState().runs[key][0]
+    const session = { id: "existing-repair", projectId: skill.projectId, title: "已有对话", status: "idle" as const, time: { created: now, updated: now } }
+    const scenario = conversationRepairScenario(session, `修复评测 ${skill.id} ${run.id}`)
+    scenario.steps[0].onAnswer!([[scenario.steps[0].question![0].options[0].label]])
+    const plan = scenario.steps[1].resolve!()
+    expect(plan.text).toContain("修复方案")
+    expect(scenario.steps[2].resolve!().card).toBeUndefined()
+    plan.onAnswer!([["暂不修改"]])
+    expect(scenario.steps[2].resolve!().card).toBeUndefined()
+    expect(devStore.skills).toEqual(before)
+    plan.onAnswer!([["确认修复"]])
+    expect(scenario.steps[2].resolve!().card).toBeDefined()
+  } finally { devStore.skills = before }
+})
+
+test("发起即固化深拷贝版本，重跑关联来源且保留已删除用例", async () => {
+  const { snapshotRunCases, runCases } = await import("../src/services/evaluation")
+  const cases = [demoSample("passed")]
+  const key = "snapshot-version"
+  const id = startRun(key, "对象", cases)!
+  const original = structuredClone(useEvaluation.getState().runs[key][0])
+  expect(original.status).toBe("running")
+  expect(original.caseSnapshot?.version).toBe("V1")
+  expect(original.caseSnapshot?.capturedAt).toBe(now)
+  cases[0].name = "外部修改"; cases[0].turns![0].input = "外部修改"
+  expect(runCases(original)[0].name).not.toBe("外部修改")
+  cancelRun(key, id); saveCases(key, [])
+  const saved = structuredClone(useEvaluation.getState().runs[key][0])
+  startRun(key, "对象", snapshotRunCases(saved), "sandbox", undefined, id)
+  const rerun = useEvaluation.getState().runs[key][0]
+  expect(rerun.caseSnapshot?.version).toBe("V1")
+  expect(rerun.sourceRunId).toBe(id)
+  expect(rerun.caseSnapshot?.cases).toEqual(saved.caseSnapshot?.cases)
+  expect(useEvaluation.getState().runs[key][1]).toEqual(saved)
+})
+
+ test("会话仅展示自己发起的运行，生成用例不关联历史报告", async () => {
+  const { latestConversationRun } = await import("../src/services/evaluation")
+  const key = "skill:conversation-test"
+  const old = startRun(key, "对象", [sample])!
+  cancelRun(key, old)
+  expect(latestConversationRun(useEvaluation.getState().runs[key], "session-a")).toBeUndefined()
+  const current = startRun(key, "对象", [sample], "sandbox", undefined, undefined, "session-a")!
+  expect(latestConversationRun(useEvaluation.getState().runs[key], "session-a")?.id).toBe(current)
+  expect(latestConversationRun(useEvaluation.getState().runs[key], "session-b")).toBeUndefined()
+  expect(latestConversationRun(useEvaluation.getState().runs[key])).toBeUndefined()
+  cancelRun(key, current)
+  const other = startRun(key, "对象", [sample], "sandbox", undefined, current, "session-b")!
+  expect(latestConversationRun(useEvaluation.getState().runs[key], "session-a")?.id).toBe(current)
+  expect(latestConversationRun(useEvaluation.getState().runs[key], "session-b")?.id).toBe(other)
+  await useEvaluation.persist.rehydrate()
+  expect(latestConversationRun(useEvaluation.getState().runs[key], "session-a")?.id).toBe(current)
+ })
+
+test("相同内容复用版本，内容变化产生新版本，恢复原内容复用旧版", async () => {
+  saveCases("version-test", [sample])
+  const first = startRun("version-test", "Object", [sample])!
+  cancelRun("version-test", first)
+  const second = startRun("version-test", "Object", [sample])!
+  cancelRun("version-test", second)
+  expect(useEvaluation.getState().runs["version-test"][0].caseSnapshot?.version).toBe("V1")
+  const changed = { ...sample, expected: "New expectation" }
+  saveCases("version-test", [changed])
+  const third = startRun("version-test", "Object", [changed])!
+  cancelRun("version-test", third)
+  expect(useEvaluation.getState().runs["version-test"][0].caseSnapshot?.version).toBe("V2")
+  saveCases("version-test", [sample])
+  startRun("version-test", "Object", [sample])
+  const runs = useEvaluation.getState().runs["version-test"]
+  expect(runs[0].caseSnapshot?.version).toBe("V1")
+  expect(new Set(runs.map(r => r.id)).size).toBe(4)
+  const { packCaseVersions, unpackCaseVersions } = await import("../src/services/evaluation")
+  const packed = packCaseVersions({ "version-test": runs })
+  expect(Object.keys(packed.snapshots).length).toBe(2)
+  expect(packed.runs["version-test"][0]).not.toHaveProperty("caseSnapshot")
+  const restored = unpackCaseVersions(packed.runs, packed.snapshots)["version-test"]
+  expect(restored[0].caseSnapshot).toBe(restored[1].caseSnapshot?.version === "V1" ? restored[1].caseSnapshot : restored[2].caseSnapshot)
+})
+test("选中范围与重跑范围独立保存，查看用例仅返回实际运行范围", async () => {
+  const { runCases, snapshotRunCases } = await import("../src/services/evaluation")
+  const other = { ...sample, id: "case-2", name: "Other" }
+  saveCases("scope-test", [sample, other])
+  const id = startRun("scope-test", "Object", [other])!
+  cancelRun("scope-test", id)
+  const original = useEvaluation.getState().runs["scope-test"][0]
+  expect(original.caseSnapshot?.cases.length).toBe(2)
+  expect(runCases(original).map(c => c.id)).toEqual(["case-2"])
+  saveCases("scope-test", [{ ...sample, expected: "Changed" }])
+  const rerunId = startRun("scope-test", "Object", snapshotRunCases(original), "sandbox", undefined, id)!
+  const rerun = useEvaluation.getState().runs["scope-test"][0]
+  expect(rerun.id).toBe(rerunId)
+  expect(rerun.caseSnapshot?.version).toBe("V1")
+  expect(runCases(rerun)).toEqual([expect.objectContaining(other)])
+})
+test("旧记录相同快照合并且历史结果不变", async () => {
+  const { normalizeCaseVersions } = await import("../src/services/evaluation")
+  const id = startRun("legacy-test", "Object", [sample])!
+  cancelRun("legacy-test", id)
+  const original = useEvaluation.getState().runs["legacy-test"][0]
+  const duplicate = { ...structuredClone(original), id: "duplicate", started: original.started + 1, caseSnapshot: { ...original.caseSnapshot!, version: "V2" } }
+  const records = normalizeCaseVersions({ legacy: [duplicate, original] }).legacy
+  expect(records[0].caseSnapshot).toBe(records[1].caseSnapshot)
+  expect(records[0].results).toEqual(duplicate.results)
+  expect(records.map(r => r.id)).toEqual(["duplicate", id])
+})
+
+test('用例编码持久绑定 ID，删除不复用，超过四位继续递增', () => {
+ const registry: Record<string, string> = { deleted: 'EC-9999' }
+ const item = { id: 'a', name: 'A', input: 'a', expected: 'a', source: 'none', outcome: 'passed' } as EvalCase
+ const assigned = assignCaseCodes([item], registry)[0]
+ expect(assigned.code).toBe('EC-10000')
+ expect(assignCaseCodes([{ ...assigned, name: '改名', code: 'EC-0001' }], registry)[0].code).toBe('EC-10000')
+ expect(assignCaseCodes([{ ...assigned, id: 'copy' }], registry)[0].code).toBe('EC-10001')
+ expect(assignCaseCodes([item], {})[0].code).toBe('EC-0001')
+})
+
+
+test("报告编码按对象递增，重新运行分配新号，清空后不复用且超过四位继续增长", () => {
+  const key = "skill:report-code"
+  const first = startRun(key, "报告编码", [sample])!
+  expect(useEvaluation.getState().runs[key][0].code).toBe("ER-0001")
+  cancelRun(key, first)
+  const second = startRun(key, "报告编码", [sample], "sandbox", undefined, first)!
+  expect(useEvaluation.getState().runs[key][0].code).toBe("ER-0002")
+  expect(useEvaluation.getState().runs[key][0].sourceRunId).toBe(first)
+  cancelRun(key, second)
+  useEvaluation.setState(s => ({runs: {...s.runs, [key]: []}}))
+  startRun(key, "报告编码", [sample])
+  expect(useEvaluation.getState().runs[key][0].code).toBe("ER-0003")
+  startRun("agent:report-code", "智能体", [sample])
+  expect(useEvaluation.getState().runs["agent:report-code"][0].code).toBe("ER-0001")
+  useEvaluation.setState(s => ({runs: {...s.runs, [key]: []}, reportSequences: {...s.reportSequences, [key]: 9999}}))
+  startRun(key, "报告编码", [sample])
+  expect(useEvaluation.getState().runs[key][0].code).toBe("ER-10000")
+})
+
+test("统一报告支持运行中进度，单轮直显、多轮折叠，技能智能体一致", async () => {
+  const { buildReportDocument } = await import("../src/features/evaluation/report-document")
+  for (const key of ["skill:unified", "agent:unified"]) {
+    const turn = { id: "t1", input: "查询", expected: "返回结果", rules: [], attachments: [] }
+    startRun(key, "统一报告", [{ ...sample, turns: [turn] }, { ...sample, id: "multi", turns: [turn, { ...turn, id: "t2" }] }])
+    const run = useEvaluation.getState().runs[key][0]
+    const activeHtml = buildReportDocument(run)
+    expect(activeHtml).toContain("0 / 2 条用例已结束")
+    expect(activeHtml).toContain("最终结论待生成")
+    expect(activeHtml.match(/class="progress-segment"/g)?.length).toBe(2)
+    expect(activeHtml).not.toContain("<progress")
+    const unknownHtml = buildReportDocument({ ...run, status: "completed", results: run.results.map(r => ({ ...r, status: "blocked", verdict: "unknown", judging: false })) })
+    expect(unknownHtml).toContain("通过率：0%</p>")
+    expect(unknownHtml).toContain('class="metric-unknown"><strong>2</strong>无法判定')
+    expect(unknownHtml).toContain('class="metric-zero"><strong>0</strong>不通过')
+    expect(activeHtml).toContain('class="round single-round"')
+    expect(activeHtml).toContain('id="case-1-round-0" class="round"><summary>')
+    expect(activeHtml).not.toContain('class="round" open')
+    cancelRun(key, run.id)
+    const stoppedHtml = buildReportDocument(useEvaluation.getState().runs[key][0])
+    expect(stoppedHtml).not.toContain('aria-label="评测进度"')
+    expect(stoppedHtml).toContain("报告不完整")
+  }
+})
+
+test('评测对话修复保留重点、确认后修改原对象，重复确认不重复修改', async () => {
+  const { respondToRepair } = await import('../src/features/evaluation/conversation-repair')
+  const { devStore } = await import('../src/mock/dev-store')
+  const original = structuredClone(devStore.skills)
+  try {
+    const skill = devStore.skills[0]
+    devStore.skills[0] = { ...skill, changed: false }
+    const key = `skill:${skill.id}`
+    saveCases(key, [demoSample('failed')])
+    startRun(key, skill.displayName, useEvaluation.getState().cases[key])
+    now += 4000; advanceRuns()
+    const run = useEvaluation.getState().runs[key][0]
+    const chat: import('../src/services/evaluation-conversations').EvaluationConversation = { session: { id: 'inline-repair', projectId: skill.projectId, title: '评测', status: 'idle', time: { created: now, updated: now } }, objectId: key, objectName: skill.displayName, runId: run.id, messages: [], request: '', rule: '', files: [], drafts: [], adopted: {} }
+    expect(respondToRepair(chat, run, '确认修复', true)).toContain('请先')
+    expect(respondToRepair(chat, run, '优先解决参数遗漏的问题')).toContain('参数遗漏')
+    expect(devStore.skills[0].changed).toBe(false)
+    expect(respondToRepair(chat, run, '这种情况应该先询问用户')).toContain('参数遗漏')
+    expect(chat.repair?.focus).toContain('先询问用户')
+    const result = respondToRepair(chat, run, '确认修复', true)
+    expect(result).toContain('模拟修改')
+    expect(devStore.skills[0].changed).toBe(true)
+    expect(chat.repair?.stage).toBe('completed')
+    expect(respondToRepair(chat, run, '确认修复', true)).toBe(result)
+  } finally { devStore.skills = original }
 })

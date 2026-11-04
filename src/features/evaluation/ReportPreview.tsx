@@ -2,7 +2,10 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 import { reportSections } from "./report-document"
 
 /** 保留独立文档的样式与脚本隔离，全文撑开高度，由评测主内容区统一滚动。 */
-export function ReportPreview({ html, actions }: { html: string; actions?: ReactNode }) {
+export function ReportPreview({ html, actions, status, focusCaseIndex = -1 }: { html: string; actions?: ReactNode; status?: ReactNode; focusCaseIndex?: number }) {
+  const [initialHtml] = useState(html)
+  const disclosure = useRef(new Map<string, boolean>())
+  const focused = useRef(-1)
   const [cases, setCases] = useState<{id: string; label: string}[]>([])
   const compact = true
   const [navOpen, setNavOpen] = useState(false)
@@ -50,6 +53,18 @@ export function ReportPreview({ html, actions }: { html: string; actions?: React
       disconnectDocument()
       const document = frame.contentDocument
       if (!document?.body) return
+      const updated = new DOMParser().parseFromString(html, "text/html")
+      updated.querySelectorAll("script").forEach(script => script.remove())
+      document.body.innerHTML = updated.body.innerHTML
+      const details = Array.from(document.querySelectorAll<HTMLDetailsElement>("details"))
+      details.forEach((item, index) => {
+        const key = item.id || `detail-${index}`
+        if (disclosure.current.has(key)) item.open = disclosure.current.get(key)!
+      })
+      const rememberDisclosure = () => {
+        details.forEach((item, index) => disclosure.current.set(item.id || `detail-${index}`, item.open))
+      }
+      document.addEventListener("toggle", rememberDisclosure, true)
       setCases(Array.from(document.querySelectorAll("details.case")).map(item => ({id:item.id,label:(item.querySelector(".case-heading-label") || item.querySelector("summary"))?.textContent || ""})))
       // 预览目录放在主滚动区，保持吸顶；下载文档仍使用自己的目录。
       document.documentElement.dataset.embedded = "true"
@@ -106,9 +121,15 @@ export function ReportPreview({ html, actions }: { html: string; actions?: React
       syncControls()
       document.addEventListener("click", navigate)
       resize()
+      if (focusCaseIndex >= 0 && focused.current !== focusCaseIndex) {
+        const target = document.getElementById(`case-${focusCaseIndex}`) as HTMLDetailsElement | null
+        if (target) { target.open = true; focused.current = focusCaseIndex; requestAnimationFrame(() => scrollToTarget(target)) }
+      }
       disconnectDocument = () => {
         window.removeEventListener("scroll", trackSection, true)
         cancelAnimationFrame(tick)
+        rememberDisclosure()
+        document.removeEventListener("toggle", rememberDisclosure, true)
         observer.disconnect()
         document.removeEventListener("toggle", syncControls, true)
         document.removeEventListener("click", navigate)
@@ -120,7 +141,7 @@ export function ReportPreview({ html, actions }: { html: string; actions?: React
       frame.removeEventListener("load", connectDocument)
       disconnectDocument()
     }
-  }, [html])
+  }, [html, focusCaseIndex])
 
   useEffect(() => {
     if (!compact || !navOpen) return
@@ -145,7 +166,7 @@ export function ReportPreview({ html, actions }: { html: string; actions?: React
 
   return <div className="eval-report-preview eval-report-unified">
     <header className="eval-report-cover">
-      <div className="eval-report-title-row"><h2>{heading.title}</h2>{actions}</div>
+      <div className="eval-report-title-row"><h2>{heading.title}</h2>{status}{actions}</div>
       <div className="eval-report-metadata" dangerouslySetInnerHTML={{ __html: heading.meta }} />
     </header>
     <nav ref={navRef} className="eval-report-nav" aria-label="报告目录">
@@ -162,6 +183,6 @@ export function ReportPreview({ html, actions }: { html: string; actions?: React
         </div>}
       </div>)}
     </nav>
-    <iframe ref={frameRef} className="eval-report-document" title="评测报告预览" sandbox="allow-same-origin" srcDoc={html.replace(/<script>[\s\S]*?<\/script>/g, "")} />
+    <iframe ref={frameRef} className="eval-report-document" title="评测报告预览" sandbox="allow-same-origin" srcDoc={initialHtml.replace(/<script>[\s\S]*?<\/script>/g, "")} />
   </div>
 }

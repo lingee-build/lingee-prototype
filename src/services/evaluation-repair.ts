@@ -52,7 +52,7 @@ export function repairPrompt(objectId: string, run: EvalRun, resultId?: string) 
   const scope = kind === "agent" ? "不默认改写所挂载技能或知识源；涉及这些对象的问题应在分析中说明。" : ""
   const results = failedRunResults(run).filter(r => !resultId || r.id === resultId)
   if (!results.length) return ""
-  return `/${creator} 请根据当前关联的评测报告，分析并修复${label}「${run.name}」的 ${results.length} 条不通过用例。先核对目标对象及当前内容与评测时的差异，只修改确认属于当前对象的问题，不放宽用例标准。${scope}修改后说明变更，由我检查后手动复测；不要自动复测或发布。`
+  return `/${creator} 请根据评测报告 ${run.code || run.id}，分析${label}「${run.name}」的 ${results.length} 条不通过用例，先说明原因与修复方案，等我确认后再修改文件。先核对目标对象及当前内容与评测时的差异，只修改确认属于当前对象的问题，不放宽用例标准。${scope}修改后说明变更，由我检查后手动复测。`
 
 }
 
@@ -60,6 +60,9 @@ export function repairDisabledReason(objectId: string, run: EvalRun, editable: b
   if (!/^(skill|agent):/.test(objectId)) return "不支持此类型的评测对象"
   if (!editable || evaluationObjectUnavailable(objectId)) return `${objectId.startsWith("agent:") ? "智能体" : "技能"}已删除或当前不可编辑`
   if (["running", "judging", "stopping", "stop_unconfirmed"].includes(run.status)) return "评测结束后可修复"
+  if (useEvaluation.getState().runs[objectId]?.some(r => ["running", "judging", "stopping", "stop_unconfirmed"].includes(r.status))) return "当前有活动评测，请等待结束后修复"
+  const latest = useEvaluation.getState().runs[objectId]?.find(r => !["running", "judging", "stopping", "stop_unconfirmed"].includes(r.status))
+  if (latest && latest.id !== run.id) return "仅最新报告支持修复，请查看最新报告"
   const result = resultId ? run.results.find(r => r.id === resultId) : undefined
   if (resultId && !result) return "未找到此用例的评测结果"
   if (result) {

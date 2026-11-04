@@ -15,7 +15,7 @@ try {
   const saved = JSON.parse(localStorage.getItem("lingee.evaluation-conversations.v1") || "null")
   for (const item of Object.values(saved?.state?.items || {}) as { session: Session; messages: Message[] }[]) {
     if (item.session?.id && Array.isArray(item.messages)) {
-      db.sessions.push(item.session)
+      db.sessions.push({ ...item.session, status: "idle" })
       db.messages.push(...item.messages)
     }
   }

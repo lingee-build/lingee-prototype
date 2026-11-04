@@ -53,17 +53,23 @@ test('明确修改对应字段，模糊修改不写入标准', () => {
  expect(c.drafts[0].checks![0].text).toBe('返回客户名称')
 })
 
-test('已加入草稿拒绝继续对话修改，未加入草稿仍可修改', () => {
+test('旧加入标记不阻止对当前用例继续修改', () => {
  const c = conversation()
  respondToEvaluation(c, '正常查询返回明细，缺少组织时先询问')
  c.adopted[c.drafts[0].id] = 'added'
- const added = structuredClone(c.drafts[0])
- for (const input of ['第1条改成多轮', '第1条名称改为新名称', '第1条补充标准：输出明细']) {
-   const response = respondToEvaluation(c, input)
-   expect(response.changed).toBe(false)
-   expect(response.text).toContain('前往用例列表')
- }
- expect(c.drafts[0]).toEqual(added)
- expect(respondToEvaluation(c, '第2条名称改为待加入场景').changed).toBe(true)
- expect(c.drafts[1].name).toBe('待加入场景')
+ expect(respondToEvaluation(c, '第1条名称改为新名称').changed).toBe(true)
+ expect(c.drafts[0].name).toBe('新名称')
+})
+
+test('编码引用不受排序影响，不存在的编码不修改或生成用例', () => {
+ const c = conversation()
+ respondToEvaluation(c, '正常查询返回明细，缺少组织时先询问')
+ c.drafts[0].code = 'EC-0001'; c.drafts[1].code = 'EC-0002'
+ const id = c.drafts[0].id
+ c.drafts.reverse()
+ expect(respondToEvaluation(c, 'EC-0001 名称改为按单号查询').changed).toBe(true)
+ expect(c.drafts.find(item => item.id === id)?.name).toBe('按单号查询')
+ const before = structuredClone(c.drafts)
+ expect(respondToEvaluation(c, 'EC-9999 名称改为不存在').changed).toBe(false)
+ expect(c.drafts).toEqual(before)
 })

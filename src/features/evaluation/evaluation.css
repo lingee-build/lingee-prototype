@@ -1,3 +1,14 @@
+:root { --eval-status-failed: #c42b32; --eval-status-unknown: #a46000; }
+.eval-workbench { display: flex; flex: 1; min-height: 0; min-width: 0; overflow: hidden; }
+.eval-workbench > .eval-panel { flex: 1; min-height: 0; }
+.eval-panel-header { position: sticky; top: 0; z-index: 12; display: flex; align-items: center; gap: 8px; min-height: 53px; padding: 12px 18px; margin: 0 calc(-1 * var(--eval-gutter, 24px)) 16px; border-bottom: 1px solid var(--neutral-100); background: var(--background-page); }
+.eval-panel-header > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; font-weight: 500; }
+/* 直接复用 MessageTimeline / Composer，与开发页相同的会话宽度和底部输入区域。 */
+.eval-native-session { display: flex; flex-direction: column; flex: 0 0 auto; width: var(--eval-chat-width, 600px); height: 100%; overflow: hidden; transition: width 240ms cubic-bezier(0.22,1,0.36,1); min-width: 0; min-height: 0; }
+.eval-native-session[data-collapsed] { width: 0; border-right: 0; pointer-events: none; }
+@media (prefers-reduced-motion: reduce) { .eval-native-session { transition: none; } }
+.eval-version-toolbar { flex-wrap: wrap; }
+@media (max-width: 1100px) { .eval-workbench .eval-case-toolbar { flex-wrap: wrap; } .eval-workbench .eval-case-toolbar-actions { flex-wrap: wrap; } .eval-workbench .eval-run-row { flex-wrap: wrap; } }
 .eval-panel {
   color: var(--text-strong);
   font-size: 14px;
@@ -129,7 +140,7 @@
   color: #444449;
 }
 .eval-status[data-status="failed"] {
-  color: #a33a32;
+  color: var(--eval-status-failed);
 }
 .eval-status[data-status="blocked"] {
   color: #786b58;
@@ -330,23 +341,6 @@
   }
 }
 
-.eval-workspace > .eval-panel {
-  flex: 1;
-  min-height: 0;
-  padding-top: 8px;
-}
-
-.eval-workspace-header {
-  min-height: 52px;
-  padding: 10px var(--eval-gutter, 24px);
-}
-/* 侧栏收起后，为左侧固定按钮（8px + 28px）及 16px 间距留位。 */
-.eval-workspace-header[data-sidebar-collapsed="true"] {
-  padding-inline-start: max(var(--eval-gutter, 24px), 52px);
-}
-.eval-workspace-header > button {
-  flex-shrink: 0;
-}
 .eval-turn-card { container-type: inline-size; display: grid; gap: 12px; padding: 16px; border: 0; border-radius: 16px; background: var(--background-white); min-width: 0; }
 .eval-turn-card > .eval-toolbar { margin: 0; }
 .eval-rule { display: grid; gap: 12px; padding: 12px; border-radius: 8px; background: var(--surface-raised-base); }
@@ -873,8 +867,8 @@
 :is(.eval-panel, .eval-authoring-session, .eval-regex-assistant) [data-component="button"]:is(:disabled, [aria-disabled="true"]) { opacity: .45; cursor: not-allowed; }
 .eval-panel .eval-case-toolbar-actions button:focus-visible { outline: 2px solid var(--primary-600); outline-offset: 2px; }
 .eval-status[data-status="passed"] { color: var(--eval-success, #237454); }
-.eval-status:is([data-status="failed"], [data-status="error"]) { color: var(--eval-danger, #a33a32); }
-.eval-status:is([data-status="unknown"], [data-status="blocked"], [data-status="stop_unconfirmed"]) { color: var(--eval-warning, #856019); }
+.eval-status:is([data-status="failed"], [data-status="error"]) { color: var(--eval-status-failed); }
+.eval-status:is([data-status="unknown"], [data-status="blocked"], [data-status="stop_unconfirmed"]) { color: var(--eval-status-unknown); }
 .eval-status:is([data-status="running"], [data-status="judging"], [data-status="stopping"]) { color: var(--primary-600, #5558ff); }
 .eval-panel .eval-title:hover, .eval-panel .eval-file-name:hover { text-decoration: underline; text-underline-offset: 3px; }
 .eval-panel .eval-add-action { color: var(--text-base); }
@@ -930,7 +924,7 @@
 .eval-report-unified .eval-report-nav { display: flex; position: sticky; top: 0; z-index: 5; gap: 16px; flex-wrap: wrap; max-height: none; overflow: visible; background: var(--background-white); border-bottom: 1px solid var(--border-base); padding: 8px 0; margin-bottom: 24px; }
 .eval-report-unified .eval-report-nav-heading { display: none; }.eval-report-unified .eval-report-nav-section { display: contents; }
 .eval-report-unified .eval-report-section-row>a { padding: 8px 4px; border-radius: 0; }
-.eval-report-unified .eval-report-case-group { position: absolute; top: 100%; left: 0; right: 0; max-height: 240px; overflow: auto; margin: 0; padding: 8px; background: var(--background-white); border: 1px solid var(--border-base); border-radius: 8px; box-shadow: 0 8px 28px rgb(0 0 0 / 12%); }
+.eval-report-unified .eval-report-case-group { position: absolute; top: 100%; left: 0; right: auto; width: min(480px, 100%); box-sizing: border-box; max-height: 240px; overflow: auto; margin: 0; padding: 8px; background: var(--background-white); border: 1px solid var(--border-base); border-radius: 8px; box-shadow: 0 8px 28px rgb(0 0 0 / 12%); }
 .eval-report-unified .eval-report-document { display: block; width: 100%; }
 @media(max-width:600px) { .eval-report-unified { padding: 16px; }.eval-report-title-row h2 { font-size: 18px; }.eval-report-metadata .meta { grid-template-columns: 1fr; } }
 
@@ -954,8 +948,8 @@
 .eval-object-report-rate dd span { font-size: 16px; margin-left: 2px; }
 .eval-object-report-rate small { display: block; margin-top: 6px; font-size: 12px; color: var(--text-weak); }
 .eval-object-report-metrics [data-verdict="pass"] dd { color: var(--eval-success); }
-.eval-object-report-metrics [data-verdict="fail"] dd { color: var(--eval-danger); }
-.eval-object-report-metrics [data-verdict="unknown"] dd { color: var(--eval-warning); }
+.eval-object-report-metrics [data-verdict="fail"] dd { color: var(--eval-status-failed); }
+.eval-object-report-metrics [data-verdict="unknown"] dd { color: var(--eval-status-unknown); }
 .eval-object-report-meta { display: flex; flex-wrap: wrap; gap: 6px 24px; padding-bottom: 16px; font-size: 12px; color: var(--text-weak); }
 .eval-object-report-footer { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; border-top: 1px solid var(--border-base); padding-top: 16px; }
 .eval-object-report-footer .eval-actions { margin-left: auto; gap: 8px; }
@@ -971,4 +965,134 @@
   .eval-object-report-rate { border-right: 0; }
   .eval-object-report-footer { align-items: stretch; }
   .eval-object-report-footer .eval-actions { flex-wrap: wrap; }
+}
+
+/* 与原生开发会话同一顶栏；侧栏收起且会话隐藏时避让全局侧栏按钮。 */
+.eval-workspace[data-sidebar-collapsed="true"] .eval-workbench:not([data-chat-open]) .eval-panel-header { padding-inline-start: 52px; }
+
+.eval-workbench[data-chat-open] > .eval-panel { border-left: 1px solid var(--border-base); }
+
+/* 评测工具栏按实际面板宽度排布，拖动不改变开发会话的视觉体系。 */
+.eval-panel { container-type: inline-size; }
+.eval-workbench[data-resizing] { user-select: none; cursor: col-resize; }
+.eval-workbench[data-resizing] .eval-native-session { transition: none; }
+.eval-workbench[data-chat-open] > .eval-panel { border-left: 0; }
+.eval-splitter { position: relative; flex: 0 0 12px; cursor: col-resize; touch-action: none; outline-offset: -2px; z-index: 15; }
+.eval-splitter::before { content: ""; position: absolute; top: 0; bottom: 0; left: 5px; width: 1px; background: var(--border-base); pointer-events: none; }
+.eval-splitter:is(:hover, :focus-visible, :focus-within)::before { width: 2px; background: var(--primary-600); }
+.eval-splitter:focus-visible { outline: 2px solid var(--primary-600); }
+.eval-case-controls { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; margin: 16px 0 12px; align-items: center; }
+.eval-case-controls .eval-toolbar { margin: 0; gap: 8px; }
+.eval-case-controls .eval-version-toolbar { min-width: 0; }
+.eval-case-controls .eval-select { width: 100%; min-width: 0; height: 40px; }
+.eval-case-controls .eval-select > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.eval-case-controls .eval-case-toolbar-actions { gap: 8px; flex-wrap: nowrap; width: auto; margin: 0; }
+.eval-case-controls .eval-case-toolbar-actions :is([data-component="button"], [data-component="brand-button"]) { height: 40px; min-width: 88px; }
+.eval-case-controls > .eval-case-search { grid-column: 1 / -1; width: 100%; min-width: 0; height: 40px; box-sizing: border-box; }
+@container (max-width: 460px) {
+  .eval-case-controls .eval-version-toolbar { grid-column: 1 / -1; }
+  .eval-case-controls .eval-case-toolbar { grid-row: 2; grid-column: 2; justify-content: flex-end; }
+  .eval-case-controls > .eval-case-search { grid-row: 2; grid-column: 1; }
+}
+
+@container (max-width: 340px) {
+  .eval-case-controls { grid-template-columns: minmax(0, 1fr); }
+  .eval-case-controls .eval-case-toolbar { grid-row: 3; grid-column: 1; }
+  .eval-case-controls > .eval-case-search { grid-column: 1; }
+}
+
+.eval-case-controls[data-current] { grid-template-columns: minmax(120px, 1fr) auto; }
+.eval-case-controls[data-current] > .eval-case-search { grid-row: 1; grid-column: 1; max-width: 320px; justify-self: start; }
+.eval-case-controls[data-current] .eval-case-toolbar { grid-row: 1; grid-column: 2; }
+.eval-case-controls:not([data-current]) { display: none; }
+@container (max-width: 340px) {
+  .eval-case-controls[data-current] { grid-template-columns: minmax(0, 1fr); }
+  .eval-case-controls[data-current] .eval-case-toolbar { grid-row: 2; grid-column: 1; }
+}
+
+.eval-history-case { margin-bottom: 8px; border-radius: 16px; background: var(--background-base, white); overflow: hidden; }
+.eval-history-case > summary { display: flex; align-items: flex-start; gap: 12px; padding: 16px; cursor: pointer; list-style: none; }
+.eval-history-case > summary::-webkit-details-marker { display: none; }
+.eval-history-case > summary > [data-component="icon"] { width: 16px; height: 16px; margin-top: 3px; flex-shrink: 0; transform: rotate(-90deg); color: var(--text-weak); }
+.eval-history-case[open] > summary > [data-component="icon"] { transform: rotate(0deg); }
+.eval-history-case > summary:focus-visible { outline: 2px solid var(--primary-600); outline-offset: -3px; border-radius: 16px; }
+.eval-history-meta { display: block; margin-top: 4px; font-size: 12px; }
+.eval-history-content { padding: 0 16px 16px; border-top: 1px solid var(--border-base); }
+
+.eval-current-case { background: var(--background-base, white); border-radius: 16px; margin-bottom: 8px; overflow: hidden; }
+.eval-current-case > .eval-row { margin: 0; }
+.eval-panel .eval-case-list .eval-row .eval-case-toggle { display: flex; align-items: flex-start; gap: 8px; text-align: left; }
+.eval-case-toggle > span { min-width: 0; line-height: 22px; }
+.eval-case-toggle > [data-component="icon"] { width: 16px; height: 16px; margin-top: 3px; flex-shrink: 0; transform: rotate(-90deg); color: var(--text-weak); }
+.eval-case-toggle[aria-expanded="true"] > [data-component="icon"] { transform: rotate(0); }
+.eval-case-toggle:focus-visible { outline: 2px solid var(--primary-600); outline-offset: 3px; border-radius: 4px; }
+
+.eval-return-report { display: inline-flex; align-items: center; gap: 8px; margin: 0 0 12px; max-width: 100%; }
+
+.eval-empty-description { max-width: 360px; margin: 12px 24px 0; line-height: 1.7; text-align: center; color: var(--text-weak); }
+
+.eval-case-code { color: var(--text-weak); font-weight: 400; margin-right: 8px; white-space: nowrap; }
+
+.eval-case-meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 6px; font-size: 13px; line-height: 22px; }
+.eval-case-meta .eval-case-code { margin: 0; font-variant-numeric: tabular-nums; }
+.eval-current-meta { margin-left: 24px; }
+
+.eval-panel .eval-current-case, .eval-panel .eval-history-case, .eval-panel .eval-case-toggle { -webkit-user-select: text; user-select: text; }
+
+/* 报告卡片：编码与运行状态、结论、辅助信息分层。 */
+.eval-panel .eval-report-card { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 14px 20px; padding: 20px; }
+.eval-report-heading { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; min-width: 0; }
+.eval-report-heading .eval-list-name { user-select: text; -webkit-user-select: text; font-variant-numeric: tabular-nums; }
+.eval-report-latest { padding: 2px 7px; border-radius: 5px; color: var(--text-weak); background: var(--background-base); font-size: 12px; line-height: 20px; }
+.eval-report-state { color: var(--text-weak); font-size: 13px; }
+.eval-panel .eval-report-card .eval-report-primary[data-component="button"] { color: var(--primary-600, #505bff); font-weight: 500; justify-self: end; }
+.eval-report-metrics { grid-column: 1 / -1; display: flex; align-items: baseline; gap: 24px; flex-wrap: wrap; font-size: 14px; user-select: text; }
+.eval-report-metrics strong { font-size: 17px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.eval-metric-failed { color: var(--eval-status-failed); }
+.eval-metric-unknown { color: var(--eval-status-unknown); }
+.eval-report-metadata { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 14px; font-size: 12px; line-height: 22px; user-select: text; }
+.eval-report-secondary { justify-content: flex-end; flex-wrap: wrap; gap: 10px; }
+@container (max-width: 760px) {
+  .eval-report-metadata { grid-column: 1 / -1; }
+  .eval-report-secondary { grid-column: 1 / -1; }
+}
+@container (max-width: 380px) {
+  .eval-panel .eval-report-card { padding: 16px; gap: 12px; }
+  .eval-report-metrics { gap: 10px 16px; }
+}
+
+.eval-panel .eval-case-name { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; white-space: normal; overflow-wrap: anywhere; line-height: 22px; max-height: 44px; min-width: 0; }
+
+.eval-report-metrics > span { display: inline-flex; align-items: baseline; gap: 4px; font-size: 14px; line-height: 24px; white-space: nowrap; }
+.eval-metric-zero { color: var(--text-weak); }
+.eval-panel .eval-report-card .eval-report-metrics > span { margin: 0; }
+
+/* 运行概览与报告列表共用信息层级。 */
+.eval-run-overview { display: flex; flex-direction: column; gap: 16px; }
+.eval-run-overview h3 { margin: 0; font-size: 18px; }
+.eval-run-overview > .eval-toolbar { gap: 16px; flex-wrap: wrap; }
+.eval-run-overview .eval-actions { flex-wrap: wrap; }
+.eval-run-overview > .eval-report-metadata { margin: 0; }
+.eval-result-filters { display: flex; gap: 8px; flex-wrap: wrap; margin: 16px 0; }
+.eval-result-filters [aria-pressed="true"] { color: var(--primary-600); background: var(--background-base); }
+.eval-result-meta { user-select: text; }
+.eval-result-row .eval-grow { min-width: 0; }
+.eval-panel .eval-result-filters [data-component="button"][aria-pressed="true"] {
+  color: var(--primary-600, #505bff);
+  background: color-mix(in srgb, #505bff 10%, transparent);
+}
+.eval-run-overview > .eval-toolbar .eval-actions > [data-variant="primary"] { order: 1; }
+
+.eval-panel .eval-result-row { flex-wrap: wrap; }
+.eval-result-toggle { display: flex; align-items: flex-start; gap: 10px; width: 100%; text-align: left; user-select: text; }
+.eval-result-toggle > [data-component="icon"] { flex-shrink: 0; margin-top: 3px; }
+.eval-inline-result { flex: 0 0 100%; min-width: 0; border-top: 1px solid var(--border-base, #e5e5e8); padding-top: 16px; }
+
+/* 运行概览操作统一尺寸，保留一个主操作。 */
+.eval-panel .eval-run-overview .eval-current-actions { gap: 10px; align-items: center; }
+.eval-panel .eval-run-overview .eval-current-actions button {
+  height: 36px; min-height: 36px; padding: 0 14px;
+  border-radius: 8px; font-size: 14px; line-height: 20px;
+  font-weight: 400; display: inline-flex; align-items: center; justify-content: center;
+  gap: 6px; white-space: nowrap;
 }
