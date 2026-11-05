@@ -28,6 +28,9 @@ function ActionButton(props: { icon: IconName; label: string; view: Exclude<Prev
 /** 会话页右上角的图标栏：切换右侧预览面板显示「审查」还是「文件树」（两者互斥，再点一次收起） */
 export function PageActions(props: { inSession: boolean }) {
   const t = useT()
+  // 工作流画布打开时不显示：画布头部已有自己的操作，这几个入口和工作流无关
+  const workflowOpen = usePanel((s) => s.view === "drawer" && s.drawer?.kind === "workflow")
+  if (workflowOpen) return null
   return (
     <div className="pointer-events-none absolute right-6 top-3 z-40 flex">
       <div className="pointer-events-auto flex items-center gap-1.5">

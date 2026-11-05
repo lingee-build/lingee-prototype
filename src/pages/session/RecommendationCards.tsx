@@ -1,9 +1,27 @@
 import { useMemo, useState } from "react"
 import { Icon } from "@/ui"
 import { useLocaleStore, useT } from "@/i18n"
-import cards from "@/mock/fixtures/recommendation-cards.gen"
-import { RECOMMENDATION_ICON_HTML } from "@/mock/fixtures/recommendation-icons.gen"
+import syncedCards from "@/mock/fixtures/recommendation-cards.gen"
+import { RECOMMENDATION_ICON_HTML as SYNCED_ICON_HTML } from "@/mock/fixtures/recommendation-icons.gen"
+import { WORKFLOW_CASES } from "@/mock/fixtures/workflow-cases"
+import { icons, iconViewBox } from "@/ui/icon/icons.gen"
 import { SKILL_TABS } from "@/features/prompt-input/skill-entries"
+
+/** 原型新增的「工作流开发」场景模板：与线上同步来的模板同一结构，追加在后面 */
+const WORKFLOW_TYPE_KEY = "proto.nav.workflowDev"
+const cards = [
+  ...syncedCards,
+  ...WORKFLOW_CASES.map((item) => ({
+    title: { ...item.title, zht: item.title.zh },
+    prompt: { ...item.prompt, zht: item.prompt.zh },
+    typeKey: WORKFLOW_TYPE_KEY,
+    devMode: "workflow",
+  })),
+]
+const RECOMMENDATION_ICON_HTML: Record<string, string> = {
+  ...SYNCED_ICON_HTML,
+  [WORKFLOW_TYPE_KEY]: `<svg xmlns="http://www.w3.org/2000/svg" width="19" height="19" viewBox="${iconViewBox("git-branch-network")}" fill="none" style="color:#2970FF">${icons["git-branch-network"]}</svg>`,
+}
 
 const pick = (pool: number, previous: number[]) => {
   const candidates = Array.from({ length: pool }, (_, i) => i).filter((i) => !previous.includes(i))

@@ -88,6 +88,7 @@ export function SessionGroups(props: { actions: SidebarActions }) {
 
   return (
     <div
+      data-component="sidebar-session-scroll"
       data-slot="sidebar-scroll"
       className="flex-1 min-h-0 overflow-y-auto px-2 pl-4 [overflow-anchor:none] [scrollbar-gutter:stable]"
       style={{ contain: "layout style" }}

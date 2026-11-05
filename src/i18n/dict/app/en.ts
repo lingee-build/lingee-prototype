@@ -2786,7 +2786,7 @@ export const dict = {
   "kcode.agentConfig.skills.noData": "No data",
   "kcode.agentConfig.skills.noMatch": "No matching results",
   "kcode.agentConfig.skills.sourceLocal": "Local skill",
-  "kcode.agentConfig.skills.sourceCloud": "Cloud skill",
+  "kcode.agentConfig.skills.sourceCloud": "Marketplace skill",
   "kcode.agentConfig.skills.statusPublished": "Published",
   "kcode.agentConfig.skills.statusReviewing": "In Review",
   "kcode.agentConfig.skills.statusUnpublished": "Unpublished",

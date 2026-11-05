@@ -33,7 +33,7 @@ export async function runAssistantStream(sessionId: string, prompt: string, emit
   const run: Run = { controller: new AbortController() }
   runs.set(sessionId, run)
   const aborted = () => run.controller.signal.aborted
-  const scenario = pickScenario({ prompt, projectId: db.sessions.find((x) => x.id === sessionId)?.projectId ?? "" })
+  const scenario = pickScenario({ prompt, sessionId, projectId: db.sessions.find((x) => x.id === sessionId)?.projectId ?? "" })
 
   const pause = (ms: number) => sleep(ms, run.controller.signal)
   const pacing = scenario.pacing

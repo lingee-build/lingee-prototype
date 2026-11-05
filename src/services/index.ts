@@ -14,4 +14,6 @@ export const userService = {
 }
 export const modelService = { list: () => latency(db.models) }
 export * from "./dev"
+export * from "./console-scope"
+export * from "./workflow"
 export * from "./file"

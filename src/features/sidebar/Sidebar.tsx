@@ -26,7 +26,7 @@ export function Sidebar() {
   return (
     <div data-component="sidebar-nav" className="h-full flex flex-col overflow-hidden max-w-[300px] bg-background-sidebar rounded-l-[32px]">
       <NavSection onNewTask={() => actions.newTask()} />
-      <ProjectsHeader onSearch={openSearch} onCreateProject={() => void actions.createProject()} />
+      <ProjectsHeader onSearch={openSearch} onCreateProject={() => void actions.createProject()} onImportProject={() => void actions.importProject()} />
       <SessionGroups actions={actions} />
       <UserMenu />
     </div>

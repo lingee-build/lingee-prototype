@@ -1,8 +1,33 @@
 import { renderCardIcons } from "@/vendor/kcode-ui/assets/render-card-icons"
 import { useT } from "@/i18n"
 import { Icon } from "../icon/Icon"
+import workflowIcon from "./workflow-card-icon.svg"
 
-export { split as splitRenderBlocks, type Segment } from "@/vendor/kcode-ui/components/render-block"
+import { split, type Segment } from "@/vendor/kcode-ui/components/render-block"
+export type { Segment }
+
+/**
+ * 原型新增的产物类型。线上解析器（vendor，同步文件不能改）只认白名单里的 kind，
+ * 这里先切出原型类型的卡片，其余文本仍交给线上解析器。
+ */
+const PROTO_CARD = /:::render:(kd-workflow-change|kd-workflow)\s*(\{[^{}]*\})\s*:::/g
+
+export function splitRenderBlocks(text: string): Segment[] {
+  const segments: Segment[] = []
+  let cursor = 0
+  for (const match of text.matchAll(PROTO_CARD)) {
+    const index = match.index ?? 0
+    if (index > cursor) segments.push(...split(text.slice(cursor, index)))
+    try {
+      segments.push({ type: "render", kind: match[1], config: JSON.parse(match[2]) as Record<string, string> })
+    } catch {
+      segments.push({ type: "text", content: match[0] })
+    }
+    cursor = index + match[0].length
+  }
+  if (cursor < text.length) segments.push(...split(text.slice(cursor)))
+  return segments
+}
 
 const DESC_KEYS: Record<string, string> = {
   kdform: "ui.renderCard.desc.kdform",
@@ -31,6 +56,8 @@ const KIND_ICON_MAP: Record<string, string> = {
   kdstandalone: renderCardIcons.general,
   "kd-digital-employee": renderCardIcons.agentDev,
   "kd-expert-team": renderCardIcons.agentDev,
+  // 原型新增：工作流
+  "kd-workflow": workflowIcon,
 }
 
 function ArrowIcon() {

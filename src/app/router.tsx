@@ -41,6 +41,8 @@ export const router = createBrowserRouter([
           { index: true, Component: HomeRedirect },
           { path: "p/:projectId/session/:sessionId?", lazy: () => import("@/pages/session/SessionPage") },
           { path: "dev/:mode", lazy: () => import("@/pages/dev/DevPage") },
+          // 工作流设计页：/dev/workflow/:itemId（其他开发入口带二级路径时回到对应列表）
+          { path: "dev/:mode/:itemId", lazy: () => import("@/pages/dev/workflow/WorkflowDesignerPage") },
           { path: "settings/:section?", lazy: () => import("@/pages/settings/SettingsPage") },
           { path: "*", element: <Navigate to="/" replace /> },
         ],

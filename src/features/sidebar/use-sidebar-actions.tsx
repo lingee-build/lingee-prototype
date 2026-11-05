@@ -1,3 +1,5 @@
+import { devStore } from "@/mock/dev-store"
+import { useUpgradeStore } from "@/features/artifact-upgrade/UpgradeGate"
 import { useNavigate, useParams } from "react-router"
 import { ConfirmDialog, showToast, useDialog } from "@/ui"
 import { useT } from "@/i18n"
@@ -108,6 +110,24 @@ export function useSidebarActions() {
           }}
         />
       ))
+    },
+
+    async importProject() {
+      const project = await projectService.create(`已有产物示例项目 ${sync.getState().projects.length + 1}`)
+      const suffix = project.id
+      const skill = structuredClone(devStore.skills.find((x) => x.id === "sk_stock")!)
+      const agent = structuredClone(devStore.agents.find((x) => x.id === "supplier-access-review")!)
+      const app = structuredClone(devStore.mcpApps.find((x) => x.appCode === "kdcloud_fin_expense_claim_card")!)
+      Object.assign(skill, { id: `skill_${suffix}`, name: `inventory-${suffix}`, projectId: project.id, displayName: "库存查询（导入示例）" })
+      Object.assign(agent, { id: `agent_${suffix}`, projectId: project.id, name: "供应商评估（导入示例）" })
+      Object.assign(app, { appCode: `component_${suffix}`, projectId: project.id, appName: "报销卡片（导入示例）" })
+      devStore.skills.push(skill)
+      devStore.agents.push(agent)
+      devStore.mcpApps.push(app)
+      useUpgradeStore.setState((s) => ({ addedLegacy: [...s.addedLegacy, skill.name, agent.id, app.appCode] }))
+      sync.getState().setProjects([...sync.getState().projects, project])
+      useLayout.getState().expandGroup(project.id)
+      navigate(`/p/${project.id}/session`)
     },
 
     async createProject() {

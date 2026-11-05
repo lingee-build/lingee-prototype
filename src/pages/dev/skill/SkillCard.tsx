@@ -43,6 +43,8 @@ function ChannelRow(props: { icon: IconName; label: string; status: string; stat
 
 export function SkillCard(props: {
   skill: Skill
+  /** 随哪个智能体审核中（审核锁） */
+  auditAgentName?: string
   selected: boolean
   action: ReactNode
   onClick: () => void
@@ -74,7 +76,7 @@ export function SkillCard(props: {
             <ChannelRow
               icon="building"
               label={t("kcode.skillDev.channel.enterprise")}
-              status={t(`kcode.skillDev.channelStatus.enterprise.${enterpriseKey}`)}
+              status={`${t(`kcode.skillDev.channelStatus.enterprise.${enterpriseKey}`)}${props.auditAgentName ? ` · 随「${props.auditAgentName}」` : ""}`}
               statusClass={ENTERPRISE_COLOR[skill.enterpriseStatus]}
               cloudTip={skill.enterpriseStatus !== "saved" && skill.changed ? t("kcode.skillDev.cloud.submitTip") : undefined}
               onCloud={() => props.onContinueSubmit("enterprise")}

@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="400" height="400" viewBox="0 0 400 400" fill="none">
+  <defs>
+    <linearGradient id="doc" x1="80" y1="30" x2="330" y2="250" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#8794FF"/>
+      <stop offset="1" stop-color="#5D6BFF"/>
+    </linearGradient>
+    <linearGradient id="fold" x1="255" y1="25" x2="330" y2="105" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFFFFF"/>
+      <stop offset="1" stop-color="#C3CAFF"/>
+    </linearGradient>
+    <linearGradient id="tray" x1="200" y1="240" x2="200" y2="385" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F1F3FF" stop-opacity=".92"/>
+      <stop offset="1" stop-color="#E1E5FF" stop-opacity=".95"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(205 300) scale(150 70)">
+      <stop stop-color="#8C98FF" stop-opacity=".55"/>
+      <stop offset="1" stop-color="#8C98FF" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect x="33" y="143" width="334" height="190" rx="28" fill="#F5F6FF" stroke="#D5DAFF" stroke-width="6"/>
+  <path d="M75 70C75 45.1 95.1 25 120 25H255L330 100V260H75V70Z" fill="url(#doc)"/>
+  <path d="M255 25V75C255 88.8 266.2 100 280 100H330L255 25Z" fill="url(#fold)"/>
+  <path d="M256 27C262 66 288 94 328 99" stroke="#DCE0FF" stroke-width="2"/>
+  <g transform="translate(140 70) scale(8)" stroke="#fff" stroke-width=".3"><path fill-rule="evenodd" clip-rule="evenodd" d="M3.99998 1.3335C5.47274 1.3335 6.66665 2.5274 6.66665 4.00016C6.66665 5.2318 5.83137 6.26731 4.69659 6.57373C4.95922 9.07637 6.92322 11.04 9.42576 11.3029C9.73233 10.1683 10.7685 9.3335 12 9.3335C13.4727 9.3335 14.6666 10.5274 14.6666 12.0002C14.6666 13.4729 13.4727 14.6668 12 14.6668C10.7483 14.6668 9.69858 13.8044 9.41144 12.6414C7.46671 12.4739 5.76967 11.4834 4.66665 10.0164V14.0002C4.66665 14.3684 4.36817 14.6668 3.99998 14.6668C3.63179 14.6668 3.33331 14.3684 3.33331 14.0002V6.58284C2.18316 6.28682 1.33331 5.24272 1.33331 4.00016C1.33331 2.5274 2.52722 1.3335 3.99998 1.3335ZM12 10.6668C11.2636 10.6668 10.6666 11.2638 10.6666 12.0002C10.6666 12.7365 11.2636 13.3335 12 13.3335C12.7364 13.3335 13.3333 12.7365 13.3333 12.0002C13.3333 11.2638 12.7364 10.6668 12 10.6668ZM3.99998 2.66683C3.2636 2.66683 2.66665 3.26378 2.66665 4.00016C2.66665 4.73654 3.2636 5.3335 3.99998 5.3335C4.73636 5.3335 5.33331 4.73654 5.33331 4.00016C5.33331 3.26378 4.73636 2.66683 3.99998 2.66683Z" fill="#fff"/></g>
+  <path d="M30 238H370C382 238 390 248 388 260L372 362C370 375 359 385 346 385H54C41 385 30 375 28 362L12 260C10 248 18 238 30 238Z" fill="url(#tray)" stroke="#D3D8FF" stroke-width="6"/>
+  <path d="M30 238H370C382 238 390 248 388 260L372 362C370 375 359 385 346 385H54C41 385 30 375 28 362L12 260C10 248 18 238 30 238Z" fill="url(#glow)"/>
+</svg>

@@ -7,10 +7,13 @@ import { useT } from "@/i18n"
 import { PromptInput } from "@/features/prompt-input/PromptInput"
 import { PageActions } from "@/features/side-panel/PageActions"
 import { PreviewPanel } from "@/features/side-panel/PreviewPanel"
+import { useWorkflowLayout } from "@/features/workflow/layout-store"
 import { useSidebarActions } from "@/features/sidebar/use-sidebar-actions"
 import { usePanel } from "@/stores/panel"
 import { usePrompt } from "@/stores/prompt"
 import { devStore } from "@/mock/dev-store"
+import { workflowService } from "@/services/workflow"
+import { openWorkflowCanvas } from "@/features/workflow/open-canvas"
 import { useSync } from "@/stores/sync"
 import { Composer } from "./composer/Composer"
 import { NewSessionView } from "./NewSessionView"
@@ -31,7 +34,7 @@ export function Component() {
   const t = useT()
   const { projectId = "", sessionId } = useParams()
   const [search] = useSearchParams()
-  const editing = { kdskill: search.get("kdskill"), agent: search.get("agent"), mcpapp: search.get("mcpapp") }
+  const editing = { kdskill: search.get("kdskill"), agent: search.get("agent"), mcpapp: search.get("mcpapp"), workflow: search.get("workflow") }
   const { ready, projects, sessions, messages, loadMessages } = useSync()
   const setDraft = usePrompt((s) => s.setDraft)
   const actions = useSidebarActions()
@@ -39,13 +42,17 @@ export function Component() {
   const [skill, setSkill] = useState<string>()
   // 新任务页没有审查视图，此时面板视为收起
   const previewOpen = usePanel((s) => !!s.view && (s.view !== "review" || !!sessionId))
+  // 工作流画布：会话、画布、右栏默认 1:1:1，分隔线可以拖动（比例记在 workflow layout store；右栏收起时画布占满剩余宽度）
+  const workflowOpen = usePanel((s) => s.view === "drawer" && s.drawer?.kind === "workflow")
+  const workflowChat = useWorkflowLayout((s) => s.chat)
+  const resizing = useWorkflowLayout((s) => s.dragging)
   const sessionCollapsed = usePanel((s) => s.sessionCollapsed) && previewOpen
   const session = sessions.find((x) => x.id === sessionId)
   const upgraded = useUpgradeStore((s) => s.upgraded)
   useEffect(() => {
-    const ids = [...(legacySessions[sessionId ?? ""] ?? []), editing.agent ?? "", editing.kdskill ?? ""]
+    const ids = [...(legacySessions[sessionId ?? ""] ?? []), editing.agent ?? "", editing.kdskill ?? "", editing.mcpapp ?? ""]
     guardUpgrade(ids, () => {})
-  }, [sessionId, editing.agent, editing.kdskill, upgraded])
+  }, [sessionId, editing.agent, editing.kdskill, editing.mcpapp, upgraded])
   const loaded = sessionId ? messages[sessionId] : undefined
 
   useEffect(() => {
@@ -57,7 +64,7 @@ export function Component() {
   }, [sessionId, loadMessages])
 
   // 面板是会话级的：换会话 / 换项目时收起并清空已打开的文件。
-  // 例外：从开发页点「编辑」进来时，地址里带着 ?kdskill= / ?agent= / ?mcpapp=，直接打开对应产物的抽屉
+  // 例外：从开发页点「编辑」进来时，地址里带着 ?kdskill= / ?agent= / ?mcpapp= / ?workflow=，直接打开对应产物的抽屉
   useEffect(() => {
     const panel = usePanel.getState()
     panel.reset()
@@ -67,7 +74,9 @@ export function Component() {
     if (skill) panel.toggleDrawer({ kind: "kdskill", id: skill.id, title: skill.displayName })
     if (agent) panel.toggleDrawer({ kind: "agentConfig", id: agent.id, title: agent.name })
     if (app) panel.toggleDrawer({ kind: "kdapp-artifact", id: app.appCode, title: app.appName })
-  }, [sessionId, projectId, editing.kdskill, editing.agent, editing.mcpapp])
+    const workflow = editing.workflow ? workflowService.find(editing.workflow) : undefined
+    if (workflow) openWorkflowCanvas(workflow.id, workflow.name)
+  }, [sessionId, projectId, editing.kdskill, editing.agent, editing.mcpapp, editing.workflow])
 
   if (!ready) return <div className="size-full bg-background-page" />
   if (!projects.some((x) => x.id === projectId) || (sessionId && !session)) return <Navigate to="/" replace />
@@ -84,9 +93,10 @@ export function Component() {
             previewOpen ? "min-w-0" : "min-w-[680px]",
             !sessionId && "pt-[calc(30vh_-_56px)]",
             sessionCollapsed && "pointer-events-none",
+            resizing && "!transition-none",
           )}
           // 收起时也给一个明确的宽度（100%）：从 auto 过渡浏览器不会插值，面板开合会先跳一下
-          style={{ width: sessionCollapsed ? 0 : previewOpen ? SESSION_WIDTH : "100%" }}
+          style={{ width: sessionCollapsed ? 0 : previewOpen ? (workflowOpen ? `${workflowChat * 100}%` : SESSION_WIDTH) : "100%" }}
         >
           <div className={cx("min-h-0 relative", sessionId ? "flex-1 overflow-hidden" : "w-full shrink-0 overflow-visible")}>
             {session ? (

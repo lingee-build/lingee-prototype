@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef } from "react"
 import type { Message, Session } from "@/mock/types"
 import { SessionTurn } from "./SessionTurn"
 import { useCardActions } from "./use-card-actions"
+import { useLayout } from "@/stores/layout"
 
 /** 把消息流切成「轮」：每条用户消息开启一轮，之后的助手消息归入该轮 */
 function toTurns(messages: Message[]) {
@@ -75,9 +76,11 @@ export function MessageTimeline(props: { session: Session; messages: Message[] }
     if (el) el.scrollTop = el.scrollHeight
   }, [props.session.id])
 
+  const sidebarOpened = useLayout((s) => s.sidebarOpened)
   return (
     <div className="relative w-full h-full min-w-0 flex flex-col">
-      <div className="px-6">
+      {/* 侧边栏收起时左上角有展开按钮，标题让出位置 */}
+      <div className="px-6" style={sidebarOpened ? undefined : { paddingLeft: 48 }}>
         <div data-session-title className="bg-background-page relative w-full py-3.5 px-0">
           <div className="h-6 w-full flex items-center justify-center gap-2 relative">
             <div className="flex flex-1 items-center justify-center min-w-0">
@@ -98,7 +101,7 @@ export function MessageTimeline(props: { session: Session; messages: Message[] }
       </div>
       <div
         ref={scroller}
-        className="flex-1 min-h-0 overflow-y-auto px-6 pb-10"
+        className="session-timeline-scroll flex-1 min-h-0 overflow-y-auto px-6 pb-10"
         style={{ overflowAnchor: "none" }}
         onWheel={(e) => { if (e.deltaY < 0) stopFollow() }}
         onTouchMove={stopFollow}

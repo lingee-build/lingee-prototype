@@ -10,12 +10,10 @@ import { diffChanges, formOf, type AgentForm } from "./form"
 import { KnowledgeBaseTab } from "./knowledge/KnowledgeBaseTab"
 import { RoleSettingsTab } from "./RoleSettingsTab"
 import { SkillConfigTab } from "./SkillConfigTab"
-import { SubAgentTab } from "./sub-agent/SubAgentTab"
 import "./agent-config.css"
 
-const TABS = ["basic", "role", "skills", "sub", "knowledge"] as const
-/** 「子智能体」是原型新增的页签，线上字典里还没有它的 key */
-const tabLabel = (tab: string) => (tab === "sub" ? "proto.subAgent.tab" : `kcode.agentConfig.tab.${tab}`)
+const TABS = ["basic", "role", "skills", "knowledge"] as const
+const tabLabel = (tab: string) => `kcode.agentConfig.tab.${tab}`
 type ConfigTab = (typeof TABS)[number]
 
 export interface AgentConfigHandle {
@@ -31,6 +29,8 @@ interface Props {
   action?: ReactNode
   /** 页签栏下方的插槽，只在「基础信息」页签显示（详情弹窗把名称 / 状态 / 编码放这里） */
   subHeader?: ReactNode
+  /** 顶部提示条（如本地修改未提交），显示在页签上方 */
+  banner?: ReactNode
   /** 隐藏基础信息里的头像 + 名称卡片（subHeader 已经展示过） */
   hideIdentity?: boolean
   onRefresh?: () => void
@@ -41,7 +41,7 @@ interface Props {
 }
 
 /**
- * 智能体配置面板：五个页签（基础信息 / 角色设定 / 技能配置 / 子智能体 / 知识）。
+ * 智能体配置面板：四个页签（基础信息 / 角色设定 / 技能 / 知识）。
  * 开发页的详情弹窗（只读）和会话右侧的配置抽屉（可编辑）共用它。结构对齐原工程的 AgentConfigPanel。
  */
 export const AgentConfigPanel = forwardRef<AgentConfigHandle, Props>(function AgentConfigPanel(props, ref) {
@@ -84,6 +84,7 @@ export const AgentConfigPanel = forwardRef<AgentConfigHandle, Props>(function Ag
       className="agent-config-panel flex flex-col gap-5 h-full"
       style={{ "--border-weak-base": "var(--border-agent-config)", "--input-base": "var(--input-agent-config)" } as CSSProperties}
     >
+      {props.banner}
       <div
         className="light-segmented shrink-0 flex items-center justify-between"
       >
@@ -110,11 +111,6 @@ export const AgentConfigPanel = forwardRef<AgentConfigHandle, Props>(function Ag
       {tab === "skills" && (
         <div className="flex-1 min-h-0">
           <SkillConfigTab form={form} set={set} readonly={readonly} projectId={props.agent.projectId} />
-        </div>
-      )}
-      {tab === "sub" && (
-        <div className="flex-1 min-h-0 pb-5">
-          <SubAgentTab form={form} set={set} readonly={readonly} hostId={props.agent.id} onOpenAgent={(agent) => props.onOpenAgent?.(agent)} />
         </div>
       )}
       {tab === "knowledge" && (

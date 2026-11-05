@@ -3,6 +3,10 @@ import { procurementArtifacts } from "../procurement-artifacts"
 import { agentCreateScenario } from "./agent-create"
 import { mcpAppCreateScenario } from "./mcp-app-create"
 import { skillCreateScenario } from "./skill-create"
+import { workflowCreateScenario } from "./workflow-create"
+import { workflowEditScenario } from "./workflow-edit"
+import { workflowService } from "@/services/workflow"
+import { WORKFLOW_CREATOR } from "../fixtures/workflow-cases"
 import type { Scenario, ScenarioContext } from "./types"
 
 export type { Scenario, ScenarioStep } from "./types"
@@ -14,5 +18,9 @@ export function pickScenario(ctx: ScenarioContext): Scenario {
   if (/采购.*价格.*(异常|预警)/.test(ctx.prompt)) return procurementCreateScenario(ctx)
   if (skill === "ai-partner-creator") return agentCreateScenario(ctx)
   if (skill === "mcp-apps-builder") return mcpAppCreateScenario(ctx)
+  // 关联了工作流的会话：后续消息都在修改这条工作流的画布
+  const linked = ctx.sessionId ? workflowService.bySession(ctx.sessionId) : undefined
+  if (linked) return workflowEditScenario(ctx, linked)
+  if (skill === WORKFLOW_CREATOR) return workflowCreateScenario(ctx)
   return skillCreateScenario(ctx)
 }

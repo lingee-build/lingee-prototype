@@ -4,6 +4,7 @@ import { cx } from "@/lib/cx"
 import { useT } from "@/i18n"
 import type { Skill } from "@/mock/fixtures/dev"
 import type { SkillDetail } from "@/mock/fixtures/skill-detail"
+import { ScopeInfoItems } from "@/features/skill-publish-scope/SkillPublishScopeDialog"
 
 function Section(props: { title: string; first?: boolean; children: ReactNode }) {
   return (
@@ -55,7 +56,7 @@ export function OverviewTab(props: { skill: Skill; detail: SkillDetail }) {
 
       <Section title={t("kcode.skillPreview.section.basicInfo")}>
         <div className="bg-surface-skill-info rounded-[16px] px-5 py-4">
-          <ul className="flex flex-wrap items-center gap-x-9 gap-y-2 list-disc list-inside text-[14px] leading-[28px] text-[var(--neutral-600)]">
+          <ul className="grid grid-cols-2 gap-x-9 gap-y-2 list-disc list-inside text-[14px] leading-[28px] text-[var(--neutral-600)]">
             {info.map(([label, value]) => (
               <li key={label}>
                 {label}
@@ -63,6 +64,8 @@ export function OverviewTab(props: { skill: Skill; detail: SkillDetail }) {
                 {value}
               </li>
             ))}
+            {/* 发布范围：从 Console 实时取，未发布的技能不显示 */}
+            <ScopeInfoItems skill={skill} />
           </ul>
         </div>
       </Section>

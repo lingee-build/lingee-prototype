@@ -6,6 +6,7 @@ import { buildFixPrompt } from "@/vendor/kcode-web/src/utils/skill-fix-prompts"
 import type { Skill } from "@/mock/fixtures/dev"
 import { skillDetailOf } from "@/mock/fixtures/skill-detail"
 import { DynamicSkillIcon } from "@/features/dev-page/DynamicSkillIcon"
+import { auditLockTip, useAuditAgentName } from "@/features/skill-publish-scope/SkillPublishScopeDialog"
 import { CheckTab } from "./CheckTab"
 import { summarize, validationOf } from "./validation"
 import { OverviewTab } from "./OverviewTab"
@@ -48,6 +49,7 @@ export function SkillDetailDialog(props: { skill: Skill; initialTab?: DetailTab;
       ? { text: t("kcode.skillDev.meta.securityCheck.noRisk"), color: "text-[var(--success-600)]" }
       : { text: t("kcode.skillDev.meta.securityCheck.hasRisk"), color: "text-[var(--warning-600)]" }
   const rejectionReason = skill.reason ? t("ui.tile.rejectionReason", { reason: skill.reason }) : ""
+  const auditAgentName = useAuditAgentName(skill)
 
   return (
     <Dialog title={t("kcode.skillDev.detail.title")} fit className="w-[640px] !rounded-[24px] overflow-hidden shadow-[0px_6px_12px_rgba(0,0,0,0.08)]">
@@ -83,8 +85,15 @@ export function SkillDetailDialog(props: { skill: Skill; initialTab?: DetailTab;
                     {skill.displayName}
                   </span>
                   <CapsuleTag className="shrink-0">{skill.category}</CapsuleTag>
+                  {/* 企业分发状态；发布范围不放在标签里，放在下方「发布范围」区块。个人分发放到副标题 */}
                   {submitted &&
-                    (skill.enterpriseStatus === "rejected" && rejectionReason ? (
+                    (auditAgentName ? (
+                      <Tooltip value={auditLockTip(auditAgentName)} placement="top" gutter={4}>
+                        <Tag type="normal" className="whitespace-nowrap shrink-0 cursor-pointer">
+                          {t("kcode.skillDev.enterpriseStatus.submitted")} · 随「{auditAgentName}」
+                        </Tag>
+                      </Tooltip>
+                    ) : skill.enterpriseStatus === "rejected" && rejectionReason ? (
                       <Tooltip value={rejectionReason} placement="top" gutter={4}>
                         <Tag type="error" className="whitespace-nowrap shrink-0 cursor-pointer">
                           {t(`kcode.skillDev.enterpriseStatus.${skill.enterpriseStatus}`)}
@@ -95,11 +104,6 @@ export function SkillDetailDialog(props: { skill: Skill; initialTab?: DetailTab;
                         {t(`kcode.skillDev.enterpriseStatus.${skill.enterpriseStatus}`)}
                       </Tag>
                     ))}
-                  {skill.personalInstalled && (
-                    <Tag type="normal" className="whitespace-nowrap shrink-0">
-                      {t("kcode.skillDev.personalStatus.published")}
-                    </Tag>
-                  )}
                   {skill.changed && (submitted || skill.personalInstalled) && (
                     <Tooltip value={t("kcode.skillDev.changedTip.local")} placement="top" gutter={4}>
                       <Tag type="normal" className="whitespace-nowrap shrink-0 cursor-pointer">
@@ -110,20 +114,22 @@ export function SkillDetailDialog(props: { skill: Skill; initialTab?: DetailTab;
                 </div>
                 <span className="text-[14px] text-[var(--text-tile-desc)] font-medium leading-[22px] truncate" title={skill.name}>
                   {skill.name}
+                  {skill.personalInstalled && <span className="font-normal text-[12px]"> · {t("kcode.skillDev.personalStatus.published")}</span>}
                 </span>
               </div>
             </div>
-            <BrandButton
-              variant="primary"
-              size="normal"
-              className="shrink-0"
-              onClick={() => {
-                dialog.close()
-                props.onEdit()
-              }}
-            >
-              {t("kcode.skillDev.action.edit")}
-            </BrandButton>
+            <div className="flex shrink-0 items-center gap-2">
+              <BrandButton
+                variant="primary"
+                size="normal"
+                onClick={() => {
+                  dialog.close()
+                  props.onEdit()
+                }}
+              >
+                {t("kcode.skillDev.action.edit")}
+              </BrandButton>
+            </div>
           </div>
 
           <div className="flex mb-4 mx-6 border border-[var(--neutral-130)] rounded-[16px] shrink-0">

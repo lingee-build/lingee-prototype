@@ -1,3 +1,4 @@
+import { UpgradeCard } from "@/features/artifact-upgrade/UpgradeGate"
 import { BrandButton, Empty, Tile, useDialog } from "@/ui"
 import { useT } from "@/i18n"
 import type { McpApp } from "@/mock/fixtures/dev"
@@ -69,8 +70,8 @@ export function McpAppDevPage() {
       ) : (
         <div className={DEV_GRID}>
           {list.map((app) => (
+            <UpgradeCard key={app.appCode} id={app.appCode}>
             <Tile
-              key={app.appCode}
               className="dev-page-tile tile-filled tile-icon-40 group cursor-pointer"
               name={app.appName}
               desc={app.appDescription}
@@ -88,6 +89,7 @@ export function McpAppDevPage() {
               }
               action={<McpAppCardActions app={app} onChanged={refresh} />}
             />
+            </UpgradeCard>
           ))}
         </div>
       )}

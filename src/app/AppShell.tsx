@@ -5,12 +5,14 @@ import { cx } from "@/lib/cx"
 import { useT } from "@/i18n"
 import { Sidebar } from "@/features/sidebar/Sidebar"
 import { useLayout } from "@/stores/layout"
+import { useRestoreSidebar } from "@/features/workflow/open-canvas"
 
 /** 主框架：左侧栏（可收起）+ 右侧内容区，结构与过渡动画对齐原工程 pages/layout.tsx */
 export function AppShell() {
   const t = useT()
   const params = useParams()
   const { sidebarOpened, sidebarWidth, toggleSidebar } = useLayout()
+  useRestoreSidebar()
   const side = sidebarOpened ? sidebarWidth : 0
   const toggleLabel = t(sidebarOpened ? "command.sidebar.close" : "command.sidebar.open")
 

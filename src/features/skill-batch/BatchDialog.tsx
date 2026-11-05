@@ -1,7 +1,11 @@
+import { useState } from "react"
+import { useQuery } from "@tanstack/react-query"
+import { agentService } from "@/services"
 import { BrandButton, Dialog, Icon, useDialog } from "@/ui"
+import { MarketScopeStep, defaultScopeOf, isFirstSubmission, referencingAgents } from "@/features/skill-publish-scope/SkillPublishScopeDialog"
 import { cx } from "@/lib/cx"
 import { useT } from "@/i18n"
-import type { Skill } from "@/mock/fixtures/dev"
+import type { Skill, SkillScope } from "@/mock/fixtures/dev"
 import { CheckingStep, DecisionStep, DeleteConfirmStep, ResourceStep, SelectStep, SummaryStep, UploadingStep } from "./steps"
 import { BATCH_MAX, useBatchRun, type BatchMode, type BatchRoute, type Phase } from "./use-batch-run"
 
@@ -12,8 +16,8 @@ export interface BatchDialogProps {
   skills: Skill[]
   /** 单个技能从卡片菜单进来时跳过「选择技能」这一步 */
   skipSelect?: boolean
-  /** 提交 / 安装成功的技能 */
-  onSubmitted?: (skills: Skill[], route: BatchRoute) => void
+  /** 提交 / 安装成功的技能；scopes 为首次发布技能的发布范围（按技能 name），只有企业分发才有 */
+  onSubmitted?: (skills: Skill[], route: BatchRoute, scopes?: Record<string, SkillScope>) => void
   onDeleted?: (skills: Skill[]) => void
   /** 检查不通过时点「去修复」 */
   onGoFix?: (skills: Skill[]) => void
@@ -32,6 +36,19 @@ export function BatchDialog(props: BatchDialogProps) {
   const single = !!props.skipSelect
   const run = useBatchRun({ mode: props.mode, route, skills: props.skills, skipSelect: single })
   const stepProps = { run, mode: props.mode, route }
+  // 单个技能的企业分发：第 1 步先确认发布范围
+  const scopeStep = props.mode === "submit" && route === "enterprise" && single
+  const [scopePhase, setScopePhase] = useState(scopeStep)
+  // 首次发布的发布范围：默认上架商城、不下发 Build；已被本项目智能体引用的技能默认不上架商城。
+  // Build 不存范围，首次发布被驳回后再提交也回到默认值。开发者改过的值记在 overrides 里
+  const enterprise = props.mode === "submit" && route === "enterprise"
+  const agents = useQuery({ queryKey: ["agents"], queryFn: agentService.list, staleTime: 0, enabled: enterprise })
+  const referencedBy = (skill: Skill) => referencingAgents(agents.data, skill)[0]?.name
+  const [overrides, setOverrides] = useState<Record<string, SkillScope>>({})
+  const scopeOf = (skill: Skill) => overrides[skill.name] ?? defaultScopeOf()
+  const setScopeOf = (skill: Skill, value: SkillScope) => setOverrides((cur) => ({ ...cur, [skill.name]: value }))
+  const firstScopes = () => Object.fromEntries(props.skills.filter(isFirstSubmission).map((skill) => [skill.name, scopeOf(skill)]))
+  const batchScope = enterprise && !single
   const busy = run.phase === "checking" || run.phase === "resource" || run.phase === "uploading"
 
   const title =
@@ -47,11 +64,11 @@ export function BatchDialog(props: BatchDialogProps) {
     t("kcode.skillDev.batch.step.resource"),
     t(props.mode === "submit" ? "kcode.skillDev.batch.step.submit" : "kcode.skillDev.batch.step.result"),
   ]
-  const steps = props.mode === "delete" ? [] : single ? allSteps.slice(1) : allSteps
+  const steps = props.mode === "delete" ? [] : scopeStep ? ["发布范围", ...allSteps.slice(1)] : single ? allSteps.slice(1) : allSteps
   // 单技能入口没有「选择技能」这一步：选择确认屏不高亮任何步骤，其余步骤前移一位
-  const current = single ? (run.phase === "select" ? 0 : PHASE_STEP[run.phase] - 1) : PHASE_STEP[run.phase]
+  const current = scopeStep ? (scopePhase ? 1 : PHASE_STEP[run.phase]) : single ? (run.phase === "select" ? 0 : PHASE_STEP[run.phase] - 1) : PHASE_STEP[run.phase]
 
-  const upload = () => void run.runUpload((skills) => props.onSubmitted?.(skills, route))
+  const upload = () => void run.runUpload((skills) => props.onSubmitted?.(skills, route, enterprise ? firstScopes() : undefined))
   const cancelButton = (
     <BrandButton variant="auxiliary" size="normal" onClick={dialog.close}>
       {t("kcode.skillDev.action.cancel")}
@@ -100,7 +117,8 @@ export function BatchDialog(props: BatchDialogProps) {
         )}
 
         <div className="flex-1 min-h-0 overflow-y-auto flex flex-col">
-          {run.phase === "select" && <SelectStep {...stepProps} />}
+          {scopePhase && <MarketScopeStep skill={props.skills[0]} scope={scopeOf(props.skills[0])} onChange={(value) => setScopeOf(props.skills[0], value)} referencedBy={referencedBy(props.skills[0])} />}
+          {!scopePhase && run.phase === "select" && <SelectStep {...stepProps} scopePicker={batchScope ? { scopeOf, onChange: setScopeOf } : undefined} />}
           {run.phase === "deleteConfirm" && <DeleteConfirmStep {...stepProps} />}
           {run.phase === "checking" && <CheckingStep {...stepProps} />}
           {run.phase === "resource" && <ResourceStep {...stepProps} />}
@@ -110,7 +128,15 @@ export function BatchDialog(props: BatchDialogProps) {
         </div>
 
         <div className="flex items-center justify-end gap-3 mt-auto pt-5 shrink-0">
-          {run.phase === "select" && (
+          {scopePhase && (
+            <>
+              {cancelButton}
+              <BrandButton variant="primary" size="normal" onClick={() => { setScopePhase(false); void run.runCheck() }}>
+                {t("kcode.skillDev.batch.dialog.next")}
+              </BrandButton>
+            </>
+          )}
+          {!scopePhase && run.phase === "select" && (
             <>
               {cancelButton}
               <BrandButton variant="primary" size="normal" onClick={() => void run.runCheck()} disabled={run.selectedCount === 0 || run.selectedCount > BATCH_MAX}>

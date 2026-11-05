@@ -1,10 +1,12 @@
 import { guardUpgrade } from "@/features/artifact-upgrade/UpgradeGate"
 import { useState } from "react"
+import { useQuery } from "@tanstack/react-query"
 import { BrandButton, ConfirmDialog, Empty, showToast, useDialog } from "@/ui"
 import { cx } from "@/lib/cx"
 import { useT } from "@/i18n"
+import { SkillSubmitPathDialog, auditLockTip, isFirstSubmission } from "@/features/skill-publish-scope/SkillPublishScopeDialog"
 import type { Skill } from "@/mock/fixtures/dev"
-import { skillService } from "@/services"
+import { agentService, consoleScopeService, skillService } from "@/services"
 import { DEV_GRID, DevPageLayout } from "@/features/dev-page/DevPageLayout"
 import { useDevList } from "@/features/dev-page/use-dev-list"
 import { useEditSession } from "@/features/dev-page/use-edit-session"
@@ -40,6 +42,9 @@ export function SkillDevPage() {
     searchText: (skill) => `${skill.displayName} ${skill.name} ${skill.desc}`,
   })
 
+  // 审核锁：随智能体审核中的技能，卡片上显示随哪个智能体，不能单独提交或撤回
+  const agents = useQuery({ queryKey: ["agents"], queryFn: agentService.list, staleTime: 0 })
+  const auditAgentName = (skill: Skill) => (skill.auditAgentId ? agents.data?.find((x) => x.id === skill.auditAgentId)?.name ?? "智能体" : undefined)
   const patch = (id: string, change: Partial<Skill>) => {
     data.update((items) => items.map((x) => (x.id === id ? { ...x, ...change } : x)))
     void skillService.patch(id, change)
@@ -50,8 +55,13 @@ export function SkillDevPage() {
       () => (
         <BatchDialog
           {...config}
-          onSubmitted={(skills, route) => {
-            skills.forEach((skill) => patch(skill.id, route === "personal" ? { personalInstalled: true, changed: false } : { enterpriseStatus: "submitted", changed: false }))
+          onSubmitted={(skills, route, scopes) => {
+            skills.forEach((skill) => {
+              patch(skill.id, route === "personal" ? { personalInstalled: true, changed: false } : { enterpriseStatus: "submitted", changed: false, reason: undefined })
+              // 只有首次发布才把发布范围带给 Console；Build 本地不存
+              const scope = scopes?.[skill.name]
+              if (route === "enterprise" && scope && isFirstSubmission(skill)) void consoleScopeService.submitFirst(skill.name, scope)
+            })
             exitBatch()
           }}
           onDeleted={(skills) => {
@@ -96,8 +106,14 @@ export function SkillDevPage() {
     onLocalTest: (skill) => startSession(`使用技能「${skill.displayName}」做一次本地测试`, skill.projectId),
     onCloudTest: (skill) => showToast({ variant: "success", title: `${skill.displayName}：${t("kcode.skillPreview.action.test")}` }),
     onCheck: (skill) => openBatch({ mode: "check", skills: [skill], skipSelect: true }),
-    onSubmit: (skill) => openBatch({ mode: "submit", route: "enterprise", skills: [skill], skipSelect: true }),
-    onWithdraw: (skill) =>
+    onSubmit: (skill) => {
+      const lockedBy = auditAgentName(skill)
+      if (lockedBy) return void showToast({ variant: "warning", description: auditLockTip(lockedBy) })
+      dialog.show(() => <SkillSubmitPathDialog onConfirm={(route) => openBatch({ mode: "submit", route, skills: [skill], skipSelect: true })} />)
+    },
+    onWithdraw: (skill) => {
+      const lockedBy = auditAgentName(skill)
+      if (lockedBy) return void showToast({ variant: "warning", description: auditLockTip(lockedBy) })
       dialog.show(() => (
         <ConfirmDialog
           title={t("kcode.skillPreview.withdraw.confirmTitle")}
@@ -105,12 +121,18 @@ export function SkillDevPage() {
           cancelText={t("kcode.skillDev.action.cancel")}
           confirmText={t("kcode.skillPreview.withdraw.confirmBtn")}
           onConfirm={() => {
-            patch(skill.id, { enterpriseStatus: "saved" })
+            // 发布后的修改撤回：线上仍是已发布版本，本地修改保留
+            patch(skill.id, skill.everPublished ? { enterpriseStatus: "published", changed: true } : { enterpriseStatus: "saved" })
             showToast({ variant: "success", description: t("kcode.skillDev.withdraw.success") })
           }}
         />
-      )),
-    onDelete: (skill) => openBatch({ mode: "delete", skills: [skill] }),
+      ))
+    },
+    onDelete: (skill) => {
+      const lockedBy = auditAgentName(skill)
+      if (lockedBy) return void showToast({ variant: "warning", description: auditLockTip(lockedBy) })
+      openBatch({ mode: "delete", skills: [skill] })
+    },
   }
 
   const handlers = Object.fromEntries(Object.entries(rawHandlers).map(([key, action]) => [key, (skill: Skill) => {
@@ -206,10 +228,11 @@ export function SkillDevPage() {
             <SkillCard
               key={skill.id}
               skill={skill}
+              auditAgentName={auditAgentName(skill)}
               selected={batchMode && selected.includes(skill.id)}
               // 批量模式下卡片点击是勾选，不打开详情
               onClick={() => (batchMode ? toggle(skill.id) : openDetail(skill))}
-              onContinueSubmit={(route) => openBatch({ mode: "submit", route, skills: [skill], skipSelect: true })}
+              onContinueSubmit={(route) => route === "enterprise" ? rawHandlers.onSubmit(skill) : openBatch({ mode: "submit", route, skills: [skill], skipSelect: true })}
               action={
                 batchMode ? (
                   <button
@@ -229,7 +252,7 @@ export function SkillDevPage() {
                     )}
                   </button>
                 ) : (
-                  <SkillCardActions skill={skill} handlers={handlers} />
+                  <SkillCardActions skill={skill} handlers={handlers} lockTip={auditAgentName(skill) ? auditLockTip(auditAgentName(skill)!) : undefined} />
                 )
               }
             />

@@ -37,6 +37,7 @@ export interface Scenario {
 export interface ScenarioContext {
   prompt: string
   projectId: string
+  sessionId?: string
 }
 
 /** 从提示词里猜一个产物名：优先取「」或【】里的字，否则取第一句的前几个字 */

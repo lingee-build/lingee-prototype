@@ -5,6 +5,9 @@ import { useT } from "@/i18n"
 import { fileService } from "@/services"
 import { usePanel } from "@/stores/panel"
 import { DrawerView } from "./drawer/DrawerView"
+import { WorkflowHeader } from "@/features/workflow/WorkflowHeader"
+import { clamp, startResize, useWorkflowLayout } from "@/features/workflow/layout-store"
+import "@/vendor/kcode-ui/components/resize-handle.css"
 import { FileTreePane } from "./FileTreePane"
 import { ReviewView } from "./ReviewView"
 
@@ -19,11 +22,33 @@ export function PreviewPanel(props: { projectId: string; sessionId?: string; wor
   const view = panel.view === "review" && !props.sessionId ? undefined : panel.view
   const diffs = useQuery({ queryKey: ["diff", props.sessionId], queryFn: () => fileService.diff(props.sessionId ?? ""), enabled: !!props.sessionId })
   const collapseLabel = t(panel.sessionCollapsed ? "command.session.expand" : "command.session.collapse")
+  const workflow = view === "drawer" && panel.drawer?.kind === "workflow"
 
   return (
     <>
       {view && (
-        <div className="relative shrink-0 w-px h-full bg-[var(--neutral-100)]" />
+        <div className="relative shrink-0 w-px h-full bg-[var(--neutral-100)]">
+          {/* 工作流：会话与画布之间的分隔线可以左右拖动（会话最窄 320px，画布区最窄 560px），双击恢复 1:1:1 */}
+          {workflow && !panel.sessionCollapsed && (
+            <div
+              data-component="resize-handle"
+              data-direction="horizontal"
+              className="workflow-resize-handle"
+              role="separator"
+              aria-orientation="vertical"
+              aria-label={t("proto.wf.resize")}
+              onDoubleClick={() => useWorkflowLayout.getState().set({ chat: 1 / 3 })}
+              onPointerDown={(e) =>
+                startResize(
+                  e,
+                  e.currentTarget.parentElement?.parentElement,
+                  (x, rect) => clamp((x - rect.left) / rect.width, 320 / rect.width, 1 - 560 / rect.width),
+                  (chat) => useWorkflowLayout.getState().set({ chat }),
+                )
+              }
+            />
+          )}
+        </div>
       )}
       <div
         className={cx(
@@ -33,7 +58,7 @@ export function PreviewPanel(props: { projectId: string; sessionId?: string; wor
       >
         {view && (
           <>
-            <div className={cx("flex items-center justify-between pl-4.5 pr-6 py-3 shrink-0 border-l-[0px]", panel.drawer?.kind !== "agentConfig" && "border-b border-[var(--neutral-100)]")}>
+            <div className={cx("flex items-center justify-between pl-4.5 py-3 shrink-0 border-l-[0px]", workflow ? "pr-4" : "pr-6", panel.drawer?.kind !== "agentConfig" && "border-b border-[var(--neutral-100)]")}>
               <div className="flex items-center gap-1">
                 <Tooltip placement="bottom" value={collapseLabel} openDelay={300}>
                   <button
@@ -51,13 +76,15 @@ export function PreviewPanel(props: { projectId: string; sessionId?: string; wor
               </div>
               {view === "drawer" && panel.drawer ? (
                 <>
-                  {panel.drawer.kind !== "agentConfig" && (
+                  {panel.drawer.kind === "workflow" ? (
+                    <WorkflowHeader id={panel.drawer.id} />
+                  ) : panel.drawer.kind !== "agentConfig" && (
                     <span className="flex-1 min-w-0 px-2 text-[14px] font-medium leading-[22px] text-text-strong truncate" title={panel.drawer.title}>
                       {panel.drawer.title}
                     </span>
                   )}
-                  {/* 右上角叠着页面级的图标栏（审查 / 文件树），关闭按钮往左让开 */}
-                  {panel.drawer.kind !== "agentConfig" && <Tooltip placement="bottom" value={t("common.close")} openDelay={300} className="mr-[98px]">
+                  {/* 右上角叠着页面级的图标栏（审查 / 文件树），关闭按钮往左让开；工作流画布不显示图标栏 */}
+                  {panel.drawer.kind !== "agentConfig" && <Tooltip placement="bottom" value={t("common.close")} openDelay={300} className={panel.drawer.kind === "workflow" ? "ml-1" : "mr-[98px]"}>
                     <button
                       type="button"
                       className="session-preview-header-icon p-0 border-none bg-transparent cursor-pointer inline-flex items-center justify-center outline-none transition-colors"

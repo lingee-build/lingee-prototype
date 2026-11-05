@@ -3,9 +3,10 @@ import { useState } from "react"
 import { useNavigate } from "react-router"
 import { ConfirmDialog, showToast, useDialog } from "@/ui"
 import { useT } from "@/i18n"
-import type { Agent } from "@/mock/fixtures/dev"
+import { AgentSubmitCheckDialog } from "@/features/skill-publish-scope/SkillPublishScopeDialog"
+import type { Agent, Skill } from "@/mock/fixtures/dev"
 import { sleep } from "@/mock/latency"
-import { agentService, sessionService } from "@/services"
+import { agentService, sessionService, skillService } from "@/services"
 import { useSync } from "@/stores/sync"
 import { useEditSession } from "@/features/dev-page/use-edit-session"
 
@@ -85,29 +86,22 @@ export function useAgentActions(onChanged: () => void) {
     },
 
     submit(agent: Agent) {
-      dialog.show(() => (
-        <ConfirmDialog
-          tone="info"
-          title={t("kcode.agentDev.submit.confirmTitle")}
-          description={t("kcode.agentDev.submit.confirmContent")}
-          cancelText={t("kcode.agentDev.delete.cancel")}
-          confirmText={t("kcode.agentDev.submit.confirmBtn")}
-          onConfirm={() =>
-            void run("submit", async () => {
-              // 挂了未发布的技能不能提交
-              if (agent.skills.some((x) => x.publishStatus && x.publishStatus !== "published")) {
-                await sleep(500)
-                return showToast({ variant: "error", title: t("kcode.agentConfig.submitInvalidSkills") })
-              }
-              await agentService.submit(agent.id)
-              showToast({ variant: "success", title: t("kcode.agentConfig.submitReviewSuccess") })
-              onChanged()
-            })
-          }
-        />
-      ))
+      // 只提交智能体本身；引用的技能须全部已发布且无未提交修改
+      const submitAgent = () => void run("submit", async () => {
+        await agentService.submit(agent.id)
+        showToast({ variant: "success", title: t("kcode.agentConfig.submitReviewSuccess") })
+        onChanged()
+      })
+      const goSubmitSkill = (skill: Skill) => {
+        const draft = t("kcode.skillDev.edit.draft", { name: skill.displayName })
+        void editSession({ title: draft.replace(/[:：]\s*$/, ""), draft: `/kingdee-skill-creator ${draft}`, projectId: skill.projectId, target: { kdskill: skill.id } })
+      }
+      void Promise.all(agent.skills.map((item) => skillService.get(item.skillName))).then((found) => {
+        const linked = found.filter((skill): skill is NonNullable<typeof skill> => !!skill)
+        if (linked.length) dialog.show(() => <AgentSubmitCheckDialog agent={agent} skills={linked} onConfirm={submitAgent} onGoSubmit={goSubmitSkill} />)
+        else dialog.show(() => <ConfirmDialog tone="info" title={t("kcode.agentDev.submit.confirmTitle")} description={t("kcode.agentDev.submit.confirmContent")} cancelText={t("kcode.agentDev.delete.cancel")} confirmText={t("kcode.agentDev.submit.confirmBtn")} onConfirm={submitAgent} />)
+      })
     },
-
     withdraw(agent: Agent) {
       dialog.show(() => (
         <ConfirmDialog

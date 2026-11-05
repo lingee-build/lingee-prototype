@@ -22,7 +22,7 @@ function HeaderButton(props: { tip: string; icon: IconName; onClick: () => void 
 }
 
 /** 「项目」标题行：搜索会话 / 新增项目 / 显示设置（分组方式 + 项目筛选） */
-export function ProjectsHeader(props: { onSearch: () => void; onCreateProject: () => void }) {
+export function ProjectsHeader(props: { onSearch: () => void; onCreateProject: () => void; onImportProject: () => void }) {
   const t = useT()
   const projects = useSync((s) => s.projects)
   const { groupBy, setGroupBy, selectedProjects, setSelectedProjects } = useLayout()
@@ -39,7 +39,15 @@ export function ProjectsHeader(props: { onSearch: () => void; onCreateProject: (
         <span className="text-[var(--neutral-500)] text-[12px] font-[500] leading-[18px]">{t("kcode.nav.projects")}</span>
         <div className="flex items-center gap-1">
           <HeaderButton tip={t("kcode.nav.search")} icon="search-16" onClick={props.onSearch} />
-          <HeaderButton tip={t("kcode.nav.newProject")} icon="directory" onClick={props.onCreateProject} />
+          <DropdownMenu placement="bottom-start">
+            <DropdownMenu.Trigger className={ICON_BUTTON} aria-label="添加项目"><Icon name="directory" size="small" /></DropdownMenu.Trigger>
+            <DropdownMenu.Portal>
+              <DropdownMenu.Content style={{ minWidth: 180 }}>
+                <DropdownMenu.Item className="cursor-pointer" onSelect={props.onCreateProject}>新建空项目</DropdownMenu.Item>
+                <DropdownMenu.Item className="cursor-pointer" onSelect={props.onImportProject}>添加已有项目（示例）</DropdownMenu.Item>
+              </DropdownMenu.Content>
+            </DropdownMenu.Portal>
+          </DropdownMenu>
           <DropdownMenu placement="bottom-start">
             <Tooltip value={t("kcode.nav.displaySettings")} placement="top">
               <DropdownMenu.Trigger className={ICON_BUTTON}>

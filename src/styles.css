@@ -112,3 +112,24 @@ html {
 .changelog-version-heading::marker { content: ""; }
 .changelog-chevron { transition: transform 150ms ease; }
 details[open] > .changelog-version-heading .changelog-chevron { transform: rotate(90deg); }
+
+/* Fade the list itself so the footer transition preserves the sidebar surface. */
+[data-component="sidebar-session-scroll"] {
+  mask-image: linear-gradient(to bottom, #000 calc(100% - 20px), transparent);
+  -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 20px), transparent);
+}
+
+
+/* 会话时间线的滚动条：平时隐藏，鼠标移入对话区时才显示细条（与 markdown 代码块一致） */
+.session-timeline-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+  transition: scrollbar-color 0.3s ease;
+}
+.session-timeline-scroll:hover {
+  scrollbar-color: var(--neutral-300, rgba(0, 0, 0, 0.25)) transparent;
+}
+.session-timeline-scroll::-webkit-scrollbar { width: 6px; }
+.session-timeline-scroll::-webkit-scrollbar-track { background: transparent; }
+.session-timeline-scroll::-webkit-scrollbar-thumb { background: transparent; border-radius: 3px; }
+.session-timeline-scroll:hover::-webkit-scrollbar-thumb { background: var(--neutral-300, rgba(0, 0, 0, 0.25)); }

@@ -1,4 +1,6 @@
 import { Icon } from "@/ui"
+import type { Skill, SkillScope } from "@/mock/fixtures/dev"
+import { CurrentScope, SCOPE_HINT_FIRST, ScopeChecks, isFirstSubmission } from "@/features/skill-publish-scope/SkillPublishScopeDialog"
 import { cx } from "@/lib/cx"
 import { useT } from "@/i18n"
 import { CHECK_CATEGORIES } from "@/mock/fixtures/skill-check"
@@ -30,7 +32,12 @@ function ProgressHeader(props: { label: string; value: number }) {
 }
 
 /** 第 1 步：勾选技能。没有改动的技能置灰不可选，超过上限给出警告 */
-export function SelectStep({ run, mode, route }: StepProps) {
+/** 批量企业分发时，在选择技能这一步一并确定发布范围：首次发布的技能可勾选，已发布的不显示范围 */
+export interface ScopePicker {
+  scopeOf: (skill: Skill) => SkillScope
+  onChange: (skill: Skill, scope: SkillScope) => void
+}
+export function SelectStep({ run, mode, route, scopePicker }: StepProps & { scopePicker?: ScopePicker }) {
   const t = useT()
   // 选择屏的副标题：当前通道状态 · 无变化/有修改 · 另一通道的补充说明
   const subOf = (item: BatchItem) => {
@@ -57,13 +64,16 @@ export function SelectStep({ run, mode, route }: StepProps) {
 
   return (
     <>
-      <div className="text-[12px] text-text-weak mb-2 shrink-0">{t(`kcode.skillDev.batch.dialog.${hintKey}`, { count: run.selectedCount })}</div>
-      <div className={LIST_BOX}>
+      <div className="flex items-center justify-between gap-3 text-[12px] text-text-weak mb-2 shrink-0">
+        <span>{t(`kcode.skillDev.batch.dialog.${hintKey}`, { count: run.selectedCount })}</span>
+        {scopePicker && <span>发布范围：{SCOPE_HINT_FIRST}</span>}
+      </div>
+      <div className={cx(LIST_BOX, scopePicker && "max-h-[320px]")}>
         {run.items.map((item) => (
+          <div key={item.skill.id} className="border-b border-[var(--border-weak-base)] last:border-b-0">
           <label
-            key={item.skill.id}
             className={cx(
-              "flex items-center gap-2.5 px-3.5 py-[9px] border-b border-[var(--border-weak-base)] last:border-b-0 transition-colors",
+              "flex items-center gap-2.5 px-3.5 py-[9px] transition-colors",
               item.selected && !item.skipReason && "bg-[color-mix(in_srgb,var(--primary-600)_10%,transparent)]",
               item.skipReason ? "opacity-45 cursor-default" : "cursor-pointer hover:bg-[color-mix(in_srgb,var(--primary-600)_10%,transparent)]",
             )}
@@ -94,7 +104,17 @@ export function SelectStep({ run, mode, route }: StepProps) {
                 </span>
               )}
             </div>
+            {scopePicker && !item.skipReason && (
+              <div className="ml-auto shrink-0">
+                {isFirstSubmission(item.skill) ? (
+                  <ScopeChecks compact disabled={!item.selected} value={scopePicker.scopeOf(item.skill)} onChange={(value) => scopePicker.onChange(item.skill, value)} />
+                ) : (
+                  <CurrentScope name={item.skill.name} />
+                )}
+              </div>
+            )}
           </label>
+          </div>
         ))}
       </div>
       {run.selectedCount > BATCH_MAX && (

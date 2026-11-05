@@ -5,7 +5,8 @@ import { useLocaleStore, useT } from "@/i18n"
 import type { Skill } from "@/mock/fixtures/dev"
 import { skillDetailOf } from "@/mock/fixtures/skill-detail"
 import { sleep } from "@/mock/latency"
-import { skillService } from "@/services"
+import { consoleScopeService, skillService } from "@/services"
+import { auditLockTip, isFirstSubmission, useAuditAgentName } from "@/features/skill-publish-scope/SkillPublishScopeDialog"
 import { DynamicSkillIcon } from "@/features/dev-page/DynamicSkillIcon"
 import { useStartSession } from "@/features/dev-page/use-start-session"
 import { BatchDialog } from "@/features/skill-batch/BatchDialog"
@@ -68,8 +69,11 @@ export function SkillDrawer(props: { id: string; working: boolean }) {
   const skill = query.data
   const detail = useMemo(() => (skill ? skillDetailOf(skill) : undefined), [skill])
   const report = useMemo(() => (skill ? validationOf(skill, locale) : []), [skill, locale])
+  const auditAgentName = useAuditAgentName(skill)
   if (!skill || !detail) return null
   const locked = props.working || !!busy
+  // 审核锁：随智能体审核中时不能单独提交或撤回
+  const lockTip = auditAgentName ? auditLockTip(auditAgentName) : undefined
 
   const patch = (change: Partial<Skill>) => skillService.patch(skill.id, change).then(() => query.refetch())
 
@@ -81,7 +85,7 @@ export function SkillDrawer(props: { id: string; working: boolean }) {
     setBusy(undefined)
     showToast({ variant: "success", title: `${skill.displayName}：${t("kcode.skillPreview.action.test")}` })
   }
-  /** 提交：走和技能开发页同一个向导（检查 → 资源更新 → 提交），跳过选择技能那一步 */
+  /** 提交：走和技能开发页同一个向导（发布范围 → 检查 → 资源更新 → 提交），跳过选择技能那一步 */
   const submit = () => {
     setTab("check")
     dialog.show(
@@ -91,7 +95,11 @@ export function SkillDrawer(props: { id: string; working: boolean }) {
           route="enterprise"
           skills={[skill]}
           skipSelect
-          onSubmitted={() => void patch({ enterpriseStatus: "submitted", changed: false })}
+          onSubmitted={(_, __, scopes) => {
+            const scope = scopes?.[skill.name]
+            if (scope && isFirstSubmission(skill)) void consoleScopeService.submitFirst(skill.name, scope)
+            void patch({ enterpriseStatus: "submitted", changed: false, reason: undefined })
+          }}
           onGoFix={() => setTab("check")}
         />
       ),
@@ -109,7 +117,7 @@ export function SkillDrawer(props: { id: string; working: boolean }) {
         onConfirm={async () => {
           setBusy("withdraw")
           await sleep(700)
-          await patch({ enterpriseStatus: "saved", changed: false })
+          await patch(skill.everPublished ? { enterpriseStatus: "published", changed: true } : { enterpriseStatus: "saved", changed: false })
           setBusy(undefined)
         }}
       />
@@ -126,7 +134,7 @@ export function SkillDrawer(props: { id: string; working: boolean }) {
         </div>
         <div className="flex items-center gap-2 shrink-0">
           {skill.enterpriseStatus === "submitted" && (
-            <BrandButton variant="secondary" size="normal" icon={busy === "withdraw" ? undefined : "undo"} disabled={locked} onClick={withdraw}>
+            <BrandButton variant="secondary" size="normal" icon={busy === "withdraw" ? undefined : "undo"} disabled={locked || !!lockTip} title={lockTip} onClick={withdraw}>
               {busy === "withdraw" && <Spinner />}
               {t("kcode.skillPreview.action.withdraw")}
             </BrandButton>
@@ -150,7 +158,7 @@ export function SkillDrawer(props: { id: string; working: boolean }) {
               </DropdownMenu.Content>
             </DropdownMenu.Portal>
           </DropdownMenu>
-          <BrandButton variant="primary" size="normal" icon="submit-upload" disabled={locked} onClick={submit}>
+          <BrandButton variant="primary" size="normal" icon="submit-upload" disabled={locked || !!lockTip} title={lockTip} onClick={submit}>
             {t("kcode.skillPreview.action.submit")}
           </BrandButton>
         </div>

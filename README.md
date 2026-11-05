@@ -49,6 +49,7 @@ src/
 | `/p/:projectId/session` | 新任务 |
 | `/p/:projectId/session/:sessionId` | 会话 |
 | `/dev/skill` `/dev/agent` `/dev/mcpapp` | 技能开发 / 智能体开发 / 业务组件 |
+| `/dev/workflow` `/dev/workflow/:id` | 工作流开发（列表）/ 跳转到工作流的关联会话并打开画布 |
 | `/dev/app` `/dev/expert` `/dev/cloudTenant` `/settings` | 占位，待建 |
 
 ## 会话里的产物卡片
@@ -82,3 +83,15 @@ src/
 执行 `npm run test:runtime` 可检查来源完整性、执行分组和采购规则联动，再用 `npm run build` 检查构建。
 
 领导演示版本：界面及生成技能文件隐藏技术性 Mock 标签；底层继续使用独立本地 fixture，不调用真实 DC/ERP。采购业务样本及工具结构位于 `src/mock/fixtures/procurement-context.ts`。
+
+## 工作流开发
+
+左侧导航「智能体开发」下方新增「工作流开发」。工作流详情不是独立页面，而是「关联的 Build 会话 + 右侧画布」：左边用 Build 原生会话和助手对话，右边是画布。会话 / 画布 / 右栏默认 1:1:1，两条分隔线都可以左右拖动（沿用 Build 的 resize-handle，双击恢复默认，比例记在 `lingee-prototype.workflow-layout`）。
+
+- **列表**（`pages/dev/workflow/`）：复用 `DevPageLayout`、`Tile`、`SegmentedControl` 等开发页控件。状态四种：已保存 / 已提交 / 已发布 / 已驳回（驳回卡片显示原因）。点卡片进入关联会话并打开画布（没有会话时自动新建，`features/workflow/use-open-workflow.ts`）。右上角「导入」读入 DSL（「导出定义」生成的 JSON，格式见 `features/workflow/dsl.ts`；也接受只有 `nodes` / `edges` 的画布），校验开始 / 结束节点、节点类型和连线后新建一条「已保存」的工作流。
+- **新建**：进入新任务页并选中 `workflow-builder`（触发名 `/workflow-creator`）。场景模板里有「销售分析 / 费用审核 / 批量审批」（`mock/fixtures/workflow-cases.ts`），对话剧本见 `mock/scenarios/workflow-create.ts`，结束时推出 `kd-workflow` 卡片，点卡片在右侧打开画布并收起左侧导航。
+- **画布**（`features/workflow/`，原生 React 实现）：头部「保存」「试运行」「提交」（已提交时变成「撤回提交」）和「···」（查看试运行记录、设计历史、查看定义、导出定义、编辑基本信息、使用说明）。头部操作栏里可以搜索节点（选中后画布定位到该节点）；底部操作栏的「节点」打开节点库（智能体、MCP 工具、代码、条件、并行、并行汇入、人工输入、循环），拖到画布上放下后从节点下方端口拖出连线，或点击插到选中节点之后。节点配置对齐原工作流设计器，分「节点配置 / 输入输出 / 执行记录 / 文件」四页（`NodePanel.tsx`、`node-config.tsx`）：条件是有序分支 + 默认出口，人工输入按动作走出口，智能体可「依据处理意图选择下一步」，分支定义在节点配置里、连线用 `edge.branch` 指向分支。修改即时写入画布，可撤销。
+- **双向同步**：会话里要求修改画布时，`mock/scenarios/workflow-edit.ts` 先生成修改方案（`kd-workflow-change` 卡片 + 画布顶部横幅，改动节点蓝色虚线框），画布只读预览，点「应用」才写入、可撤销；「放弃」则丢弃。画布上的手动修改会被记录下来，下次发消息时助手自动读取（「读取画布」步骤），不需要用户操作。已提交状态下助手只读。
+- **保存 / 提交**（方案 10.1 / 10.2）：保存做轻校验，形成「已保存基线」（判断未保存修改、设计历史可恢复）；提交做完整校验，不通过时列出问题并可定位，通过后弹提交清单（版本号、发布范围、写操作步骤、人工确认数、依赖对象、按「已提交基线」生成的变更说明），审核在 Console 进行。撤回提交回到已保存，已提交基线回退。
+- **试运行**：模板只保存画布内容。MCP 工具账号、智能体版本、人工输入的实际办理人在试运行时配置（`doc.runtime`，可一键使用推荐配置，不进模板）。`trial-run.ts` 在本地模拟：并行分支、条件只走命中分支、循环逐轮输出、人工输入停在「待我处理」由你模拟办理并选择动作。智能体步骤记模拟 Token，汇总显示状态 / 耗时 / Token / 步骤；结果分「业务结果」（结束节点的最终输出）和「运行产物」（文件）。写操作 MCP 工具绑定「华东区账套（只读）」会失败，可在失败卡片里换账号后「重试该步骤并继续」。每次运行有记录可切换，步骤可展开看输入输出，结果文件可预览、下载、定位产出步骤，完成后在会话里追加一轮结果摘要。
+- 数据存在 localStorage（`lingee-prototype.workflows.v3`、`lingee-prototype.workflow-docs.v3`），刷新不丢；关联会话在内存数据库里，刷新后会重新建。

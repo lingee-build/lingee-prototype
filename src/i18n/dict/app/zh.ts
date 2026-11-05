@@ -2564,7 +2564,7 @@ export const dict = {
   "kcode.agentConfig.notFound": "无法加载文件",
   "kcode.agentConfig.tab.basic": "基础信息",
   "kcode.agentConfig.tab.role": "角色设定",
-  "kcode.agentConfig.tab.skills": "技能配置",
+  "kcode.agentConfig.tab.skills": "技能",
   "kcode.agentConfig.tab.knowledge": "知识",
 
   // ── 智能体版本与变更记录 ──
@@ -2665,7 +2665,7 @@ export const dict = {
   "kcode.agentConfig.skills.noData": "暂无数据",
   "kcode.agentConfig.skills.noMatch": "没有匹配的结果",
   "kcode.agentConfig.skills.sourceLocal": "本地技能",
-  "kcode.agentConfig.skills.sourceCloud": "云端技能",
+  "kcode.agentConfig.skills.sourceCloud": "商城技能",
   "kcode.agentConfig.skills.statusPublished": "已发布",
   "kcode.agentConfig.skills.statusReviewing": "审核中",
   "kcode.agentConfig.skills.statusUnpublished": "未发布",
@@ -3188,7 +3188,7 @@ export const dict = {
   "kcode.skillDev.batch.dialog.deleteDoneTxt": "{{count}} 个技能已成功删除。",
   "kcode.skillDev.batch.dialog.deleteDoneFail": "{{count}} 个删除失败。",
   "kcode.skillDev.batch.dialog.submitDoneTitle": "提交成功！等待管理员审核",
-  "kcode.skillDev.batch.dialog.submitDoneTxt": "你提交的 {{count}} 个技能已进入企业分发审核流程，审核通过后将自动发布至团队技能市场。",
+  "kcode.skillDev.batch.dialog.submitDoneTxt": "你提交的 {{count}} 个技能已进入企业审核流程。",
   "kcode.skillDev.batch.dialog.installDoneTitle": "安装成功！",
   "kcode.skillDev.batch.dialog.installDoneTxt": "{{count}} 个技能已完成安全检查并安装到工作（Work），可立即使用。",
   "kcode.skillDev.batch.dialog.partialDoneTitle": "部分提交成功",
@@ -3541,10 +3541,10 @@ export const dict = {
   // ── 技能提交：路径选择 ──
   "kcode.skillSubmit.pathSelect.title": "提交技能 · 选择路径",
   "kcode.skillSubmit.pathSelect.enterprise": "企业分发",
-  "kcode.skillSubmit.pathSelect.enterpriseDesc": "适合团队协作与知识沉淀，技能可共享给他人或发布至企业市场",
+  "kcode.skillSubmit.pathSelect.enterpriseDesc": "适合团队协作与知识沉淀，技能可共享给他人或发布至技能商城",
   "kcode.skillSubmit.pathSelect.personal": "个人自用",
   "kcode.skillSubmit.pathSelect.personalDesc": "适合本人独立使用，安全检测通过后即时安装到 Work，无需审核",
-  "kcode.skillSubmit.pathSelect.enterpriseHint": "企业分发将对团队成员或市场开放，需管理员审核后生效。",
+  "kcode.skillSubmit.pathSelect.enterpriseHint": "企业分发将对团队成员或技能商城开放，需管理员审核后生效。",
   "kcode.skillSubmit.pathSelect.personalHint": "仅限本人使用，安全检测通过后即时生效。",
   "kcode.skillSubmit.pathSelect.cancel": "取消",
   "kcode.skillSubmit.pathSelect.submit": "提交",
@@ -3556,7 +3556,7 @@ export const dict = {
   // ── 技能提交：企业成功 ──
   "kcode.skillSubmit.success.title": "提交成功！等待管理员审核",
   "kcode.skillSubmit.success.descPrefix": "您的技能「",
-  "kcode.skillSubmit.success.descSuffix": "」已提交企业分发审核管理员，审核通过后将自动发布至团队技能市场",
+  "kcode.skillSubmit.success.descSuffix": "」已提交企业分发审核管理员，审核通过后将自动发布至技能商城",
   "kcode.skillSubmit.success.step.submitted": "已提交",
   "kcode.skillSubmit.success.step.review": "审核中",
   "kcode.skillSubmit.success.step.publish": "发布",

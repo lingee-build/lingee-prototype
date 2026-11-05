@@ -1,5 +1,16 @@
 export type ReviewStatus = "saved" | "submitted" | "published" | "rejected"
 
+/**
+ * 发布范围：两个独立开关。Build 不存这份数据，展示时都从 Console 取（见 services/console-scope.ts）；
+ * 只在首次发布时由 Build 随提交带上默认值或开发者勾选的值。
+ */
+export interface SkillScope {
+  /** 上架技能商城 */
+  mall: boolean
+  /** 下发 Build */
+  build: boolean
+}
+
 export interface Skill {
   id: string
   name: string
@@ -11,6 +22,10 @@ export interface Skill {
   personalInstalled: boolean
   /** 企业分发通道的审核状态 */
   enterpriseStatus: ReviewStatus
+  /** 是否发布过：从未发布过的技能（含首次提交被驳回、撤回）再次提交仍算首次发布，可以选发布范围 */
+  everPublished?: boolean
+  /** 随哪个智能体一起审核中（审核锁）：有值时技能不能单独提交或撤回，只能撤回整个智能体 */
+  auditAgentId?: string
   /** 提交后本地又有修改，卡片上出现「云朵」提示继续提交 */
   changed?: boolean
   reason?: string
@@ -27,6 +42,7 @@ export interface AgentSkill {
   skillName: string
   desc: string
   builtin?: boolean
+  /** 添加时的来源：本地技能（本项目）/ 更多技能（技能商城） */
   source?: "local" | "marketplace"
   publishStatus?: "unpublished" | "reviewing" | "published"
 }
@@ -111,27 +127,53 @@ export interface McpApp {
   reviewRemark?: string
 }
 
-export const skills: Skill[] = [
-  { id: "sk_delivery", name: "delivery-notice-query", displayName: "发货通知单查询", desc: "按单据编号、状态和通知日期组合筛选发货通知单，返回分页列表或物料行明细，查询为空时提示调整条件。", category: "供应链", projectId: "scm-skills", personalInstalled: true, enterpriseStatus: "published", inspect: "pass" },
-  { id: "sk_stock", name: "realtime-stock-query", displayName: "即时库存查询", desc: "按物料、仓库、仓位查询即时库存与可用量，支持批号与辅助属性维度展开。", category: "供应链", projectId: "scm-skills", personalInstalled: true, enterpriseStatus: "submitted", changed: true },
-  { id: "sk_purchase", name: "purchase-order-push", displayName: "采购订单下推入库", desc: "校验采购订单可入库数量后下推生成采购入库单，超收时给出明确提示并阻止提交。", category: "供应链", projectId: "scm-skills", personalInstalled: false, enterpriseStatus: "saved" },
-  { id: "sk_leave", name: "leave-request", displayName: "办理请假申请", desc: "通过对话收集假期类型、起止日期、事由与代理人，自动校验剩余假期天数，生成请假单草稿并在确认后提交。", category: "人力资源", projectId: "hr-assistant", personalInstalled: true, enterpriseStatus: "rejected", reason: "缺少对跨年假期的处理说明，请补充后重新提交。", inspect: "fail" },
+/**
+ * 演示数据覆盖的情况：
+ * - 发货通知单查询：已上架商城、本地有修改 → 引用它的智能体要等它单独审核通过才能提交
+ * - 即时库存查询：发布后的修改正在单独审核（审核锁）
+ * - 采购订单下推入库：首次发布被驳回
+ * - 办理请假申请 / 薪资条查询与解释：单独审核中
+ * - 费用报销提交 / 应收账龄分析：未提交 → 引用它们的智能体不能提交
+ * - 供应商准入核查：首次发布正在单独审核（审核锁）
+ * - 价格表批量调价：已发布，下发 Build
+ * - 客户信用评估：已发布、本地有修改 → 需先提交
+ */
+const rawSkills: Skill[] = [
+  { id: "sk_delivery", name: "delivery-notice-query", displayName: "发货通知单查询", desc: "按单据编号、状态和通知日期组合筛选发货通知单，返回分页列表或物料行明细，查询为空时提示调整条件。", category: "供应链", projectId: "scm-skills", personalInstalled: true, enterpriseStatus: "published", inspect: "pass", changed: true },
+  { id: "sk_stock", name: "realtime-stock-query", displayName: "即时库存查询", desc: "按物料、仓库、仓位查询即时库存与可用量，支持批号与辅助属性维度展开。", category: "供应链", projectId: "scm-skills", personalInstalled: true, enterpriseStatus: "submitted", everPublished: true },
+  { id: "sk_purchase", name: "purchase-order-push", displayName: "采购订单下推入库", desc: "校验采购订单可入库数量后下推生成采购入库单，超收时给出明确提示并阻止提交。", category: "供应链", projectId: "scm-skills", personalInstalled: false, enterpriseStatus: "rejected", reason: "缺少超收场景的处理说明，请补充后重新提交。", inspect: "fail" },
+  { id: "sk_leave", name: "leave-request", displayName: "办理请假申请", desc: "通过对话收集假期类型、起止日期、事由与代理人，自动校验剩余假期天数，生成请假单草稿并在确认后提交。", category: "人力资源", projectId: "hr-assistant", personalInstalled: true, enterpriseStatus: "submitted", inspect: "pass" },
   { id: "sk_expense", name: "expense-claim-submit", displayName: "费用报销提交", desc: "分步收集费用类型、金额、发生日期和票据附件，超过限额时提醒走额外审批流程。", category: "财务", projectId: "workspace", personalInstalled: false, enterpriseStatus: "saved" },
-  { id: "sk_salary", name: "payslip-explain", displayName: "薪资条查询与解释", desc: "查询指定月份薪资条，并用通俗语言解释各项扣款与补贴的计算依据。", category: "人力资源", projectId: "hr-assistant", personalInstalled: true, enterpriseStatus: "published", changed: true },
+  { id: "sk_salary", name: "payslip-explain", displayName: "薪资条查询与解释", desc: "查询指定月份薪资条，并用通俗语言解释各项扣款与补贴的计算依据。", category: "人力资源", projectId: "hr-assistant", personalInstalled: true, enterpriseStatus: "submitted", everPublished: true },
   { id: "sk_supplier", name: "supplier-onboarding-check", displayName: "供应商准入核查", desc: "汇总供应商资质、历史交付与质量评分，输出准入建议和风险点清单。", category: "供应链", projectId: "scm-skills", personalInstalled: false, enterpriseStatus: "submitted" },
-  { id: "sk_price", name: "price-batch-adjust", displayName: "价格表批量调价", desc: "按物料分组或供应商批量调整采购价格表，支持按百分比或固定金额调价，调价前先给出影响范围预览。", category: "供应链", projectId: "scm-skills", personalInstalled: false, enterpriseStatus: "saved" },
+  { id: "sk_price", name: "price-batch-adjust", displayName: "价格表批量调价", desc: "按物料分组或供应商批量调整采购价格表，支持按百分比或固定金额调价，调价前先给出影响范围预览。", category: "供应链", projectId: "scm-skills", personalInstalled: false, enterpriseStatus: "published" },
   { id: "sk_ar", name: "ar-aging-analysis", displayName: "应收账龄分析", desc: "按客户与账期区间统计应收余额，标记逾期重点客户并给出催收优先级。", category: "财务", projectId: "workspace", personalInstalled: false, enterpriseStatus: "saved" },
+  { id: "sk_credit", name: "customer-credit-check", displayName: "客户信用评估", desc: "结合历史回款、逾期次数与授信额度评估客户信用等级，给出是否放单的建议。", category: "财务", projectId: "workspace", personalInstalled: false, enterpriseStatus: "published", changed: true, inspect: "pass" },
 ]
+/** 发布过 = 已发布，或者显式标记（发布后的修改正在审核） */
+export const skills: Skill[] = rawSkills.map((skill) => ({ ...skill, everPublished: skill.everPublished ?? skill.enterpriseStatus === "published" }))
 
-const skillRef = (id: string, publishStatus: AgentSkill["publishStatus"] = "published"): AgentSkill => {
+/**
+ * Console 侧的发布范围（只给已发布的技能）。Build 不存，每次展示都从这里取。
+ * 存量技能怎么换算成两个开关由 Console 处理，Build 直接用返回值。
+ */
+export const consoleScopes: Record<string, SkillScope> = {
+  "delivery-notice-query": { mall: true, build: false },
+  "realtime-stock-query": { mall: false, build: false },
+  "payslip-explain": { mall: false, build: false },
+  "price-batch-adjust": { mall: false, build: true },
+  "customer-credit-check": { mall: false, build: false },
+}
+
+const skillRef = (id: string, source: AgentSkill["source"] = "local"): AgentSkill => {
   const skill = skills.find((x) => x.id === id)!
   return {
     id: skill.name,
     name: skill.displayName,
     skillName: skill.name,
     desc: skill.desc,
-    source: publishStatus === "published" ? "marketplace" : "local",
-    publishStatus,
+    source,
+    publishStatus: skill.enterpriseStatus === "submitted" ? "reviewing" : skill.everPublished ? "published" : "unpublished",
   }
 }
 
@@ -145,7 +187,7 @@ export const agents: Agent[] = [
     id: "scm-collab-assistant", projectId: "scm-skills", name: "供应链协同助手", desc: "覆盖采购、库存、发货全链路的问答与单据处理，能够跨单据追溯上下游关系。", avatar: "/preset-agent-avatar-1.png",
     status: "published", backendStatus: "published", domain: "supply-chain", preset: true, createdAt: "2026-03-02T02:00:00Z", defaultModelLevel: "expert",
     role: role("供应链协同助手", "负责解答采购、库存、发货相关问题，并协助处理单据。", ["先确认用户关心的单据类型与组织范围", "查询结果用表格呈现，超过 20 行时先给汇总", "发现上下游数量不一致时主动提示"]),
-    skills: [skillRef("sk_delivery"), skillRef("sk_stock", "reviewing")], knowledge: [catalog("kc_scm", "供应链制度", "供应链制度")], subs: ["mk-sales-fulfil"],
+    skills: [skillRef("sk_delivery"), skillRef("sk_stock")], knowledge: [catalog("kc_scm", "供应链制度", "供应链制度")], subs: ["mk-sales-fulfil"],
     changelog: {
       pending: [
         { createdAt: "2026-10-16T02:30:00Z", operator: "梁平贤", summary: "新增供应商风险监控子智能体。" },
@@ -161,7 +203,7 @@ export const agents: Agent[] = [
     id: "hr-assistant", projectId: "hr-assistant", name: "HR 智能助手", desc: "解答假期、薪资、入转调离等员工高频问题，并可代为发起请假与证明开具。", avatar: "/preset-agent-avatar-2.png",
     status: "submitted", backendStatus: "submitted", domain: "hr", createdAt: "2026-08-21T03:20:00Z", allowModelSwitch: true, defaultModelLevel: "auto",
     role: role("HR 智能助手", "面向全体员工解答人事制度问题，并代办请假、开具证明等事务。", ["回答制度问题时引用知识库原文并给出条款出处", "办理请假前校验剩余假期天数", "薪资类问题只回答本人数据"]),
-    skills: [skillRef("sk_leave", "unpublished"), skillRef("sk_salary")], subs: ["onboarding-guide", "mk-contract-risk"],
+    skills: [skillRef("sk_leave"), skillRef("sk_salary")], subs: ["onboarding-guide", "mk-contract-risk"],
     knowledge: [
       catalog("kc_hr_attendance", "考勤与假期", "人事制度/考勤与假期"),
       catalog("kc_hr_salary", "薪酬福利", "人事制度/薪酬福利"),
@@ -179,14 +221,14 @@ export const agents: Agent[] = [
     id: "expense-advisor", projectId: "workspace", name: "财务报销顾问", desc: "指导员工按制度填写报销单，自动识别票据并校验费用标准。", avatar: "/preset-agent-avatar-3.png",
     status: "saved", domain: "finance", createdAt: "2026-09-30T08:00:00Z",
     role: role("财务报销顾问", "帮助员工按公司费用制度完成报销。", ["先问清费用类型与发生日期", "超过标准的费用提示需要额外审批", "票据不清晰时请用户重新上传"]),
-    skills: [skillRef("sk_expense", "unpublished")], knowledge: [catalog("kc_fin_expense", "费用报销制度", "财务制度/费用报销制度")],
+    skills: [skillRef("sk_expense"), skillRef("sk_delivery", "marketplace"), skillRef("sk_price", "marketplace")], knowledge: [catalog("kc_fin_expense", "费用报销制度", "财务制度/费用报销制度")],
     changelog: { pending: [{ createdAt: "2026-09-30T08:00:00Z", operator: "梁平先", summary: "创建智能体" }], versions: [] },
   },
   {
     id: "supplier-access-review", projectId: "scm-skills", name: "供应商准入评估", desc: "结合资质文件与历史绩效给出准入评分，输出结构化评估报告。", avatar: "/avatar-agent-1.png",
     status: "rejected", backendStatus: "rejected", rejectionRemark: "知识库引用的评分标准已过期，请更新后重新提交。", domain: "supply-chain", createdAt: "2026-09-05T02:40:00Z",
     role: role("供应商准入评估", "根据资质与历史绩效评估供应商是否可以准入。", ["逐项核对资质文件有效期", "历史交付与质量数据不足时在报告里注明", "输出评分与风险点清单"]),
-    skills: [skillRef("sk_supplier", "reviewing")], knowledge: [catalog("kc_scm_supplier", "供应商管理", "供应链制度/供应商管理")],
+    skills: [skillRef("sk_supplier")], knowledge: [catalog("kc_scm_supplier", "供应商管理", "供应链制度/供应商管理")],
     changelog: { pending: [], versions: [{ version: "1.0.0", releasedAt: "2026-09-06T03:00:00Z", operator: "梁平先", lines: [] }] },
   },
   {
@@ -204,14 +246,17 @@ export const agents: Agent[] = [
   },
   {
     id: "sales-order-tracker", projectId: "workspace", name: "销售订单跟单员", desc: "跟踪订单从下单到回款的各节点，主动提醒延期风险并给出处理建议。", avatar: "/avatar-agent-3.png",
-    status: "published", backendStatus: "published", domain: "sales", createdAt: "2026-06-02T01:00:00Z", allowModelSwitch: false, defaultModelLevel: "fast",
+    status: "saved", backendStatus: "published", isChanged: true, domain: "sales", createdAt: "2026-06-02T01:00:00Z", allowModelSwitch: false, defaultModelLevel: "fast",
     role: role("销售订单跟单员", "跟踪销售订单的交付与回款进度。", ["每次回答先给当前节点与下一步", "发现延期风险时给出可选处理方案", "金额类数据保留两位小数"]),
-    skills: [skillRef("sk_delivery"), skillRef("sk_ar", "unpublished")], knowledge: [], subs: ["mk-sales-fulfil", "supplier-access-review", "mk-fin-analyst"],
+    skills: [skillRef("sk_ar"), skillRef("sk_credit")], knowledge: [], subs: ["mk-sales-fulfil", "supplier-access-review", "mk-fin-analyst"],
     changelog: {
-      pending: [],
+      pending: [
+        { createdAt: "2026-11-02T03:10:00Z", operator: "王敏", summary: "新增技能「应收账龄分析」" },
+        { createdAt: "2026-11-02T03:40:00Z", operator: "王敏", summary: "修改技能「客户信用评估」的放单规则" },
+      ],
       versions: [
         { version: "1.0.0", releasedAt: "2026-06-05T02:00:00Z", operator: "梁平先", lines: [] },
-        { version: "1.1.0", releasedAt: "2026-08-01T02:00:00Z", operator: "王敏", summary: "接入应收账龄分析", lines: ["新增技能「应收账龄分析」", "默认模型等级调整为「快速」"] },
+        { version: "1.1.0", releasedAt: "2026-08-01T02:00:00Z", operator: "王敏", summary: "接入客户信用评估", lines: ["新增技能「客户信用评估」", "默认模型等级调整为「快速」"] },
       ],
     },
   },

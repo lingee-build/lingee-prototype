@@ -6,11 +6,14 @@ import { sessionService } from "@/services"
 import { usePanel } from "@/stores/panel"
 import { usePrompt } from "@/stores/prompt"
 import { useSync } from "@/stores/sync"
+import { workflowService } from "@/services/workflow"
+import { collapseSidebarForCanvas } from "@/features/workflow/open-canvas"
 
 /**
  * 会话里产物卡片的点击行为（对应原工程 session.tsx 的 onCardClick）：
  * - 点卡片主体：在右侧面板打开对应的抽屉（技能预览 / 智能体配置 / 业务组件详情），再点一次收起
  * - 「本地测试」：技能跳到新任务页并带上 /技能名；智能体新建一个测试会话
+ * - 工作流卡片：在右侧打开工作流画布，并收起最左侧边栏
  * - 业务组件的「预览」：原型里没有真的开发服务器，给一条提示
  */
 export function useCardActions(projectId: string): CardClick {
@@ -41,6 +44,14 @@ export function useCardActions(projectId: string): CardClick {
       const app = devStore.mcpApps.find((x) => x.appCode === config.appCode)
       if (!app) return showToast({ variant: "error", title: t("kcode.mcpApp.empty.noMatch") })
       return toggleDrawer({ kind: "kdapp-artifact", id: app.appCode, title: app.appName })
+    }
+    if (kind === "kd-workflow") {
+      const id = config.id ?? ""
+      if (!workflowService.exists(id)) return showToast({ variant: "error", title: t("proto.workflow.notFound") })
+      // 打开画布时收起最左侧边栏，给画布留出宽度
+      const opening = !(usePanel.getState().view === "drawer" && usePanel.getState().drawer?.id === id)
+      if (opening) collapseSidebarForCanvas()
+      return toggleDrawer({ kind: "workflow", id, title: config.title ?? "" })
     }
     if (kind === "kdapp-preview-start") return showToast({ description: `${t("kcode.mcpApp.action.preview")}：${config.url ?? ""}` })
   }

@@ -26,14 +26,10 @@ export function UserMenu() {
   const name = user?.displayName || user?.userId || ""
 
   return (
-    <div className="relative shrink-0 px-2 pb-2">
-      <div
-        className="absolute -top-8 left-0 right-0 pointer-events-none h-8"
-        style={{ background: "linear-gradient(180deg, var(--user-info-shadow-start) 0%, var(--user-info-shadow-end) 100%)" }}
-      />
+    <div data-component="sidebar-user-footer" className="relative shrink-0 px-3 py-2">
       <DropdownMenu placement="top-start" open={open} onOpenChange={setOpen}>
-        <DropdownMenu.Trigger className="group mt-2 flex h-10 w-full items-center gap-1.5 rounded-[20px] border-none px-2 py-1.5 text-left cursor-pointer transition-colors hover:bg-[var(--neutral-100)]">
-          <Avatar fallback={name} className="size-5 shrink-0 rounded-[14px] text-[14px]" />
+        <DropdownMenu.Trigger className="group flex h-11 w-full items-center gap-2 rounded-[20px] border-none bg-transparent px-1 py-1.5 text-left cursor-pointer transition-colors hover:bg-[var(--neutral-100)]">
+          <Avatar fallback={name} className="size-6 shrink-0 rounded-full text-[14px]" />
           <div className="min-w-0 flex-1">
             <div className="truncate text-[14px] font-[500] leading-[20px] text-[var(--neutral-900)]" title={name}>
               {name}
@@ -111,6 +107,28 @@ export function UserMenu() {
                       {colorScheme === scheme && <Icon name="check" size="small" className="text-[var(--neutral-600)]" />}
                     </DropdownMenu.Item>
                   ))}
+                </DropdownMenu.SubContent>
+              </DropdownMenu.Portal>
+            </DropdownMenu.Sub>
+
+            <DropdownMenu.Sub gutter={10}>
+              <DropdownMenu.SubTrigger className={SUB_TRIGGER}>
+                <Icon name="building" size="small" className="text-[var(--neutral-600)]" />
+                <span className={LABEL}>切换租户</span>
+                <Icon name="chevron-right-16" size="small" />
+              </DropdownMenu.SubTrigger>
+              <DropdownMenu.Portal>
+                <DropdownMenu.SubContent style={{ minWidth: 240 }}>
+                  {["金蝶软件（中国）有限公司", "灵基演示租户"].map((tenantName) => (
+                    <DropdownMenu.Item key={tenantName} className="flex cursor-pointer items-center gap-2" onSelect={() => {
+                      useSync.setState((s) => ({ user: s.user ? { ...s.user, tenantName } : undefined }))
+                      navigate("/dev/agent")
+                    }}>
+                      <span className="flex-1">{tenantName}</span>
+                      {user?.tenantName === tenantName && <Icon name="check" size="small" />}
+                    </DropdownMenu.Item>
+                  ))}
+                  <p className="px-2 py-1 text-[11px] text-text-weak">原型演示：复用项目数据，分别记录升级状态</p>
                 </DropdownMenu.SubContent>
               </DropdownMenu.Portal>
             </DropdownMenu.Sub>

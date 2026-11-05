@@ -30,6 +30,7 @@ export function AgentDetailDialog(props: { agent: Agent; onChanged?: () => void 
             agent={agent}
             readonly
             hideIdentity
+            banner={<AgentChangedAlert agent={agent} />}
             onOpenAgent={(sub) => dialog.show(() => <AgentDetailDialog agent={sub} onChanged={props.onChanged} />)}
             action={
               editable && (
@@ -68,7 +69,6 @@ export function AgentDetailDialog(props: { agent: Agent; onChanged?: () => void 
                     </span>
                   </div>
                 </div>
-                <AgentChangedAlert agent={agent} />
               </div>
             }
           />

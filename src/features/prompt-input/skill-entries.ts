@@ -4,6 +4,8 @@ import type { IconName } from "@/ui"
 export const SKILL_TABS: Array<{ name: string; labelKey: string; iconName: IconName }> = [
   { name: "kingdee-skill-creator", labelKey: "kcode.nav.skillDev", iconName: "skill-bolt" },
   { name: "ai-partner-creator", labelKey: "kcode.nav.agentDev", iconName: "ai-partner" },
+  // 原型新增：工作流开发
+  { name: "workflow-creator", labelKey: "proto.nav.workflowDev", iconName: "git-branch-network" },
   { name: "kingdee-design", labelKey: "kcode.starter.app.universal", iconName: "app-prototype" },
   { name: "standalone-build", labelKey: "kcode.starter.app.general", iconName: "app-general" },
   { name: "app-build", labelKey: "kcode.starter.app.erp", iconName: "app-cosmic" },
@@ -17,6 +19,7 @@ const SKILL_DISPLAY_NAME_MAP: Record<string, string> = {
   "standalone-build": "general-app-builder",
   "kingdee-skill-creator": "skill-builder",
   "ai-partner-creator": "agent-builder",
+  "workflow-creator": "workflow-builder",
   "kingdee-design": "prototype-builder",
 }
 

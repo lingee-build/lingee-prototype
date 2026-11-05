@@ -7,6 +7,7 @@ import { stageParts, splitFinalParts } from "./process-groups"
 import { ExecutionPlan } from "./ExecutionPlan"
 import { ToolPart } from "./ToolPart"
 import { UserMessage } from "./UserMessage"
+import { WorkflowChangeCard } from "@/features/workflow/proposals"
 
 /** 一轮对话 = 一条用户消息 + 其后的助手回复。结构对齐 kcode-ui 的 session-turn */
 /** 一段正文：普通文字走 Markdown，其中的 :::render:kind {...}::: 指令渲染成产物卡片 */
@@ -17,7 +18,12 @@ const TextPart = memo(function TextPart(props: { text: string; onCardClick?: Car
       <div data-slot="text-part-body">
         {segments.map((segment, index) =>
           segment.type === "render" ? (
+            // 原型新增：工作流的画布修改卡片（应用 / 放弃），其余产物卡片走 Build 原有 RenderCard
+            segment.kind === "kd-workflow-change" ? (
+              <WorkflowChangeCard key={index} config={segment.config} />
+            ) : (
             <RenderCard key={index} kind={segment.kind} config={segment.config} onCardClick={props.onCardClick} />
+            )
           ) : (
             segment.content.trim() && <Markdown key={index} text={segment.content} />
           ),
