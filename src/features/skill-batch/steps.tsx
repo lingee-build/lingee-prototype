@@ -1,3 +1,4 @@
+import { evaluationDeletionNotice } from "@/services/evaluation-deletion"
 import { Icon } from "@/ui"
 import type { Skill, SkillScope } from "@/mock/fixtures/dev"
 import { CurrentScope, SCOPE_HINT_FIRST, ScopeChecks, isFirstSubmission } from "@/features/skill-publish-scope/SkillPublishScopeDialog"
@@ -156,7 +157,7 @@ export function DeleteConfirmStep({ run }: StepProps) {
       </div>
       <div className="flex items-start gap-2 px-3 py-2.5 rounded-[8px] bg-[var(--danger-50)] border border-[rgba(241,34,52,0.25)]">
         <Icon name="warning-circle" size="small" className="size-4 text-[var(--danger-500)] shrink-0 mt-0.5" />
-        <span className="text-[12px] leading-[1.5] text-[var(--danger-600)]">{t("kcode.skillDev.batch.dialog.deleteLocalWarn")}</span>
+        <span className="text-[12px] leading-[1.5] text-[var(--danger-600)]">{t("kcode.skillDev.batch.dialog.deleteLocalWarn")} {evaluationDeletionNotice}</span>
       </div>
     </div>
   )

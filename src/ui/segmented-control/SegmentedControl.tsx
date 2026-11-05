@@ -37,6 +37,19 @@ export function SegmentedControl(props: SegmentedControlProps) {
             type="button"
             role="tab"
             aria-selected={props.value === item.value}
+            tabIndex={props.value === item.value ? 0 : -1}
+            onKeyDown={(event) => {
+              const index = props.items.findIndex(i => i.value === item.value)
+              let next = index
+              if (event.key === "ArrowRight") next = (index + 1) % props.items.length
+              else if (event.key === "ArrowLeft") next = (index + props.items.length - 1) % props.items.length
+              else if (event.key === "Home") next = 0
+              else if (event.key === "End") next = props.items.length - 1
+              else return
+              event.preventDefault()
+              props.onChange(props.items[next].value)
+              list.current?.querySelectorAll<HTMLButtonElement>('[role="tab"]')[next]?.focus()
+            }}
             data-slot="segmented-control-item"
             data-selected={props.value === item.value ? "" : undefined}
             onClick={() => props.onChange(item.value)}

@@ -1,3 +1,5 @@
+import { useNavigate } from "react-router"
+import { ObjectEvaluationReport } from "@/features/evaluation/ObjectEvaluationReport"
 import { useMemo, useState, type CSSProperties } from "react"
 import { BrandButton, CapsuleTag, Dialog, Icon, Markdown, SegmentedControl, Tag, Tooltip, useDialog } from "@/ui"
 import { cx } from "@/lib/cx"
@@ -11,7 +13,7 @@ import { CheckTab } from "./CheckTab"
 import { summarize, validationOf } from "./validation"
 import { OverviewTab } from "./OverviewTab"
 
-type DetailTab = "overview" | "preview" | "check"
+type DetailTab = "overview" | "preview" | "check" | "evaluation"
 
 function MetaCell(props: { label: string; value: string; className?: string; icon?: boolean }) {
   return (
@@ -35,6 +37,7 @@ const Divider = () => <div className="w-[0.5px] h-[50px] bg-[var(--neutral-100)]
 export function SkillDetailDialog(props: { skill: Skill; initialTab?: DetailTab; onEdit: () => void; onFix: (prompt: string) => void }) {
   const t = useT()
   const dialog = useDialog()
+  const navigate = useNavigate()
   const { skill } = props
   const detail = useMemo(() => skillDetailOf(skill), [skill])
   const [tab, setTab] = useState<DetailTab>(props.initialTab ?? "overview")
@@ -52,9 +55,9 @@ export function SkillDetailDialog(props: { skill: Skill; initialTab?: DetailTab;
   const auditAgentName = useAuditAgentName(skill)
 
   return (
-    <Dialog title={t("kcode.skillDev.detail.title")} fit className="w-[640px] !rounded-[24px] overflow-hidden shadow-[0px_6px_12px_rgba(0,0,0,0.08)]">
-      <div className="relative flex flex-col max-h-[80vh]">
-        <div className="flex flex-col h-full min-h-0">
+    <Dialog title={t("kcode.skillDev.detail.title")} fit className="w-[640px] !max-w-[94vw] !rounded-[24px] overflow-hidden shadow-[0px_6px_12px_rgba(0,0,0,0.08)]">
+      <div className="relative flex flex-col max-h-[80vh] min-h-0">
+        <div className="flex flex-col h-full min-h-0 overflow-hidden">
           {skill.changed && submitted && (
             <div
               className={cx(
@@ -147,12 +150,13 @@ export function SkillDetailDialog(props: { skill: Skill; initialTab?: DetailTab;
           >
             <SegmentedControl
               value={tab}
-              onChange={(value) => setTab(value as DetailTab)}
-              items={(["overview", "preview", "check"] as const).map((value) => ({ value, label: t(`kcode.skillPreview.tab.${value}`) }))}
+              onChange={value => setTab(value as DetailTab)}
+              items={[...(["overview", "preview", "check"] as const).map((value) => ({ value, label: t(`kcode.skillPreview.tab.${value}`) })), {value:"evaluation", label:"评测报告"}]}
             />
           </div>
 
           <div className="flex-1 min-h-0 overflow-y-auto no-scrollbar">
+            {tab === "evaluation" && <ObjectEvaluationReport objectId={`skill:${skill.id}`} open={url => { dialog.close(); navigate(url) }} />}
             {tab === "overview" && <OverviewTab skill={skill} detail={detail} />}
             {tab === "preview" && (
               <div className="flex-1 px-6 pb-4 select-text">

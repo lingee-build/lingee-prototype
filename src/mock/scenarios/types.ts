@@ -1,4 +1,5 @@
 import type { ExecutionPlanPart, PermissionRequest, QuestionInfo, ToolPart } from "../types"
+import type { EvaluationRepairTarget } from "@/services/evaluation-repair"
 
 export interface ScenarioStep {
   /** 进入这一步时，把第几条待办标为进行中（之前的都算完成） */
@@ -35,6 +36,7 @@ export interface Scenario {
 }
 
 export interface ScenarioContext {
+  repairTarget?: EvaluationRepairTarget
   prompt: string
   projectId: string
   sessionId?: string

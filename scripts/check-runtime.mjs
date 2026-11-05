@@ -8,6 +8,21 @@ import { build } from 'esbuild'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const temporary = await mkdtemp(path.join(tmpdir(), 'build-runtime-check-'))
+// 评测模块依赖浏览器存储和轮询；为 Node 回归提供独立存储，并在结束后清理轮询。
+const previousStorage = Object.getOwnPropertyDescriptor(globalThis, 'localStorage')
+const storage = new Map()
+Object.defineProperty(globalThis, 'localStorage', { configurable: true, value: {
+  getItem: key => storage.get(key) ?? null,
+  setItem: (key, value) => storage.set(key, String(value)),
+  removeItem: key => storage.delete(key),
+} })
+const realInterval = globalThis.setInterval
+const intervals = new Set()
+globalThis.setInterval = (...args) => {
+  const timer = realInterval(...args)
+  intervals.add(timer)
+  return timer
+}
 try {
   await build({ entryPoints: [path.join(root,'src/pages/session/timeline/process-groups.ts'),path.join(root,'src/mock/scenarios/procurement-create.ts'),path.join(root,'src/mock/latency.ts'),path.join(root,'src/services/procurement.ts')], bundle:true, platform:'node', format:'esm', outdir:temporary, entryNames:'[name]', outExtension:{'.js':'.mjs'}, alias:{'@':path.join(root,'src')}, logLevel:'silent' })
   const {stageParts,contextRuns,splitFinalParts} = await import(pathToFileURL(path.join(temporary,'process-groups.mjs')))
@@ -165,4 +180,10 @@ try {
     assert.ok(imports.includes(`@import "./styles/${name}.css" layer(components);`), `Missing component cascade layer: ${name}`)
   }
   console.log('PASS: source CSS/code integrity; process grouping; reasoning/context merge; final/card visibility; confirmed rules → generated files → reports → local retest.')
-} finally { await rm(temporary,{recursive:true,force:true}) }
+} finally {
+  for (const timer of intervals) clearInterval(timer)
+  globalThis.setInterval = realInterval
+  if (previousStorage) Object.defineProperty(globalThis, 'localStorage', previousStorage)
+  else delete globalThis.localStorage
+  await rm(temporary,{recursive:true,force:true})
+}

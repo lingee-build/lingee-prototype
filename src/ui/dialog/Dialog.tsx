@@ -8,6 +8,8 @@ import { useDialogStore } from "./dialog-store"
 export interface DialogProps {
   title?: ReactNode
   description?: ReactNode
+  /** 内容区自带 Radix.Title 和 Radix.Description，保留调用方的布局。 */
+  customHeader?: boolean
   action?: ReactNode
   status?: ReactNode
   size?: "normal" | "large" | "x-large"
@@ -38,7 +40,7 @@ export function Dialog(props: DialogProps) {
       <div data-slot="dialog-container" style={{ "--dialog-width": props.width } as CSSProperties}>
         <Radix.Content
           ref={ref}
-          aria-describedby={undefined}
+          {...(!props.description && !props.customHeader ? { "aria-describedby": undefined } : {})}
           data-slot="dialog-content"
           data-no-header={hasHeader ? undefined : ""}
           className={cx("relative", props.className)}
@@ -72,9 +74,9 @@ export function Dialog(props: DialogProps) {
                 />
               )}
             </div>
-          ) : (
+          ) : !props.customHeader ? (
             <Radix.Title className="sr-only">dialog</Radix.Title>
-          )}
+          ) : null}
           {props.description && (
             <Radix.Description data-slot="dialog-description" style={{ marginLeft: -4 }}>
               {props.description}

@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef } from "react"
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, type ReactNode } from "react"
+import type { CardClick } from "@/ui"
 import type { Message, Session } from "@/mock/types"
 import { SessionTurn } from "./SessionTurn"
 import { useCardActions } from "./use-card-actions"
@@ -15,7 +16,7 @@ function toTurns(messages: Message[]) {
 }
 
 /** 会话时间线：固定标题 + 可滚动的消息区；流式输出时若用户停在底部则自动跟随 */
-export function MessageTimeline(props: { session: Session; messages: Message[] }) {
+export function MessageTimeline(props: { session: Session; messages: Message[]; footer?: ReactNode; titleActions?: ReactNode; titleDescription?: ReactNode; onCardClick?: CardClick }) {
   const scroller = useRef<HTMLDivElement>(null)
   const stick = useRef(true)
   const turns = useMemo(() => toTurns(props.messages), [props.messages])
@@ -96,7 +97,9 @@ export function MessageTimeline(props: { session: Session; messages: Message[] }
                 </div>
               </div>
             </div>
+            {props.titleActions && <div className="shrink-0 flex items-center gap-2">{props.titleActions}</div>}
           </div>
+          {props.titleDescription}
         </div>
       </div>
       <div
@@ -121,9 +124,10 @@ export function MessageTimeline(props: { session: Session; messages: Message[] }
               user={turn.user}
               assistants={turn.assistants}
               working={working && index === turns.length - 1}
-              onCardClick={onCardClick}
+              onCardClick={props.onCardClick ?? onCardClick}
             />
           ))}
+          {props.footer}
         </div>
       </div>
     </div>

@@ -1,3 +1,4 @@
+import { evaluationEn, evaluationZh } from "./evaluation"
 import { create } from "zustand"
 import { dict as appEn } from "./dict/app/en"
 import { dict as appZh } from "./dict/app/zh"
@@ -9,8 +10,8 @@ export type Locale = "zh" | "en"
 export const LOCALES: readonly Locale[] = ["zh", "en"]
 
 const dicts: Record<Locale, Record<string, string>> = {
-  en: { ...uiEn, ...appEn, ...localEn },
-  zh: { ...uiEn, ...appEn, ...localEn, ...uiZh, ...appZh, ...localZh },
+  en: { ...uiEn, ...appEn, ...localEn, ...evaluationEn },
+  zh: { ...uiEn, ...appEn, ...localEn, ...uiZh, ...appZh, ...localZh, ...evaluationZh },
 }
 
 const STORAGE_KEY = "lingee-prototype.locale"

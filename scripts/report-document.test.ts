@@ -1,0 +1,216 @@
+import { test, expect } from "bun:test"
+import { buildReportDocument } from "../src/features/evaluation/report-document"
+import { clarificationText, type EvalRun } from "../src/services/evaluation"
+import fixture from "../outputs/delivery-demo/模拟结果.json"
+const run = fixture.state.runs["skill:sk_delivery"][0] as EvalRun
+
+test("报告展示运行保存的两个模型及版本，旧记录不补默认值，名称安全转义", () => {
+  const value = structuredClone(run)
+  value.models = {
+    execution: { id: "a", name: "执行 A", provider: "供应方 A", version: "v1" },
+    judging: { id: "b", name: '<script>unsafe</script>', provider: "供应方 B" },
+  }
+  const html = buildReportDocument(value)
+  expect(html).toContain('<dt>执行模型</dt><dd>执行 A · v1</dd>')
+  expect(html).toContain('<dt>判定模型</dt><dd>&lt;script&gt;unsafe&lt;/script&gt;</dd>')
+  expect(html).not.toContain('<script>unsafe</script>')
+  delete value.models
+  const legacy = buildReportDocument(value)
+  expect(legacy).toContain('<dt>执行模型</dt><dd>未记录</dd>')
+  expect(legacy).toContain('<dt>判定模型</dt><dd>未记录</dd>')
+})
+
+test("报告总耗时与单例耗时读取同一记录，缺失历史不反推或写成零", () => {
+  const value = structuredClone(run)
+  value.started = 1000; value.ended = 66000; value.status = "completed"
+  value.results = value.results.slice(0, 1)
+  value.results[0].timing = { started: 1000, ended: 3500 }
+  const html = buildReportDocument(value)
+  expect(html.replace(/<[^>]*>/g, "")).toContain("耗时：1 分 05 秒")
+  expect(html).toContain('>耗时</th>')
+  expect(html).toContain('<td class="duration-cell">2.5 秒</td>')
+  expect(html).toContain('耗时：2.5 秒</span>')
+  delete value.results[0].timing
+  expect(buildReportDocument(value)).toContain('<td class="duration-cell">未记录</td>')
+  value.results[0].status = "skipped"
+  expect(buildReportDocument(value)).toContain('<td class="duration-cell">未执行</td>')
+  delete value.ended
+  expect(buildReportDocument(value).replace(/<[^>]*>/g, "")).toContain('耗时：未记录')
+  expect(buildReportDocument(value)).toContain('<dt>结束时间</dt><dd>未记录</dd>')
+})
+
+test("已确认未发生澄清时，页面与报告不显示记录缺失，且不依赖配置数量", () => {
+  const value = structuredClone(run)
+  const result = value.results[0]
+  const turn = result.roundResults![0]
+  value.results = [result]
+  result.roundResults = [turn]
+  turn.clarification = "本轮未发生澄清。"
+  for (const rules of [turn.rules, []]) {
+    turn.rules = rules
+    expect(clarificationText(turn)).toBe("本轮未发生澄清。")
+    const html = buildReportDocument(value)
+    expect(html).toContain("<h4>本次澄清过程</h4><p>本轮未发生澄清。</p>")
+    expect(html).not.toContain("未记录澄清过程")
+  }
+})
+
+test("澄清实际过程和记录缺失分别保留，不从配置推断未发生", () => {
+  const value = structuredClone(run)
+  const result = value.results[0]
+  const turn = result.roundResults![0]
+  value.results = [result]
+  result.roundResults = [turn]
+  turn.clarification = "实际追问：核算组织？\n已接收回复：华东公司"
+  expect(clarificationText(turn)).toBe(turn.clarification)
+  expect(buildReportDocument(value)).toContain(turn.clarification)
+  turn.clarification = ""
+  for (const rules of [turn.rules, []]) {
+    turn.rules = rules
+    expect(clarificationText(turn)).toBe("未记录澄清过程。")
+    const html = buildReportDocument(value)
+    expect(html).toContain("<h4>本次澄清过程</h4><p>未记录澄清过程。</p>")
+    expect(html).not.toContain("本轮未发生澄清。")
+  }
+})
+
+test("尚未执行或正在执行的轮次不冒充已确认未发生澄清", () => {
+  for (const status of ["pending", "skipped"] as const) {
+    expect(clarificationText({ status, clarification: "" })).toBe("本轮未执行，无澄清过程。")
+  }
+  expect(clarificationText({ status: "running", clarification: "" })).toBe("本轮执行中，尚未记录澄清过程。")
+  expect(clarificationText({ status: "cancelled", clarification: "" })).toBe("未记录澄清过程。")
+})
+
+test("报告包含全部轮次、四种标准和模拟标识，不依赖外部资源", () => {
+  const html = buildReportDocument(run)
+  for (const label of ["评测结论", "问题清单", "用例概览", "详细结果", "语义判断", "关键词匹配", "正则匹配", "文件存在性", "实际回复", "澄清过程", "实际结果", "判定依据"]) expect(html).toContain(label)
+  expect(html.match(/<details id="case-\d+-round-\d+" class="round">/g)?.length).toBe(6)
+  expect(html).not.toMatch(/<details[^>]*class="round"[^>]*\sopen[\s>]/)
+  expect(html).not.toMatch(/<link|src="https?:/)
+  expect(html.match(/<script>/g)).toHaveLength(1)
+})
+test("报告转义用户内容，避免下载 HTML 执行注入", () => {
+  const unsafe = structuredClone(run)
+  unsafe.name = '</title><script>alert(1)</script>'
+  unsafe.results[0].roundResults![0].response = '<img src=x onerror="alert(1)">'
+  const html = buildReportDocument(unsafe)
+  expect(html).not.toContain('<script>alert(1)</script>')
+  expect(html.match(/<script>/g)).toHaveLength(1)
+  expect(html).not.toContain('<img src=x')
+  expect(html).toContain('&lt;img src=x')
+})
+test("空运行不宣称全部通过，历史记录不伪造逐轮依据", () => {
+  expect(buildReportDocument({ ...run, results: [] })).toContain('本次没有用例结果')
+  const legacy = structuredClone(run)
+  delete legacy.results[0].roundResults
+  expect(buildReportDocument(legacy)).toContain('历史运行未记录逐轮依据')
+})
+
+test("报告区分空回复与缺失回复并显示未执行状态和文件检查时点", () => {
+  const value = structuredClone(run)
+  const turns = value.results[0].roundResults!
+  turns[0].response = ""; turns[0].responseRecorded = true
+  turns[1].response = ""; turns[1].responseRecorded = false; turns[1].status = "skipped"
+  const file = { id: "review-file", kind: "file" as const, operator: "exists" as const, text: "outputs/review.txt", required: true, files: [] }
+  turns[0].checks = [file]
+  turns[0].checkResults = [{ ...file, verdict: "passed", actual: "存在", evidence: "模拟检查", fileEvidence: { path: file.text, exists: true, checkedAt: 1700000000000 } }]
+  const html = buildReportDocument(value)
+  expect(html).toContain("最终回复为空")
+  expect(html).toContain("未记录实际回复")
+  expect(html).toContain("未执行")
+  expect(html).toContain("检查时点")
+  expect(html).toContain(new Date(1700000000000).toLocaleString("zh-CN", { hour12: false }))
+  delete turns[0].checkResults[0].fileEvidence!.checkedAt
+  expect(buildReportDocument(value)).toContain("<dt>检查时点</dt><dd>未记录</dd>")
+})
+
+test("报告不展示通用判定说明，保留运行快照并展示对象版本", () => {
+  const value = structuredClone(run)
+  value.checkPolicySnapshot = "当次规则：区分大小写；flags 为空"
+  value.objectContentSummary = "对象摘要 <revision-1>"
+  let html = buildReportDocument(value)
+  expect(html).not.toContain("当次规则：区分大小写；flags 为空")
+  expect(value.checkPolicySnapshot).toBe("当次规则：区分大小写；flags 为空")
+  expect(html).not.toContain("判定说明")
+  expect(html).toContain("对象摘要 &lt;revision-1&gt;")
+  delete value.checkPolicySnapshot
+  delete value.objectContentSummary
+  html = buildReportDocument(value)
+  expect(html).not.toContain("历史运行未记录详细判定口径")
+  expect(html).toContain("<dt>评测时的对象版本</dt><dd>未记录</dd>")
+  expect(html).not.toContain("整体标准检查最后一轮最终回复")
+})
+
+test("最终报告区分已停止、执行异常、无法判定与仍在判定", () => {
+  const unknown = { ...run, results: run.results.map(c => ({ ...c, verdict: "unknown" as const, judging: false })) }
+  for (const status of ["completed", "cancelled", "error"] as const) {
+    const html = buildReportDocument({ ...unknown, status })
+    expect(html).toContain("暂不能据此判断对象是否满足要求")
+    expect(html).not.toContain("部分用例尚未完成判定")
+    expect(html).not.toContain("运行尚未全部完成")
+    expect(html).not.toContain("结果仍在更新")
+  }
+  expect(buildReportDocument({ ...unknown, status: "cancelled" })).toContain("运行已停止")
+  expect(buildReportDocument({ ...unknown, status: "error" })).toContain("运行因执行异常结束")
+  expect(buildReportDocument({ ...unknown, status: "judging" })).toContain("最终结论待生成")
+})
+
+test("报告只展示运行总点数和状态，缺失判定消耗不能当作完整总量", async () => {
+  const { pointsText, runPoints, pointsScopeNote } = await import("../src/services/evaluation-points")
+  const value = structuredClone(run)
+  value.pointsQuery = { status: "missing", amount: { execution: 7, judging: 0, recorded: true, missing: true } }
+  const html = buildReportDocument(value)
+  expect(html).toContain(pointsText(runPoints(value)))
+  expect(html).toContain("已获取消耗点数：7.00 · 统计不完整")
+  expect(html).toContain(pointsScopeNote)
+  expect(html).not.toContain("<th>消耗点数</th>")
+  expect(html).not.toContain("（执行 ")
+  const detail = html.slice(html.indexOf('<section id="details">'))
+  expect(detail).not.toContain("消耗点数：")
+  expect(html.match(/消耗点数：/g)).toHaveLength(1)
+})
+
+ test("报告离线交互脚本受 CSP 哈希限制，用户输入不能改变脚本", async () => {
+  const { createHash } = await import("node:crypto")
+  const html = buildReportDocument(run)
+  const script = html.match(/<script>([\s\S]*?)<\/script>/)![1]
+  expect(html).toContain("script-src 'sha256-" + createHash("sha256").update(script).digest("base64") + "'")
+  const changed = structuredClone(run)
+  changed.name = '</script><script>alert(1)</script>'
+  expect(buildReportDocument(changed).match(/<script>([\s\S]*?)<\/script>/)![1]).toBe(script)
+ })
+
+
+test("报告标题和元信息位于目录之前，正文无重复统计总结", () => {
+  const html = buildReportDocument(run)
+  const cover = html.indexOf('<header class="report-cover">')
+  const nav = html.indexOf('<aside aria-label="报告目录">')
+  const body = html.indexOf('<section id="conclusion">')
+  expect(cover).toBeGreaterThan(0)
+  expect(nav).toBeGreaterThan(cover)
+  expect(body).toBeGreaterThan(nav)
+  expect(html.match(/<h1>/g)?.length).toBe(1)
+  expect(html).not.toContain('本次评测包含')
+})
+
+test("结论精简统计，保留未知提示、总数及活动状态", () => {
+  const base = structuredClone(run)
+  const result = base.results[0]
+  const unknown = { ...result, status: "failed" as const, verdict: "unknown" as const, judging: false }
+  const failed = { ...unknown, verdict: "failed" as const }
+  const value = { ...base, status: "completed" as const, results: [unknown, unknown] }
+  let html = buildReportDocument(value)
+  expect(html).toContain("通过率 0%")
+  expect(html).toContain("暂不能据此判断对象是否满足要求")
+  expect(html).toContain("· 共 2 条用例")
+  expect(html).not.toContain("本次评测已结束")
+  expect(html).not.toContain("包含 2 条无法判定")
+  html = buildReportDocument({ ...value, results: [failed, unknown] })
+  expect(html).toContain("建议先排查无法判定的原因，再处理未通过用例。")
+  expect(html).not.toContain("1 条用例不通过，1 条无法判定")
+  expect(html).not.toContain('class="conclusion-lead conclusion-unknown"')
+  expect(buildReportDocument({ ...value, results: [failed, failed] })).toContain("建议查看失败证据并分析修复方案。")
+  expect(buildReportDocument({ ...value, status: "judging" })).not.toContain("本次所有用例均无法判定")
+  expect(buildReportDocument({ ...value, results: [] })).toContain("本次没有用例结果")
+})

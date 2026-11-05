@@ -1,3 +1,4 @@
+import { SessionToggleButton } from "./SessionToggleButton"
 import { useQuery } from "@tanstack/react-query"
 import { Icon, Tooltip } from "@/ui"
 import { cx } from "@/lib/cx"
@@ -21,7 +22,6 @@ export function PreviewPanel(props: { projectId: string; sessionId?: string; wor
   // 新任务页没有审查视图
   const view = panel.view === "review" && !props.sessionId ? undefined : panel.view
   const diffs = useQuery({ queryKey: ["diff", props.sessionId], queryFn: () => fileService.diff(props.sessionId ?? ""), enabled: !!props.sessionId })
-  const collapseLabel = t(panel.sessionCollapsed ? "command.session.expand" : "command.session.collapse")
   const workflow = view === "drawer" && panel.drawer?.kind === "workflow"
 
   return (
@@ -60,19 +60,7 @@ export function PreviewPanel(props: { projectId: string; sessionId?: string; wor
           <>
             <div className={cx("flex items-center justify-between pl-4.5 py-3 shrink-0 border-l-[0px]", workflow ? "pr-4" : "pr-6", panel.drawer?.kind !== "agentConfig" && "border-b border-[var(--neutral-100)]")}>
               <div className="flex items-center gap-1">
-                <Tooltip placement="bottom" value={collapseLabel} openDelay={300}>
-                  <button
-                    type="button"
-                    className={cx(
-                      "session-preview-header-icon p-0 border-none cursor-pointer inline-flex items-center justify-center outline-none transition-colors active:[--icon-fill:var(--icon-fill-active)]",
-                      panel.sessionCollapsed ? "bg-[var(--icon-bg-active)] rounded-[6px]" : "bg-transparent",
-                    )}
-                    onClick={panel.toggleSessionCollapsed}
-                    aria-label={collapseLabel}
-                  >
-                    <Icon size="small" name="drawer" className={cx(panel.sessionCollapsed && "text-[var(--icon-fill-active)]")} />
-                  </button>
-                </Tooltip>
+                <SessionToggleButton collapsed={panel.sessionCollapsed} onToggle={panel.toggleSessionCollapsed} />
               </div>
               {view === "drawer" && panel.drawer ? (
                 <>

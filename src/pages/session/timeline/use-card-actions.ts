@@ -22,6 +22,12 @@ export function useCardActions(projectId: string): CardClick {
   const toggleDrawer = usePanel((s) => s.toggleDrawer)
 
   return (kind, config) => {
+    if (kind === "evaluation-cases") {
+      const [type, id] = (config.id || "").split(":")
+      const target = type === "skill" ? devStore.skills.find(s => s.id === id && s.projectId === projectId) : type === "agent" ? devStore.agents.find(a => a.id === id && a.projectId === projectId) : undefined
+      if (!target) return showToast({ variant: "error", title: "评测对象不可用" })
+      return navigate(`/dev/${type}/${id}/evaluation`)
+    }
     if (kind === "kdskill" || kind === "kdskill-local-test") {
       const id = config.id || (config.directory ?? "").split("/").pop() || ""
       const skill = devStore.skills.find((x) => x.name === id || x.id === id)

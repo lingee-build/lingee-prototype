@@ -1,3 +1,4 @@
+import { evaluationObjectUnavailable } from "./evaluation"
 import { currentDisplayName } from "@/stores/auth"
 import { devStore as store } from "@/mock/dev-store"
 import type { Agent, AgentChangeRecord, McpApp, Skill } from "@/mock/fixtures/dev"
@@ -6,9 +7,11 @@ import { latency } from "@/mock/latency"
 
 /** 三个开发页的数据服务（mock）。增删改都落在内存里，刷新页面恢复初始数据 */
 export const skillService = {
-  list: () => latency(store.skills, 350),
-  get: (idOrName: string) => latency(store.skills.find((x) => x.id === idOrName || x.name === idOrName), 150),
-  remove(ids: string[]) {
+  list: () => latency(store.skills.filter(x => !evaluationObjectUnavailable(`skill:${x.id}`)), 350),
+  get: (idOrName: string) => latency(store.skills.find((x) => (x.id === idOrName || x.name === idOrName) && !evaluationObjectUnavailable(`skill:${x.id}`)), 150),
+  async remove(ids: string[]) {
+    const { deleteObjectEvaluations } = await import("./evaluation-deletion")
+    await deleteObjectEvaluations(ids.map(id => `skill:${id}`))
     store.skills = store.skills.filter((x) => !ids.includes(x.id))
     return latency(true)
   },
@@ -19,13 +22,11 @@ export const skillService = {
 }
 
 export const agentService = {
-  list: () => latency(store.agents, 350),
-  get: (id: string) => latency(store.agents.find((x) => x.id === id) ?? store.mallAgents.find((x) => x.id === id), 150),
-  /** 「更多智能体」：官方 / Beta / 其它企业共享的，可引用为子智能体 */
-  mall: () => latency(store.mallAgents, 300),
-  /** 可被引用为子智能体的全部候选（本地 + 更多），子智能体页签用它把编码解析成卡片 */
-  candidates: () => latency([...store.agents, ...store.mallAgents], 250),
-  remove(id: string) {
+  list: () => latency(store.agents.filter(x => !evaluationObjectUnavailable(`agent:${x.id}`)), 350),
+  get: (id: string) => latency(store.agents.find((x) => x.id === id && !evaluationObjectUnavailable(`agent:${x.id}`)), 150),
+  async remove(id: string) {
+    const { deleteObjectEvaluations } = await import("./evaluation-deletion")
+    await deleteObjectEvaluations([`agent:${id}`])
     store.agents = store.agents.filter((x) => x.id !== id)
     return latency(true)
   },

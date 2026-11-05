@@ -6,7 +6,6 @@ import type { Agent } from "@/mock/fixtures/dev"
 import { agentService } from "@/services"
 import { canWithdraw, useAgentActions } from "@/features/agent-actions/use-agent-actions"
 import { AgentConfigPanel, type AgentConfigHandle } from "@/features/agent-config/AgentConfigPanel"
-import { AgentDetailDialog } from "@/features/agent-config/AgentDetailDialog"
 import { AgentStatusTag } from "@/features/agent-config/AgentStatusTag"
 
 const Spinner = () => (
@@ -151,7 +150,6 @@ export function AgentDrawer(props: { id: string; working: boolean }) {
           agent={agent}
           onNameChange={setName}
           onRefresh={refresh}
-          onOpenAgent={(sub) => dialog.show(() => <AgentDetailDialog agent={sub} />)}
         />
       </div>
     </div>

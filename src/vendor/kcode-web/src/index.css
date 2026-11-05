@@ -2857,15 +2857,15 @@ aside {
   fill: currentColor !important;
 }
 
-/* 处理中(processing)蓝色系 tag，按设计稿 token（未定义时用 rgba 兜底）。设计暂未覆盖暗色，统一用亮色。 */
+/* 本地测试与评测共用环境标识，跟随灵基品牌色。 */
 .session-title-local-test-badge {
-  background-color: var(--tag-tint-bg-color-processing-default, rgba(77, 137, 255, 0.08));
-  color: var(--tag-tint-fg-color-text-processing-default, rgba(41, 112, 255, 1));
+  background-color: color-mix(in srgb, var(--brand-button-primary-base) 8%, transparent);
+  color: var(--brand-button-primary-base);
 }
 
 .session-title-local-test-badge svg {
-  color: var(--tag-tint-fg-color-text-processing-default, rgba(41, 112, 255, 1));
-  fill: var(--tag-tint-fg-color-text-processing-default, rgba(41, 112, 255, 1));
+  color: inherit;
+  fill: currentColor;
 }
 
 [data-component="turn-navigator-list"] {

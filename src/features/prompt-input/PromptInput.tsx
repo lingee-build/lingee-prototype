@@ -15,13 +15,24 @@ import { ProjectPicker } from "./ProjectPicker"
 import { PromptPopover, type PopoverItem } from "./PromptPopover"
 import { useCompletion } from "./use-completion"
 
+export interface PromptDraft { text?: string; files?: File[] }
 export interface PromptInputProps {
+  /** 可选的视图草稿容器，由工作区持有；不写入服务器或浏览器持久存储。 */
+  viewDraft?: PromptDraft
+  contextSlot?: import("react").ReactNode
+  onDraftChange?: (hasContent: boolean) => void
   /** 所在项目；新会话时在输入框下方展示项目选择 */
   projectId: string
   /** 有值表示在已有会话中（外框变细、下拉向上展开） */
   sessionId?: string
   working: boolean
-  onSubmit: (text: string) => void
+  /** 入口引导，仅在首次可用且输入为空时填入，不自动发送。 */
+  initialText?: string
+  /** 空输入时显示的引导文案，不作为发送内容。 */
+  placeholder?: string
+  /** 当前工作区固定使用的技能，不写入输入草稿。 */
+  defaultSkill?: string
+  onSubmit: (text: string, files?: File[]) => void | Promise<void>
   onAbort: () => void
   onCreateProject: () => void
   onSkillChange?: (skill: string | undefined) => void
@@ -34,9 +45,12 @@ export interface PromptInputProps {
 export function PromptInput(props: PromptInputProps) {
   const t = useT()
   const editor = useRef<EditorHandle>(null)
+  const restoredText = useRef(props.viewDraft?.text)
+  const initialTextApplied = useRef(restoredText.current !== undefined)
   const [focused, setFocused] = useState(false)
   const [empty, setEmpty] = useState(true)
-  const [attachments, setAttachments] = useState<Attachment[]>([])
+  const [skillWidth, setSkillWidth] = useState(0)
+  const [attachments, setAttachments] = useState<Attachment[]>(() => (props.viewDraft?.files || []).map(file => ({ id: crypto.randomUUID(), file, url: file.type.startsWith("image/") ? URL.createObjectURL(file) : undefined })))
   const attachmentsRef = useRef(attachments)
   attachmentsRef.current = attachments
   const fileInput = useRef<HTMLInputElement>(null)
@@ -51,7 +65,7 @@ export function PromptInput(props: PromptInputProps) {
   const disabled = enhancing || (!props.working && empty && !attachments.length)
   const hoodVisible = inSession && project?.git
   const restoreFocus = () => editor.current?.focus()
-  const placeholder = t(mode === "quest" ? "prompt.placeholder.quest" : "prompt.placeholder.normal", { example: "", agent: "" })
+  const placeholder = props.placeholder ?? t(mode === "quest" ? "prompt.placeholder.quest" : "prompt.placeholder.normal", { example: "", agent: "" })
 
   // "/" 与 "@" 的补全：选中后把触发词替换成胶囊 / 文件引用 / 指令文本
   const applyCompletion = (item: PopoverItem) => {
@@ -61,11 +75,25 @@ export function PromptInput(props: PromptInputProps) {
   }
   const completion = useCompletion(props.projectId, applyCompletion)
 
+  useEffect(() => {
+    if (restoredText.current !== undefined) editor.current?.set(restoredText.current)
+  }, [])
+  useEffect(() => {
+    if (props.viewDraft) props.viewDraft.files = attachments.map(item => item.file)
+    props.onDraftChange?.(!!props.viewDraft?.text?.trim() || attachments.length > 0)
+  }, [attachments, props.viewDraft])
+
   // 外部来源写入的草稿：推荐卡片、技能入口发给新任务页；开发页的「编辑」发给刚建好的那个会话
   useEffect(() => {
     const text = takeDraft(props.sessionId)
     if (text !== undefined) editor.current?.set(text)
   }, [draft.seq, props.sessionId])
+
+  useEffect(() => {
+    if (!props.initialText || initialTextApplied.current) return
+    initialTextApplied.current = true
+    if (!editor.current?.value().trim()) editor.current?.set(props.initialText)
+  }, [props.initialText])
 
   // 切换会话 / 项目后把焦点还给输入框
   useEffect(() => {
@@ -80,7 +108,10 @@ export function PromptInput(props: PromptInputProps) {
     clearTimeout(enhanceTimer.current)
     attachmentsRef.current.forEach((item) => { if (item.url) URL.revokeObjectURL(item.url) })
   }, [])
+  const attachmentContext = useRef({ projectId: props.projectId, sessionId: props.sessionId })
   useEffect(() => {
+    if (attachmentContext.current.projectId === props.projectId && attachmentContext.current.sessionId === props.sessionId) return
+    attachmentContext.current = { projectId: props.projectId, sessionId: props.sessionId }
     clearAttachments()
     clearTimeout(enhanceTimer.current)
     setEnhancing(false)
@@ -105,12 +136,12 @@ export function PromptInput(props: PromptInputProps) {
       setEnhancing(false)
     }, 700)
   }
-  const submit = () => {
-    if (enhancing) return
+  const submit = async () => {
+    if (enhancing || (empty && !attachments.length && !props.working)) return
     if (props.working) return props.onAbort()
     const text = [editor.current?.value() ?? "", ...attachments.map((item) => `@${item.file.webkitRelativePath || item.file.name}`)].filter(Boolean).join("\n")
     if (!text) return
-    props.onSubmit(text)
+    try { await props.onSubmit(text, attachments.map(item => item.file)) } catch { return }
     clearAttachments()
     setOriginal(undefined)
     editor.current?.clear()
@@ -171,10 +202,12 @@ export function PromptInput(props: PromptInputProps) {
                 if (item?.url) URL.revokeObjectURL(item.url)
                 setAttachments((items) => items.filter((item) => item.id !== id))
               }} />
+              {props.contextSlot}
               <div className="relative">
                 <Editor
                   ref={editor}
                   placeholder={placeholder}
+                  defaultSkill={props.defaultSkill}
                   newSession={!inSession}
                   hasAttachments={!!attachments.length}
                   enhancing={enhancing}
@@ -183,12 +216,15 @@ export function PromptInput(props: PromptInputProps) {
                   onTrigger={completion.setTrigger}
                   onKeyIntercept={completion.intercept}
                   onChange={(state) => {
+                    if (props.viewDraft) props.viewDraft.text = state.text
+                    props.onDraftChange?.(!state.empty || attachmentsRef.current.length > 0)
                     setEmpty(state.empty)
+                    setSkillWidth(state.skillWidth)
                     props.onSkillChange?.(state.skill)
                   }}
                 />
                 {empty && (
-                  <div className={cx("absolute top-0 inset-x-0 px-4 text-[16px] leading-[30px] text-[var(--prompt-input-placeholder)] pointer-events-none whitespace-nowrap truncate", attachments.length ? "pt-0" : "pt-4")}>
+                  <div style={{ paddingLeft: 16 + skillWidth }} className={cx("absolute top-0 inset-x-0 px-4 text-[16px] leading-[30px] text-[var(--prompt-input-placeholder)] pointer-events-none whitespace-nowrap truncate", attachments.length ? "pt-0" : "pt-4")}>
                     {placeholder}
                   </div>
                 )}

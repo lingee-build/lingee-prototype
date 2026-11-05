@@ -47,6 +47,7 @@ function findMatchingBrace(text: string, openPos: number): number {
   return -1
 }
 const RENDER_CARD_KINDS = new Set([
+  "evaluation-cases",
   "kdform",
   "kwcform",
   "kdskill",

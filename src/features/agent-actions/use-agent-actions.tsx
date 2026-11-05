@@ -1,3 +1,4 @@
+import { evaluationDeletionNotice } from "@/services/evaluation-deletion"
 import { guardUpgrade } from "@/features/artifact-upgrade/UpgradeGate"
 import { useState } from "react"
 import { useNavigate } from "react-router"
@@ -129,12 +130,14 @@ export function useAgentActions(onChanged: () => void) {
         <ConfirmDialog
           variant="danger"
           title={t("kcode.agentDev.delete.title")}
-          description={`${tip}${reason}${t("kcode.agentDev.delete.content")}`}
+          description={`${tip}${reason}${t("kcode.agentDev.delete.content")}\n${evaluationDeletionNotice}`}
           cancelText={t("kcode.agentDev.delete.cancel")}
           confirmText={t("kcode.agentDev.delete.confirm")}
           onConfirm={() => {
-            void agentService.remove(agent.id).then(onChanged)
-            showToast({ variant: "success", title: t("kcode.agentDev.delete.success") })
+            void agentService.remove(agent.id).then(() => {
+              onChanged()
+              showToast({ variant: "success", title: t("kcode.agentDev.delete.success") })
+            }).catch(error => showToast({ variant: "error", title: "删除失败", description: error instanceof Error ? error.message : "请恢复存储后重试" }))
           }}
         />
       ))

@@ -64,10 +64,10 @@ export function SkillDevPage() {
             })
             exitBatch()
           }}
-          onDeleted={(skills) => {
+          onDeleted={async (skills) => {
             const ids = skills.map((x) => x.id)
+            await skillService.remove(ids)
             data.update((items) => items.filter((x) => !ids.includes(x.id)))
-            void skillService.remove(ids)
             exitBatch()
           }}
           onGoFix={(skills) =>

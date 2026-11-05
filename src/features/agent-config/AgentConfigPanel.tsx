@@ -1,6 +1,11 @@
+import { usePanel } from "@/stores/panel"
+import { useParams } from "react-router"
+import { evaluationRepairTarget } from "@/services/evaluation-repair"
+import { ControlledConfirmDialog } from "@/ui/dialog/ConfirmDialog"
+import { useNavigate } from "react-router"
+import { ObjectEvaluationReport } from "@/features/evaluation/ObjectEvaluationReport"
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState, type CSSProperties, type ReactNode } from "react"
-import { useQuery } from "@tanstack/react-query"
-import { IconButton, SegmentedControl, showToast } from "@/ui"
+import { IconButton, SegmentedControl, showToast, useDialog } from "@/ui"
 import { useT } from "@/i18n"
 import type { Agent } from "@/mock/fixtures/dev"
 import { agentService } from "@/services"
@@ -13,8 +18,7 @@ import { SkillConfigTab } from "./SkillConfigTab"
 import "./agent-config.css"
 
 const TABS = ["basic", "role", "skills", "knowledge"] as const
-const tabLabel = (tab: string) => `kcode.agentConfig.tab.${tab}`
-type ConfigTab = (typeof TABS)[number]
+type ConfigTab = (typeof TABS)[number] | "evaluation"
 
 export interface AgentConfigHandle {
   /** 校验并保存；成功返回保存后的智能体，失败返回 undefined（提示已弹出） */
@@ -36,8 +40,6 @@ interface Props {
   onRefresh?: () => void
   onNameChange?: (name: string) => void
   onSaved?: (agent: Agent) => void
-  /** 在子智能体页签里点了某个子智能体的卡片 */
-  onOpenAgent?: (agent: Agent) => void
 }
 
 /**
@@ -46,7 +48,21 @@ interface Props {
  */
 export const AgentConfigPanel = forwardRef<AgentConfigHandle, Props>(function AgentConfigPanel(props, ref) {
   const t = useT()
-  const [tab, setTab] = useState<ConfigTab>("basic")
+  const navigate = useNavigate()
+  const dialog = useDialog()
+  const [confirmEvaluation, setConfirmEvaluation] = useState(false)
+  const [evaluationUrl, setEvaluationUrl] = useState("")
+  const openEvaluation = () => {
+    dialog.close()
+    navigate(evaluationUrl || `/dev/agent/${encodeURIComponent(props.agent.id)}/evaluation`)
+  }
+  const { sessionId: repairSessionId } = useParams()
+  const repairTarget = repairSessionId ? evaluationRepairTarget(repairSessionId) : undefined
+  const [tab, setTab] = useState<ConfigTab>(() => repairTarget?.objectType === "agent" && repairTarget.objectId === props.agent.id ? "evaluation" : "basic")
+  const reportRequest = usePanel(s => s.evaluationReport)
+  useEffect(() => {
+    if (reportRequest?.objectId === `agent:${props.agent.id}`) setTab("evaluation")
+  }, [reportRequest, props.agent.id])
   const [form, setForm] = useState<AgentForm>(() => formOf(props.agent))
   // 上一次落盘的内容：用来判断有没有未保存的改动、生成改动摘要
   const saved = useRef(formOf(props.agent))
@@ -62,9 +78,7 @@ export const AgentConfigPanel = forwardRef<AgentConfigHandle, Props>(function Ag
   useEffect(() => props.onNameChange?.(form.name), [form.name])
 
   const set = (patch: Partial<AgentForm>) => setForm((prev) => ({ ...prev, ...patch }))
-  // 子智能体只存编码，写更新日志时要换成名称
-  const candidates = useQuery({ queryKey: ["agent-candidates"], queryFn: agentService.candidates, staleTime: 0 })
-  const changes = () => diffChanges(saved.current, form, t, (id) => candidates.data?.find((x) => x.id === id)?.name ?? id)
+  const changes = () => diffChanges(saved.current, form, t)
 
   useImperativeHandle(ref, () => ({
     dirty: () => changes().length > 0,
@@ -89,13 +103,20 @@ export const AgentConfigPanel = forwardRef<AgentConfigHandle, Props>(function Ag
         className="light-segmented shrink-0 flex items-center justify-between"
       >
         <div className="agent-config-tab-scroll flex-1">
-          <SegmentedControl value={tab} onChange={(value) => setTab(value as ConfigTab)} items={TABS.map((value) => ({ value, label: t(tabLabel(value)) }))} />
+          <SegmentedControl value={tab} onChange={value => setTab(value as ConfigTab)} items={[...TABS.map(value => ({ value, label: t(`kcode.agentConfig.tab.${value}`) })), { value: "evaluation", label: "评测报告" }]} />
         </div>
         <div className="ml-3 flex shrink-0 items-center gap-2">
           {props.onRefresh && <IconButton icon="refresh" variant="ghost" iconSize="small" className="h-7 w-7" title={t("session.files.refresh")} onClick={props.onRefresh} />}
           {props.action}
         </div>
       </div>
+      <ControlledConfirmDialog open={confirmEvaluation} onClose={() => setConfirmEvaluation(false)}
+        title="放弃修改并进入评测？" description="智能体配置有未保存的修改，继续将丢弃这些修改"
+        cancelText="继续编辑" confirmText="放弃并进入评测" variant="danger" onConfirm={openEvaluation} />
+      {tab === "evaluation" && <ObjectEvaluationReport objectId={`agent:${props.agent.id}`} open={url => {
+        if (!readonly && changes().length) { setEvaluationUrl(url); setConfirmEvaluation(true) }
+        else { dialog.close(); navigate(url) }
+      }} />}
       {props.subHeader && tab === "basic" && <div className="shrink-0">{props.subHeader}</div>}
       {tab === "role" && (
         <div className="flex-1 min-h-0 pb-5">

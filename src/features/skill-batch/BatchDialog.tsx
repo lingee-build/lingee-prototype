@@ -18,7 +18,7 @@ export interface BatchDialogProps {
   skipSelect?: boolean
   /** 提交 / 安装成功的技能；scopes 为首次发布技能的发布范围（按技能 name），只有企业分发才有 */
   onSubmitted?: (skills: Skill[], route: BatchRoute, scopes?: Record<string, SkillScope>) => void
-  onDeleted?: (skills: Skill[]) => void
+  onDeleted?: (skills: Skill[]) => void | Promise<void>
   /** 检查不通过时点「去修复」 */
   onGoFix?: (skills: Skill[]) => void
 }

@@ -22,13 +22,10 @@ export const MCP_SERVERS: Array<{ name: string; tools: Array<{ name: string; des
   { name: "邮件 MCP", tools: [{ name: "send_mail", desc: "发送邮件", write: true }] },
 ]
 
-/**
- * 智能体候选：按编排层级约束排除已配置子智能体的智能体（方案 3.8：一次运行链路最多两个编排者）。
- * 返回值同时给出被排除的名称，供界面提示。
- */
+/** 智能体候选：远程版本已移除子智能体配置，保留工作流可选能力。 */
 export function agentOptions() {
-  const local = devStore.agents.filter((a) => !a.subs?.length).map((a) => a.name)
-  const excluded = devStore.agents.filter((a) => a.subs?.length).map((a) => a.name)
+  const local = devStore.agents.map((a) => a.name)
+  const excluded: string[] = []
   return { options: [...new Set([...BASE_AGENTS, ...local])].map((x) => ({ value: x, label: x, desc: "已发布智能体" })), excluded }
 }
 
