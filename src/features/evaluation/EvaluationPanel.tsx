@@ -28,6 +28,10 @@ import { EvaluationDuration, useEvaluationClock } from "./EvaluationDuration"
 import { caseDuration, caseDurationNote, runDuration, runDurationNote } from "@/services/evaluation-duration"
 import { ReportPreview } from "./ReportPreview"
 import { buildReportDocument } from "./report-document"
+import { ComparisonPicker } from "./ComparisonPicker"
+import { ReportDelta } from "./ReportDelta"
+import { useEvaluationComparison } from "@/stores/evaluation-comparison"
+import { completedRuns, isCompletedRun, normalizeBaseline, runLabelText, runPassRate, runStats } from "@/services/evaluation-comparison"
 import { useEffect, useMemo, useRef, useState, type ReactNode, type CSSProperties } from "react"
 import { Empty, SegmentedControl, BrandButton, Button, ConfirmDialog, Tooltip, DropdownMenu, Icon, useDialog } from "@/ui"
 import { useT } from "@/i18n"
@@ -221,10 +225,24 @@ export function EvaluationPanel({ objectId, name, heading, onEnvironmentChange, 
   const startTime = runStartDate ? new Date(`${runStartDate}T00:00:00`).getTime() : -Infinity
   const endTime = runEndDate ? (() => { const end = new Date(`${runEndDate}T00:00:00`); end.setDate(end.getDate() + 1); return end.getTime() })() : Infinity
   const filteredRuns = invalidRunRange ? [] : runs.filter(run => run.started >= startTime && run.started < endTime && (runStatusFilter === "all" || runStatusGroups[runStatusFilter]?.includes(run.status)))
+  // 执行中的报告始终置顶，其余按时间倒序（runs 本身已按时间倒序，保持稳定排序）。
+  const orderedRuns = [...filteredRuns].sort((a, b) => Number(isActiveRun(b)) - Number(isActiveRun(a)))
   const runPageSize = 10
-  const runPageCount = Math.max(1, Math.ceil(filteredRuns.length / runPageSize))
+  const runPageCount = Math.max(1, Math.ceil(orderedRuns.length / runPageSize))
   const currentRunPage = Math.min(runPage, runPageCount)
-  const visibleRuns = filteredRuns.slice((currentRunPage - 1) * runPageSize, currentRunPage * runPageSize)
+  const visibleRuns = orderedRuns.slice((currentRunPage - 1) * runPageSize, currentRunPage * runPageSize)
+  // 报告对比范围（多选）与基线（唯一，随所选范围自动迁移）。
+  const cmpSelection = useEvaluationComparison(s => s.selections[objectId] ?? null)
+  const storedBaselineId = useEvaluationComparison(s => s.baselines[objectId])
+  const setCmpSelection = useEvaluationComparison(s => s.setSelection)
+  const setCmpBaseline = useEvaluationComparison(s => s.setBaseline)
+  const completedList = useMemo(() => completedRuns(runs), [runs])
+  const comparisonPool = completedList.filter(run => !cmpSelection || cmpSelection.includes(run.id))
+  const baselineId = normalizeBaseline(comparisonPool, storedBaselineId)
+  const baselineRun = comparisonPool.find(run => run.id === baselineId)
+  useEffect(() => {
+    if (storedBaselineId !== baselineId) setCmpBaseline(objectId, baselineId)
+  }, [baselineId, storedBaselineId, objectId, setCmpBaseline])
   const [caseSearch, setCaseSearch] = useState("")
   const [casePage, setCasePage] = useState(1)
   const casePageSize = 10
@@ -618,6 +636,9 @@ export function EvaluationPanel({ objectId, name, heading, onEnvironmentChange, 
                 <DatePicker label="结束日期" value={runEndDate} min={runStartDate || undefined} onChange={value => { setRunEndDate(value); setRunPage(1) }} />
                 <Button variant="ghost" onClick={() => applyRunRange("all")}>清空</Button>
                 </div> : runRangePreset !== "all" && <span className="eval-muted">{runStartDate} 至 {runEndDate}</span>}
+                <ComparisonPicker dones={completedList} poolIds={comparisonPool.map(run => run.id)} baselineId={baselineId}
+                  onSelectionChange={ids => { setCmpSelection(objectId, ids); setRunPage(1) }}
+                  onSetBaseline={id => { setCmpBaseline(objectId, id); setNotice(`已将 ${runLabelText(completedList.find(run => run.id === id)!)} 设为基线版本（基线唯一）`, true) }} />
               </div>
               {invalidRunRange && <p id="eval-date-error" className="eval-field-error" role="alert">开始日期不能晚于结束日期</p>}
               {!filteredRuns.length && !invalidRunRange && (
@@ -625,27 +646,53 @@ export function EvaluationPanel({ objectId, name, heading, onEnvironmentChange, 
                   <Empty description={runStartDate || runEndDate || runStatusFilter !== "all" ? "暂无符合筛选条件的运行记录" : "还没有运行记录，先到“评测用例”选择用例并运行"} />
                 </div>
               )}
-              {visibleRuns.map((run) => (
+              {visibleRuns.map((run) => {
+                const stats = runStats(run)
+                const rate = runPassRate(run)
+                const full = stats.executed >= stats.total
+                const denom = run.status === "completed" ? Math.max(stats.executed, 1) : stats.total
+                const seg = (count: number) => `${(count / denom * 100).toFixed(2)}%`
+                const modelsText = run.models ? (run.models.execution?.id === run.models.judging?.id
+                  ? `执行/评测 ${run.models.execution?.name || "未记录"}`
+                  : `执行 ${run.models.execution?.name || "未记录"} · 评测 ${run.models.judging?.name || "未记录"}`) : ""
+                return (
                 <div className="eval-row eval-run-row eval-report-card" key={run.id}>
                   <div className="eval-report-heading">
                     <span className="eval-report-code" style={{ userSelect: "text", WebkitUserSelect: "text" }}>{run.code || runTitle(run.started)}</span>
                     <span className="eval-report-state">{status(run.status)}</span>
                     {run.id === runs.find(r => !isActiveRun(r))?.id && <span className="eval-report-latest">最新</span>}
+                    {run.id === baselineId && isCompletedRun(run) && <span className="eval-report-latest eval-report-baseline">基线</span>}
                   </div>
                   <Button variant="ghost" className="eval-report-primary" onClick={() => openView({ section: "runs", runId: run.id, report: !isActiveRun(run) })}>
                     {isActiveRun(run) ? "查看进度" : "查看报告"}
                   </Button>
-                  <div className="eval-report-metrics">
-                    <span><strong>{run.results.length}</strong> 条用例</span>
-                    {(["通过", "不通过", "无法判定"] as const).map(label => {
-                      const count = run.results.filter(c => verdictLabel(c) === label).length
-                      return <span key={label} className={count ? label === "不通过" ? "eval-metric-failed" : label === "无法判定" ? "eval-metric-unknown" : "" : "eval-metric-zero"}>{label} <strong>{count}</strong></span>
-                    })}
+                  <div className="eval-report-rate">
+                    <span className="eval-rate-line">
+                      {rate === undefined
+                        ? <span className="eval-rate-big eval-rate-muted">已执行 {stats.executed}/{stats.total}</span>
+                        : <>
+                            <span className="eval-rate-big">{rate}%</span>
+                            <span className="eval-rate-sub">{stats.passed}/{stats.executed} 通过 · {full ? "全量案例" : "部分案例"}</span>
+                          </>}
+                      {isActiveRun(run) && <Button variant="ghost" className="eval-run-stop" disabled={["stopping", "stop_unconfirmed"].includes(run.status)} onClick={() => requestCancelRun(objectId, run.id)}>{["stopping", "stop_unconfirmed"].includes(run.status) ? "停止处理中…" : "停止执行"}</Button>}
+                    </span>
+                    <div className="eval-segbar" title={`通过 ${stats.passed} · 未通过 ${stats.failed} · 无法判定 ${stats.unknown} · 未执行 ${stats.total - stats.executed}`}>
+                      <div className="eval-seg eval-seg-pass" style={{ width: seg(stats.passed) }} />
+                      <div className="eval-seg eval-seg-fail" style={{ width: seg(stats.failed) }} />
+                      <div className="eval-seg eval-seg-unknown" style={{ width: seg(stats.unknown) }} />
+                    </div>
                   </div>
                   <div className="eval-muted eval-report-metadata">
+                    <span>用例集 {caseVersionLabel(run)}（共 {stats.total} 条）</span>
+                    {run.status === "completed" && stats.executed < stats.total && <span>本次执行 {stats.executed}/{stats.total}</span>}
+                    {modelsText && <span>{modelsText}</span>}
                     <span>{runTitle(run.started)}</span>
                     <EvaluationDuration label="耗时" value={runDuration(run, durationNow)} note={runDurationNote} />
                     <span>{pointsText(runPoints(run))}</span>
+                    {run.status === "error" && run.stopReason && <span>{run.stopReason}</span>}
+                  </div>
+                  <div className="eval-report-deltas">
+                    <ReportDelta run={run} pool={comparisonPool} baselineId={baselineId} baselineRun={baselineRun} />
                   </div>
                   <div className="eval-run-actions eval-report-secondary">
                   <Button variant="ghost" onClick={() => viewRunCases(run.id, "list")}>查看用例</Button>
@@ -654,7 +701,9 @@ export function EvaluationPanel({ objectId, name, heading, onEnvironmentChange, 
 
                   </div>
                 </div>
-              ))}
+                )
+              })}
+              {!!orderedRuns.length && <p className="eval-hint-foot">重新执行会生成新报告，不覆盖历史报告</p>}
               {!!filteredRuns.length && <nav className="eval-pagination" aria-label="运行记录分页">
                 <span className="eval-muted">共 {filteredRuns.length} 条 · 每页 {runPageSize} 条</span>
                 <div className="eval-actions">

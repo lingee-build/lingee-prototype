@@ -1144,3 +1144,49 @@
 .eval-conversation .eval-report-text-field { margin: 24px 0; }
 .eval-conversation .eval-report-text-field > strong { display: block; font-size: 13px; line-height: 1.6; font-weight: 500; color: var(--text-weak); }
 .eval-conversation .eval-report-text-field > p { margin: 8px 0 0; padding-inline-start: 12px; font-size: 14px; line-height: 1.7; }
+
+/* ===== 报告对比范围、基线与通过率卡（P1） ===== */
+:root { --eval-status-passed: #17803d; }
+
+.eval-panel .eval-cmp-btn[data-component="button"] { max-width: 420px; gap: 6px; height: auto; min-height: 32px; padding: 4px 10px; }
+.eval-cmp-label { flex-shrink: 0; font-weight: 500; }
+.eval-cmp-value { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-weak); font-weight: 400; }
+.eval-cmp-base { flex-shrink: 0; padding: 1px 7px; border-radius: 5px; background: var(--surface-raised-base); color: var(--primary-600); font-size: 12px; }
+.eval-cmp-pop { display: flex; flex-direction: column; gap: 8px; width: 340px; max-height: 420px; padding: 12px; overflow: auto; }
+.eval-cmp-header { display: flex; flex-direction: column; font-weight: 500; }
+.eval-cmp-header small { color: var(--text-weak); font-weight: 400; }
+.eval-cmp-all { padding: 6px 4px; border-bottom: 1px solid var(--border-base, rgba(0, 0, 0, 0.08)); }
+.eval-cmp-list { display: flex; flex-direction: column; }
+.eval-cmp-row { display: flex; align-items: center; gap: 8px; padding: 6px 4px; border-radius: 6px; }
+.eval-cmp-row[data-on] { background: var(--surface-raised-base); }
+.eval-cmp-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.eval-cmp-state { padding: 1px 7px; border-radius: 5px; background: var(--surface-raised-base); color: var(--primary-600); font-size: 12px; }
+.eval-cmp-set { height: 24px; min-height: 24px; font-size: 12px; }
+.eval-cmp-footer { display: flex; flex-direction: column; padding-top: 8px; border-top: 1px solid var(--border-base, rgba(0, 0, 0, 0.08)); font-size: 13px; }
+.eval-cmp-footer small { color: var(--text-weak); }
+
+.eval-report-baseline { color: var(--primary-600); background: color-mix(in srgb, var(--primary-600) 12%, transparent); font-weight: 500; }
+.eval-report-rate { grid-column: 1 / -1; display: flex; flex-direction: column; gap: 8px; user-select: text; -webkit-user-select: text; }
+.eval-rate-line { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+.eval-rate-big { font-size: 26px; font-weight: 600; line-height: 1.2; font-variant-numeric: tabular-nums; }
+.eval-rate-muted { font-size: 20px; color: var(--text-weak); }
+.eval-rate-sub { color: var(--text-weak); font-size: 13px; }
+.eval-run-stop { height: 26px; min-height: 26px; }
+.eval-segbar { display: flex; height: 8px; border-radius: 4px; overflow: hidden; background: var(--background-base); max-width: 520px; }
+.eval-seg { height: 100%; }
+.eval-seg-pass { background: var(--eval-status-passed); }
+.eval-seg-fail { background: var(--eval-status-failed); }
+.eval-seg-unknown { background: var(--eval-status-unknown); }
+.eval-report-deltas { grid-column: 1 / -1; display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; border-radius: 8px; background: var(--surface-raised-base); }
+.eval-dp { display: flex; align-items: baseline; gap: 10px; min-width: 0; font-size: 13px; }
+.eval-dp-label { flex-shrink: 0; color: var(--text-weak); }
+.eval-dp-value { display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; min-width: 0; font-variant-numeric: tabular-nums; }
+.eval-dp-value small { color: var(--text-weak); }
+.eval-dp-flat { color: var(--text-weak); }
+.eval-delta { font-weight: 600; }
+.eval-delta[data-direction="up"] { color: var(--eval-status-passed); }
+.eval-delta[data-direction="down"] { color: var(--eval-status-failed); }
+.eval-delta[data-direction="flat"] { color: var(--text-weak); }
+.eval-upd { padding: 1px 6px; border-radius: 4px; background: var(--background-base); color: var(--text-weak); font-size: 11px; white-space: nowrap; }
+.eval-upd-warn { color: var(--eval-status-unknown); }
+.eval-hint-foot { margin: 12px 4px 0; color: var(--text-weak); font-size: 12px; text-align: center; }
