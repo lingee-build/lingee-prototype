@@ -1139,3 +1139,8 @@
 .eval-report-details-trigger[aria-current="location"] { color: var(--primary-600); }
 .eval-report-details-trigger:focus-visible { outline: 2px solid var(--primary-600); outline-offset: -2px; }
 .eval-report-details-trigger .eval-report-nav-toggle { width: 14px; height: 20px; color: inherit; background: transparent; }
+
+/* 报告输入与回复：标题与正文通过缩进和留白区分。 */
+.eval-conversation .eval-report-text-field { margin: 24px 0; }
+.eval-conversation .eval-report-text-field > strong { display: block; font-size: 13px; line-height: 1.6; font-weight: 500; color: var(--text-weak); }
+.eval-conversation .eval-report-text-field > p { margin: 8px 0 0; padding-inline-start: 12px; font-size: 14px; line-height: 1.7; }
