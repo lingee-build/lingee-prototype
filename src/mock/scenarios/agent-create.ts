@@ -8,7 +8,7 @@ const ASSISTANT_JSON = (agent: Agent) =>
   JSON.stringify({ id: agent.id, name: agent.name, desc: agent.desc, domain: agent.domain, skills: agent.skills.map((x) => x.skillName), knowledge: [] }, null, 2)
 
 /** 提示词里点了某个已有智能体的名字（「编辑【xxx】」）就是修改，否则是新建 */
-const findTarget = (prompt: string) => devStore.agents.find((x) => !x.preset && prompt.includes(`【${x.name}】`))
+const findTarget = (prompt: string) => devStore.agents.find((x) => prompt.includes(`【${x.name}】`))
 
 /** 剧本：创建 / 修改一个智能体。结束时给出智能体产物卡片，并把结果写进「智能体开发」页的数据 */
 export const agentCreateScenario = ({ prompt, projectId }: ScenarioContext): Scenario => {

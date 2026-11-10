@@ -60,9 +60,10 @@ export function AgentCardActions(props: { agent: Agent; onChanged: () => void })
         <DropdownMenu.Portal>
           <DropdownMenu.Content style={{ minWidth: 100 }}>
             {item("edit-doc-16", t("kcode.agentDev.menu.edit"), () => actions.edit(agent))}
-            {!agent.preset && item("test-flask", t("kcode.agentConfig.localTest"), () => void actions.localTest(agent), "localTest", true)}
-            {!agent.preset && item("cloud-test", t("kcode.agentConfig.test"), () => actions.cloudTest(agent), "test", true)}
+            {item("test-flask", t("kcode.agentConfig.localTest"), () => void actions.localTest(agent), "localTest", true)}
+            {item("cloud-test", t("kcode.agentConfig.test"), () => actions.cloudTest(agent), "test", true)}
             {item("checklist", <EvaluationLabel />, () => navigate(`/dev/agent/${encodeURIComponent(agent.id)}/evaluation`))}
+            {item("export", "导出", () => void actions.export(agent))}
             {canSubmit(agent) && item("submit-upload", t("kcode.agentConfig.submit"), () => actions.submit(agent), "submit")}
             {canWithdraw(agent) && item("undo", t("kcode.agentDev.action.withdraw"), () => actions.withdraw(agent), "withdraw")}
             {canRemove(agent) && (

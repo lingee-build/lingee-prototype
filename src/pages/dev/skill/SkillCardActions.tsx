@@ -7,6 +7,7 @@ import type { Skill } from "@/mock/fixtures/dev"
 import { DOT_BUTTON } from "@/features/dev-page/DevPageLayout"
 
 export interface SkillActionHandlers {
+  onExport: (skill: Skill) => void
   onEdit: (skill: Skill) => void
   onLocalTest: (skill: Skill) => void
   onCloudTest: (skill: Skill) => void
@@ -48,6 +49,10 @@ export function SkillCardActions(props: { skill: Skill; handlers: SkillActionHan
               <DropdownMenu.Item onSelect={() => navigate(`/dev/skill/${encodeURIComponent(skill.id)}/evaluation`)} className={ITEM}>
                 <Icon name="checklist" size="small" />
                 <EvaluationLabel />
+              </DropdownMenu.Item>
+              <DropdownMenu.Item onSelect={() => handlers.onExport(skill)} className={ITEM}>
+                <Icon name="export" size="small" />
+                <span>导出</span>
               </DropdownMenu.Item>
               <DropdownMenu.Item onSelect={() => handlers.onCheck(skill)} className={ITEM}>
                 <Icon name="shield-check" size="small" />

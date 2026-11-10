@@ -1,3 +1,4 @@
+import { ConfigPreparationHost } from "@/features/artifact-config/ConfigPreparationHost"
 import { UpgradeHost } from "@/features/artifact-upgrade/UpgradeGate"
 import { createBrowserRouter, Navigate, Outlet, useLocation } from "react-router"
 import { AppShell } from "./AppShell"
@@ -10,6 +11,7 @@ function Root() {
     <Providers>
       <Outlet />
       <UpgradeHost />
+      <ConfigPreparationHost />
     </Providers>
   )
 }

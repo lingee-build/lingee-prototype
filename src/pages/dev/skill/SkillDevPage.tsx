@@ -1,3 +1,5 @@
+import { exportArtifactPackage } from "@/features/artifact-config/package-export"
+import { guardArtifactConfig } from "@/features/artifact-config/config-state"
 import { guardUpgrade } from "@/features/artifact-upgrade/UpgradeGate"
 import { useState } from "react"
 import { useQuery } from "@tanstack/react-query"
@@ -79,6 +81,7 @@ export function SkillDevPage() {
       { closeOnOverlayClick: false },
     )
   const openBatch = (config: Pick<BatchDialogProps, "mode" | "route" | "skills" | "skipSelect">) => {
+    if (config.mode === "submit" && config.skills.some(skill => guardArtifactConfig("skill", skill.id))) return
     const run = () => showBatch(config)
     if (!guardUpgrade(config.skills.map((skill) => skill.id), run)) run()
   }
@@ -90,6 +93,7 @@ export function SkillDevPage() {
   }
 
   const rawHandlers: SkillActionHandlers = {
+    onExport: (skill) => void exportArtifactPackage("skill", skill.id),
     onEdit: (skill) => {
       // 已提交 / 已发布的技能，编辑前需要二次确认
       if (skill.enterpriseStatus === "saved" || skill.enterpriseStatus === "rejected") return edit(skill)
@@ -136,6 +140,7 @@ export function SkillDevPage() {
   }
 
   const handlers = Object.fromEntries(Object.entries(rawHandlers).map(([key, action]) => [key, (skill: Skill) => {
+    if (["onLocalTest", "onCloudTest", "onSubmit"].includes(key) && guardArtifactConfig("skill", skill.id)) return
     const run = () => action(skill)
     if (!guardUpgrade([skill.id], run)) run()
   }])) as unknown as SkillActionHandlers

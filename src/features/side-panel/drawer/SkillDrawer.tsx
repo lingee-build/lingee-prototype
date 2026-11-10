@@ -1,3 +1,4 @@
+import { guardArtifactConfig } from "@/features/artifact-config/config-state"
 import { usePanel } from "@/stores/panel"
 import { useParams } from "react-router"
 import { evaluationRepairTarget } from "@/services/evaluation-repair"
@@ -89,6 +90,7 @@ export function SkillDrawer(props: { id: string; working: boolean }) {
 
   /** 云端测试：先切到检查页签（线上测试前会重跑一遍校验），再推到沙箱 */
   const cloudTest = async () => {
+    if (guardArtifactConfig("skill", skill.id)) return
     setTab("check")
     setBusy("test")
     await sleep(1500)
@@ -97,6 +99,7 @@ export function SkillDrawer(props: { id: string; working: boolean }) {
   }
   /** 提交：走和技能开发页同一个向导（发布范围 → 检查 → 资源更新 → 提交），跳过选择技能那一步 */
   const submit = () => {
+    if (guardArtifactConfig("skill", skill.id)) return
     setTab("check")
     dialog.show(
       () => (
@@ -157,7 +160,7 @@ export function SkillDrawer(props: { id: string; working: boolean }) {
             </DropdownMenu.Trigger>
             <DropdownMenu.Portal>
               <DropdownMenu.Content className="test-dropdown-menu">
-                <DropdownMenu.Item className="flex items-center gap-2 cursor-pointer" onSelect={() => startSession(`/${skill.name} `, skill.projectId)}>
+                <DropdownMenu.Item className="flex items-center gap-2 cursor-pointer" onSelect={() => { if (!guardArtifactConfig("skill", skill.id)) startSession(`/${skill.name} `, skill.projectId) }}>
                   <Icon name="monitor" size="small" />
                   <DropdownMenu.ItemLabel>{t("kcode.skillPreview.action.localTest")}</DropdownMenu.ItemLabel>
                 </DropdownMenu.Item>

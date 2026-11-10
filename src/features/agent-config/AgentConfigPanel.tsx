@@ -66,7 +66,6 @@ export const AgentConfigPanel = forwardRef<AgentConfigHandle, Props>(function Ag
   const [form, setForm] = useState<AgentForm>(() => formOf(props.agent))
   // 上一次落盘的内容：用来判断有没有未保存的改动、生成改动摘要
   const saved = useRef(formOf(props.agent))
-  const preset = !!props.agent.preset
   const readonly = !!props.readonly
 
   // 换了一个智能体，或外部（会话里的模型）改了它：重置表单
@@ -120,7 +119,7 @@ export const AgentConfigPanel = forwardRef<AgentConfigHandle, Props>(function Ag
       {props.subHeader && tab === "basic" && <div className="shrink-0">{props.subHeader}</div>}
       {tab === "role" && (
         <div className="flex-1 min-h-0 pb-5">
-          <RoleSettingsTab form={form} set={set} readonly={readonly || preset} />
+          <RoleSettingsTab form={form} set={set} readonly={readonly} />
         </div>
       )}
       {tab === "basic" && (

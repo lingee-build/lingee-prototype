@@ -1,3 +1,4 @@
+import { guardArtifactConfig } from "@/features/artifact-config/config-state"
 import { useState } from "react"
 import { ConfirmDialog, showToast, useDialog } from "@/ui"
 import { useT } from "@/i18n"
@@ -37,7 +38,7 @@ export function useMcpAppActions(onChanged: () => void) {
     return false
   }
 
-  return {
+  const actions = {
     busy,
 
     /** 预览：到新任务页让模型启动开发服务器。编辑：建一个会话直接进去，右侧打开组件详情 */
@@ -99,5 +100,10 @@ export function useMcpAppActions(onChanged: () => void) {
         />
       ))
     },
+  }
+  return { ...actions,
+    preview: (app: McpApp) => { if (!guardArtifactConfig("mcpapp", app.appCode)) return actions.preview(app) },
+    test: (app: McpApp) => { if (!guardArtifactConfig("mcpapp", app.appCode)) return actions.test(app) },
+    submit: (app: McpApp) => { if (!guardArtifactConfig("mcpapp", app.appCode)) return actions.submit(app) },
   }
 }

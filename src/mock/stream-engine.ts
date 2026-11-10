@@ -1,3 +1,4 @@
+import { completeFromCard } from "@/features/artifact-config/config-state"
 import type { Scenario } from "./scenarios/types"
 import { conversationRepairScenario } from "./scenarios/evaluation-repair-dialog"
 import { evaluationRepairTarget } from "@/services/evaluation-repair"
@@ -139,6 +140,7 @@ export async function runAssistantStream(sessionId: string, prompt: string, emit
     if (step.card && !aborted()) {
       // 卡片指令整段一次推出，避免逐字输出时把半截指令当正文显示
       const card = step.card()
+      completeFromCard(card.kind, card.config)
       push({ id: uid("prt"), type: "text", text: `:::render:${card.kind} ${JSON.stringify(card.config)}:::` })
     }
     if (pacing && !aborted()) await pause(pacing.stepPauseMs)

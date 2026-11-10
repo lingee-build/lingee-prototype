@@ -1,3 +1,4 @@
+import { guardArtifactConfig } from "@/features/artifact-config/config-state"
 import { useNavigate } from "react-router"
 import { showToast, type CardClick } from "@/ui"
 import { useT } from "@/i18n"
@@ -33,6 +34,7 @@ export function useCardActions(projectId: string): CardClick {
       const skill = devStore.skills.find((x) => x.name === id || x.id === id)
       if (!skill) return showToast({ variant: "error", title: t("kcode.skillDev.notFound") })
       if (kind === "kdskill") return toggleDrawer({ kind: "kdskill", id: skill.id, title: skill.displayName })
+      if (guardArtifactConfig("skill", skill.id)) return
       usePrompt.getState().setDraft(`/${skill.name} `)
       return navigate(`/p/${projectId}/session`)
     }
@@ -40,6 +42,7 @@ export function useCardActions(projectId: string): CardClick {
       const agent = devStore.agents.find((x) => x.id === config.id)
       if (!agent) return showToast({ variant: "error", title: t("kcode.agentDev.notFound") })
       if (kind === "ai-partner") return toggleDrawer({ kind: "agentConfig", id: agent.id, title: agent.name })
+      if (guardArtifactConfig("agent", agent.id)) return
       return void sessionService.create(projectId, `${t("kcode.localTest.sessionTitlePrefix")}${agent.name}`).then((session) => {
         useSync.getState().apply({ type: "session.updated", session })
         useSync.setState((s) => ({ messages: { ...s.messages, [session.id]: [] } }))

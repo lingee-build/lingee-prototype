@@ -1,3 +1,5 @@
+import { exportArtifactPackage } from "@/features/artifact-config/package-export"
+import { guardArtifactConfig } from "@/features/artifact-config/config-state"
 import { evaluationDeletionNotice } from "@/services/evaluation-deletion"
 import { guardUpgrade } from "@/features/artifact-upgrade/UpgradeGate"
 import { useState } from "react"
@@ -39,6 +41,7 @@ export function useAgentActions(onChanged: () => void) {
 
   const actions = {
     busy,
+    export: (agent: Agent) => exportArtifactPackage("agent", agent.id),
 
     /** 已发布 / 已提交的智能体，编辑前先确认（编辑后需要重新提交审核） */
     edit(agent: Agent) {
@@ -145,15 +148,16 @@ export function useAgentActions(onChanged: () => void) {
   }
   return { ...actions, ...Object.fromEntries(
     Object.entries(actions).filter(([key]) => key !== "busy").map(([key, action]) => [key, (agent: Agent) => {
+      if (["localTest", "cloudTest", "submit"].includes(key) && guardArtifactConfig("agent", agent.id)) return
       const run = () => (action as (agent: Agent) => unknown)(agent)
       if (!guardUpgrade([agent.id], run)) return run()
     }]),
   ) } as typeof actions
 }
 
-/** 能否提交：非预置，且状态是已保存或已驳回 */
-export const canSubmit = (agent: Agent) => !agent.preset && (agent.status === "saved" || agent.status === "rejected")
+/** 能否提交：状态是已保存或已驳回 */
+export const canSubmit = (agent: Agent) => (agent.status === "saved" || agent.status === "rejected")
 /** 能否撤回：云端正在审核中 */
-export const canWithdraw = (agent: Agent) => !agent.preset && agent.backendStatus === "submitted"
+export const canWithdraw = (agent: Agent) => agent.backendStatus === "submitted"
 /** 能否删除：云端审核中或已发布时不允许删 */
 export const canRemove = (agent: Agent) => canSubmit(agent) && agent.backendStatus !== "submitted" && agent.backendStatus !== "published"

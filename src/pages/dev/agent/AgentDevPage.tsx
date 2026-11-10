@@ -30,8 +30,8 @@ export function AgentDevPage() {
   const startSession = useStartSession()
   const data = useDevList<Agent>({ queryKey: "agents", fetch: agentService.list, matchTab, searchText: (agent) => `${agent.name} ${agent.desc}` })
 
-  // 预置智能体保持原顺序排前面；自己建的按创建时间倒序
-  const list = [...data.list.filter((x) => x.preset), ...data.list.filter((x) => !x.preset).sort((a, b) => b.createdAt.localeCompare(a.createdAt))]
+  // Build 中的智能体统一按创建时间倒序排列
+  const list = [...data.list].sort((a, b) => b.createdAt.localeCompare(a.createdAt))
 
   return (
     <DevPageLayout
@@ -74,7 +74,6 @@ export function AgentDevPage() {
               footer={
                 <>
                   {domainI18nKeys[agent.domain] && <CapsuleTag>{t(domainI18nKeys[agent.domain])}</CapsuleTag>}
-                  {agent.preset && <CapsuleTag>{t("kcode.agentDev.tag.official")}</CapsuleTag>}
                 </>
               }
               action={<AgentCardActions agent={agent} onChanged={() => void data.refresh()} />}

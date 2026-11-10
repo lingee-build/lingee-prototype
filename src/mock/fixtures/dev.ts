@@ -88,7 +88,6 @@ export interface Agent {
   isChanged?: boolean
   rejectionRemark?: string
   domain: string
-  preset?: boolean
   createdAt: string
   allowModelSwitch?: boolean
   defaultModelLevel?: ModelLevel
@@ -177,7 +176,7 @@ const role = (name: string, duty: string, rules: string[]) =>
 export const agents: Agent[] = [
   {
     id: "scm-collab-assistant", projectId: "scm-skills", name: "供应链协同助手", desc: "覆盖采购、库存、发货全链路的问答与单据处理，能够跨单据追溯上下游关系。", avatar: "/preset-agent-avatar-1.png",
-    status: "published", backendStatus: "published", domain: "supply-chain", preset: true, createdAt: "2026-03-02T02:00:00Z", defaultModelLevel: "expert",
+    status: "published", backendStatus: "published", domain: "supply-chain", createdAt: "2026-03-02T02:00:00Z", defaultModelLevel: "expert",
     role: role("供应链协同助手", "负责解答采购、库存、发货相关问题，并协助处理单据。", ["先确认用户关心的单据类型与组织范围", "查询结果用表格呈现，超过 20 行时先给汇总", "发现上下游数量不一致时主动提示"]),
     skills: [skillRef("sk_delivery"), skillRef("sk_stock")], knowledge: [catalog("kc_scm", "供应链制度", "供应链制度")],
     changelog: {
