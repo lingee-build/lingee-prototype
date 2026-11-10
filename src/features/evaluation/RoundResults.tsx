@@ -68,16 +68,14 @@ export function RoundResults({ result }: { result: EvalResult }) {
       status={<span className="eval-status" data-status={{ "通过": "passed", "不通过": "failed", "无法判定": "unknown" }[turnVerdict(turn, t)]}>{turnVerdict(turn, t)}</span>}
       open={isOpen(turn)} toggle={() => setExpanded(prev => ({ ...prev, [turn.id]: { status: turn.status, open: !isOpen(turn) } }))}>
 
-      <div className="eval-input-group"><div className="eval-message"><strong>用户输入</strong><p>{turn.input}</p></div>
+      <div className="eval-input-group"><div className="eval-message eval-report-text-field"><strong>用户输入</strong><p>{turn.input}</p></div>
       <Files files={turn.attachments} label="附件" /></div>
       {!!turn.rules.length && <details className="eval-result-rules"><summary className="eval-section-title">澄清回复配置 <span className="eval-section-count">（{turn.rules.length}）</span></summary>
         <ClarificationReplies rules={turn.rules} />
       </details>}
       <details className="eval-message" open><summary>本次澄清过程</summary><p>{clarificationText(turn)}</p></details>
       {"issue" in turn && turn.issue && <div className="eval-message"><strong>执行异常</strong><dl className="eval-result-evidence"><dt>发生阶段</dt><dd>{executionIssues[turn.issue].stage}</dd><dt>原因</dt><dd>{executionIssues[turn.issue].reason}</dd><dt>处理建议</dt><dd>{executionIssues[turn.issue].action}</dd></dl></div>}
-      {"tool" in turn && turn.tool && <div className="eval-message"><strong>工具调用</strong><p>{turn.tool}</p></div>}
-      {turn.toolResult && <div className="eval-message"><strong>{t("proto.eval.toolResult")}</strong><p>{turn.toolResult}</p></div>}
-      <div className="eval-message"><strong>实际回复</strong><p>{responseText(turn, t)}</p></div>
+      <div className="eval-message eval-report-text-field"><strong>实际回复</strong><p>{responseText(turn, t)}</p></div>
       <CheckResults label="评测标准" checks={checksOf(turn)} results={"checkResults" in turn ? turn.checkResults as CheckResult[] : undefined} />
       {!("checkResults" in turn && (turn.checkResults as CheckResult[] | undefined)?.length) && <div className="eval-message"><strong>判定依据</strong><p>{turn.evidence ? t(turn.evidence) : turn.status === "skipped" ? "本轮未执行。" : turn.status === "cancelled" ? "本轮已停止，未生成判定依据。" : t("proto.eval.waiting")}</p></div>}
     </TurnCard>)}
