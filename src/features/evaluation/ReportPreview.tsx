@@ -3,7 +3,7 @@ import { reportSections } from "./report-document"
 import { updateReportDOM } from "./report-dom"
 
 /** 保留独立文档的样式与脚本隔离，全文撑开高度，由评测主内容区统一滚动。 */
-export function ReportPreview({ html, actions, status, focusCaseIndex = -1 }: { html: string; actions?: ReactNode; status?: ReactNode; focusCaseIndex?: number }) {
+export function ReportPreview({ html, actions, status, focusCaseIndex = -1, onCaseAction }: { html: string; actions?: ReactNode; status?: ReactNode; focusCaseIndex?: number; onCaseAction?: (action: "rerun" | "edit", caseId: string) => void }) {
   const [initialHtml] = useState(html)
   const focused = useRef(-1)
   const [cases, setCases] = useState<{id: string; label: string}[]>([])
@@ -39,6 +39,8 @@ export function ReportPreview({ html, actions, status, focusCaseIndex = -1 }: { 
   }, [compact, navOpen])
   const [active, setActive] = useState("conclusion")
   const frameRef = useRef<HTMLIFrameElement>(null)
+  const caseActionRef = useRef(onCaseAction)
+  caseActionRef.current = onCaseAction
   const scrollToTarget = (target: HTMLElement) => {
     const frame = frameRef.current
     const panel = frame?.closest<HTMLElement>(".eval-panel")
@@ -92,6 +94,13 @@ export function ReportPreview({ html, actions, status, focusCaseIndex = -1 }: { 
           items.forEach(item => { item.open = open })
           syncControls()
           resize()
+        }
+        const caseAction = (event.target as Element | null)?.closest?.("[data-case-action]") as HTMLElement | null
+        if (caseAction) {
+          const caseId = caseAction.closest("details.case")?.getAttribute("data-case-id")
+          const kind = caseAction.dataset.caseAction
+          if (caseId && (kind === "rerun" || kind === "edit")) caseActionRef.current?.(kind, caseId)
+          return
         }
         const link = (event.target as Element | null)?.closest?.('a[href^="#"]')
         if (!link) return

@@ -1,4 +1,4 @@
-import type { DemoJudgment, EvalAttachment, EvalCase, EvalCheck } from "./evaluation"
+import type { DemoJudgment, EvalAttachment, EvalCase, EvalCheck, EvalClarifyScene } from "./evaluation"
 
 const judgment = (text: string, actual: string, evidence: string, verdict: DemoJudgment["verdict"] = "passed"): DemoJudgment => ({ check: { text }, verdict, actual, evidence })
 
@@ -27,7 +27,14 @@ export function completeEvaluationSample(name: string): EvalCase {
   const id = () => crypto.randomUUID()
   const check = (kind: EvalCheck["kind"], text: string, operator?: EvalCheck["operator"]): EvalCheck => ({ id: id(), kind, text, operator, required: true, files: [] })
   const attachment = (name: string, content: string): EvalAttachment => ({ id: id(), name, size: new TextEncoder().encode(content).length, data: `data:text/plain;charset=utf-8,${encodeURIComponent(content)}` })
-  const rule = (match: string, response: string) => ({ id: id(), match, responses: [response] })
+  const scene = (ask: string, pick: string): EvalClarifyScene => ({
+    id: id(),
+    check: { id: id(), kind: "natural", text: ask, required: true, files: [] },
+    pickMode: "fixed",
+    match: pick,
+    responses: [pick],
+    post: "output",
+  })
   return {
     id: id(), name: `${name} · 附件、多轮澄清与完整标准示例`, source: "tenant", outcome: "passed", demo: true,
     input: "请按会话附件中的业务要求查询单据，先确认缺少的信息", expected: "先澄清组织和期间，再返回可核验的查询结果",
@@ -36,13 +43,13 @@ export function completeEvaluationSample(name: string): EvalCase {
       {
         id: id(), input: "请根据业务要求查询单据，返回单号、客户和状态。组织和期间请先向我确认", expected: "确认组织、期间后查询单据",
         attachments: [attachment("查询条件.txt", "单据编号：FHTZ-20261030-001\n组织和期间由用户确认后再查询")],
-        rules: [rule("需要查询哪个核算组织？", "华东公司"), rule("需要查询哪个期间？", "2026年10月")],
+        rules: [scene("查询前先澄清缺失的核算组织与查询期间，不自行假设", "华东公司；2026年10月")],
         checks: [check("natural", "查询前确认核算组织和期间，使用华东公司、2026年10月查询"), check("keyword", "FHTZ-20261030-001\n优品科技", "all"), check("regex", "FHTZ-[0-9]{8}-[0-9]{3}", "regex")],
       },
       {
         id: id(), input: "继续核对这张单据的物料数量，依据本轮附件计算未发数量，不要重复询问已确认的组织", expected: "未发数量为40件，并沿用上一轮组织",
         attachments: [attachment("物料明细.csv", "物料,应发数量,已发数量\n物料A,100,60\n")],
-        rules: [rule("数量按什么单位展示？", "按件展示")],
+        rules: [scene("数量展示单位不明确时先澄清，不自行选择单位", "按件展示")],
         checks: [check("natural", "沿用华东公司上下文，根据100减60得出未发40件"), check("keyword", "未发40件\n未发数量：40", "any"), check("keyword", "手机号\n身份证号", "none"), check("regex", "1[3-9][0-9]{9}", "not_regex")],
       },
       {
@@ -56,14 +63,20 @@ export function completeEvaluationSample(name: string): EvalCase {
         {
           response: "已按确认的华东公司、2026年10月查询：单号 FHTZ-20261030-001，客户：优品科技，状态：已审核。",
           tool: "mcp.tenant.business_query", toolResult: "示例查询参数：组织=华东公司，期间=2026年10月。示例返回：单号=FHTZ-20261030-001，客户=优品科技，状态=已审核。",
-          clarification: "示例追问：需要查询哪个核算组织？\n自动回复：华东公司\n\n示例追问：需要查询哪个期间？\n自动回复：2026年10月", files: [],
-          judgments: [judgment("查询前确认核算组织和期间，使用华东公司、2026年10月查询", "先确认组织和期间，再使用华东公司、2026年10月查询。", "本轮两次澄清分别回复华东公司和2026年10月；示例工具参数采用这两个值，返回 FHTZ-20261030-001。")],
+          clarification: "示例澄清提问：需要查询哪个核算组织与期间？\n澄清选择：华东公司；2026年10月", files: [],
+          judgments: [
+            judgment("查询前先澄清缺失的核算组织与查询期间，不自行假设", "已先向用户追问核算组织与查询期间，未自行假设。", "示例澄清记录：模型先追问需要查询的核算组织与期间，用户回复后才开始查询。"),
+            judgment("查询前确认核算组织和期间，使用华东公司、2026年10月查询", "先确认组织和期间，再使用华东公司、2026年10月查询。", "本轮两次澄清分别回复华东公司和2026年10月；示例工具参数采用这两个值，返回 FHTZ-20261030-001。"),
+          ],
         },
         {
           response: "沿用华东公司及单号 FHTZ-20261030-001。按本轮物料明细：物料A应发100件，已发60件，未发40件（100－60）。",
           tool: "read_attachment", toolResult: "示例读取本轮附件物料明细.csv：物料A，应发数量100，已发数量60。", files: [],
-          clarification: "示例追问：数量按什么单位展示？\n自动回复：按件展示",
-          judgments: [judgment("沿用华东公司上下文，根据100减60得出未发40件", "沿用华东公司，将应发100件减去已发60件，得到未发40件。", "第一轮已确认华东公司；本轮只询问数量单位。附件读取结果为100、60，最终回复写明100－60及未发40件。")],
+          clarification: "示例澄清提问：数量按什么单位展示？\n澄清选择：按件展示",
+          judgments: [
+            judgment("数量展示单位不明确时先澄清，不自行选择单位", "已先向用户追问数量展示单位，未自行选择。", "示例澄清记录：模型先追问数量按什么单位展示，得到「按件展示」后再计算。"),
+            judgment("沿用华东公司上下文，根据100减60得出未发40件", "沿用华东公司，将应发100件减去已发60件，得到未发40件。", "第一轮已确认华东公司；本轮只询问数量单位。附件读取结果为100、60，最终回复写明100－60及未发40件。"),
+          ],
         },
         {
           response: "已生成 outputs/查询汇总.txt。汇总内容：华东公司，FHTZ-20261030-001，优品科技，已审核；物料A应发100件、已发60件、未发40件。未生成客户联系方式文件。",

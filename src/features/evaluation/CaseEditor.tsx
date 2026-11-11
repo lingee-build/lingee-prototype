@@ -1,13 +1,48 @@
-import { EvaluationSelect } from "./EvaluationSelect"
-import { CheckTypeIcon } from "./CheckTypeIcon"
-import { sessionAttachmentTip } from "./attachment-help"
-import { AttachmentRow } from "./AttachmentRow"
 import { flushSync } from "react-dom"
-import { TurnCard } from "./TurnCard"
-import { saveAttachment, downloadAttachment } from "@/services/evaluation-attachments"
-import { useCallback, useId, useRef, useState, useLayoutEffect, type TextareaHTMLAttributes } from "react"
-import { Button, BrandButton, Icon, Tooltip, ConfirmDialog, DropdownMenu, useDialog } from "@/ui"
-import { caseValidation, checkKind, checkOperators, checkValidation, checkDescription, checksOf, turnsOf, type EvalCheck, type EvalCase, type EvalTurn, type EvalAttachment } from "@/services/evaluation"
+import { useRef, useState, useCallback } from "react"
+import { BrandButton, Button, Icon, ConfirmDialog, useDialog } from "@/ui"
+import { saveAttachment } from "@/services/evaluation-attachments"
+import { caseBriefOf, caseValidation, checkKind, checkValidation, checkDescription, checksOf, turnsOf, expectedResponseLabels, overallCategories, isClarifyTurn, scenesOf, sceneChecksOf, clarifyChecksOf, clarifyPickModes, clarifySceneNames, maxClarifyScenes, type CheckKind, type ClarifyPickMode, type EvalCheck, type EvalCase, type EvalClarifyScene, type EvalTurn, type EvalAttachment, type OverallCategory } from "@/services/evaluation"
+
+/** 设计稿的类型下拉：一项对应 kind + operator 的组合。 */
+const typeOptions = [
+  { key: "natural", label: "语义判断" },
+  { key: "keyword:all", label: "关键词包含" },
+  { key: "keyword:any", label: "关键词包含任一" },
+  { key: "keyword:none", label: "关键词不包含" },
+  { key: "regex", label: "正则匹配" },
+  { key: "regex:not_regex", label: "正则不匹配" },
+  { key: "file:exists", label: "文件存在" },
+  { key: "file:not_exists", label: "文件不存在" },
+] as const
+function checkTypeKey(check: EvalCheck): string {
+  const kind = checkKind(check)
+  if (kind === "natural") return "natural"
+  return `${kind}:${check.operator || (kind === "file" ? "exists" : kind === "regex" ? "regex" : "all")}`
+}
+function applyCheckType(check: EvalCheck, key: string): EvalCheck {
+  if (key === "natural") return { ...check, kind: "natural", operator: undefined }
+  const [kind, operator] = key.split(":")
+  return { ...check, kind: kind as CheckKind, operator: operator as EvalCheck["operator"] }
+}
+const typePlaceholder = (key: string) => key === "natural" ? "例如：缺少组织信息时，应先询问用户"
+  : key.startsWith("keyword") ? "每行一个关键词" : key.startsWith("regex") ? "输入正则表达式，无需两侧斜杠" : "相对工作区的文件路径，如 outputs/对账报告.xlsx"
+
+function UploadField({ label, files, onChange, onUploadingChange }: { label: string; files: EvalAttachment[]; onChange: (files: EvalAttachment[]) => void; onUploadingChange?: (uploading: boolean) => void }) {
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState("")
+  return <div className="eval-upl">
+    <label className="eval-upbtn">{busy ? "正在保存…" : "+ 上传文件"}<input aria-label={label} type="file" multiple hidden disabled={busy} onChange={async e => {
+      const chosen = Array.from(e.target.files || []); e.target.value = ""
+      setBusy(true); onUploadingChange?.(true)
+      try { onChange([...files, ...await Promise.all(chosen.map(saveAttachment))]); setError("") }
+      catch { setError("附件保存失败，请重试。") }
+      finally { setBusy(false); onUploadingChange?.(false) }
+    }} /></label>
+    {files.map(f => <span className="eval-fchip" key={f.id}>{f.name}<button type="button" aria-label={`移除附件 ${f.name}`} onClick={() => onChange(files.filter(x => x.id !== f.id))}>×</button></span>)}
+    {error && <span role="alert" className="eval-form-error" style={{ margin: 0 }}>{error}</span>}
+  </div>
+}
 
 function useDeleteConfirmation() {
   const dialog = useDialog()
@@ -17,215 +52,239 @@ function useDeleteConfirmation() {
   }
 }
 
-export function AttachmentInput({ files, onChange, label, tip, children, onUploadingChange }: { onUploadingChange?: (uploading: boolean) => void; children?: React.ReactNode; files: EvalAttachment[]; onChange: (files: EvalAttachment[]) => void; label: string; tip?: string }) {
-  const [error, setError] = useState("")
-  const [uploading, setUploading] = useState(false)
-  return <div className={`eval-attachments${label === "附件" ? " eval-attachments-inline" : ""}`}><div className="eval-field-heading"><span className="eval-field-label">{children ? "用户输入" : label}</span>{tip && (label === "会话附件" || label === "本轮附件") && <Tooltip value={tip}><button type="button" className="eval-field-help" aria-label={tip}><Icon name="help" size="small" /></button></Tooltip>}</div><label className="eval-upload-trigger eval-add-action">{!uploading && <Icon name="plus-small" size="small" />}<span>{uploading ? "正在保存附件…" : "添加附件"}</span><input aria-label={label} className="eval-file-input" type="file" multiple disabled={uploading} onChange={async e => {
-    const chosen = Array.from(e.target.files || []); e.target.value = ""
-    setUploading(true)
-    onUploadingChange?.(true)
-    try {
-      const next = await Promise.all(chosen.map(saveAttachment))
-      onChange([...files, ...next]); setError("")
-    } catch { setError("附件保存失败，请重试。") } finally { setUploading(false); onUploadingChange?.(false) }
-  }} /></label>{children && <div className="eval-input-content">{children}</div>}{uploading && <p role="status">正在保存附件…</p>}{error && <p role="alert">{error}</p>}{files.map(f => <AttachmentRow key={f.id} file={f} download={() => { void downloadAttachment(f).catch(() => setError("附件无法读取，请重新添加。")) }} remove={() => onChange(files.filter(x => x.id !== f.id))} />)}</div>
-}
-function StandardInput(props: TextareaHTMLAttributes<HTMLTextAreaElement>) {
-  const ref = useRef<HTMLTextAreaElement>(null)
-  useLayoutEffect(() => {
-    const el = ref.current
-    if (!el) return
-    const resize = () => {
-      if (!el.clientWidth) return
-      el.style.height = "auto"
-      el.style.height = `${el.scrollHeight + el.offsetHeight - el.clientHeight}px`
-    }
-    resize()
-    let width = el.clientWidth
-    const observer = new ResizeObserver(() => {
-      if (width !== el.clientWidth) { width = el.clientWidth; resize() }
-    })
-    observer.observe(el)
-    return () => observer.disconnect()
-  }, [props.value])
-  return <textarea {...props} ref={ref} rows={props.rows ?? 1} />
-}
-function simplifyCheck(check: EvalCheck): EvalCheck {
-  return { ...check, kind: checkKind(check), text: !check.kind || check.kind === "natural" ? checkDescription(check) : check.text, condition: undefined, reference: undefined, files: [] }
-}
-function KeywordInput({ value, onChange, field }: { value: string; onChange: (value: string) => void; field: { id: string } }) {
-  const [tokens, setTokens] = useState(() => value.split("\n").map(v => v.trim()).filter(Boolean))
-  const [pending, setPending] = useState("")
-  const commit = () => {
-    const next = [...new Set([...tokens, ...pending.split("\n").map(v => v.trim()).filter(Boolean)])]
-    setTokens(next); setPending(""); onChange(next.join("\n"))
-  }
-  return <div className="eval-keywords">
-    {tokens.map((token, i) => <span className="eval-keyword" key={i}>{token}<button type="button" aria-label={`移除关键词 ${token}`} onClick={() => { const next = tokens.filter((_, n) => n !== i); setTokens(next); onChange([...next, pending].filter(Boolean).join("\n")) }}>×</button></span>)}
-    <input {...field} data-check-field="true" value={pending} placeholder={tokens.length ? "继续添加关键词" : "可添加多个关键词，按回车确认"} onChange={e => { setPending(e.target.value); onChange([...tokens, e.target.value].filter(Boolean).join("\n")) }} onBlur={commit} onKeyDown={e => { if (e.key === "Enter" && !e.nativeEvent.isComposing) { e.preventDefault(); commit() } }} />
+/** 一条校验：类型下拉 + 判据输入，设计稿 ckr-set 形态。 */
+function CheckRow({ check, index, label, onChange, onDelete, error, leading }: {
+  check: EvalCheck; index: number; label: string; onChange: (check: EvalCheck) => void; onDelete: () => void; error?: string; leading?: React.ReactNode
+}) {
+  const key = checkTypeKey(check)
+  return <div className="eval-ckr-set">
+    <div className="eval-ckr">
+      {leading}
+      <select className="eval-sel" aria-label={`${label} ${index + 1} 类型`} value={key} onChange={e => onChange(applyCheckType(check, e.target.value))}>
+        {typeOptions.map(option => <option key={option.key} value={option.key}>{option.label}</option>)}
+      </select>
+      <input className="eval-inp" aria-label={`${label} ${index + 1} 判据`} placeholder={typePlaceholder(key)} value={check.text}
+        onChange={e => onChange({ ...check, text: e.target.value })} />
+      <button type="button" aria-label={`删除${label} ${index + 1}`} className="eval-nx" onClick={onDelete}><Icon name="trash-16" size="small" /></button>
+    </div>
+    {error && <p className="eval-form-error" role="alert">{error}</p>}
   </div>
 }
-function CheckEditor({ label, checks, onChange, fieldProps, fieldError }: {
-  label: string; checks: EvalCheck[]; onChange: (v: EvalCheck[]) => void;
-  fieldProps: (key: string, label: string, message: string) => { id: string };
-  fieldError: (key: string) => React.ReactNode;
+
+/** 澄清场景页签：编号连续、场景间互为「或」，多于一个时可删除。 */
+function SceneTabs({ scenes, active, onSelect, onAdd, onDelete }: {
+  scenes: EvalClarifyScene[]; active: number; onSelect: (index: number) => void; onAdd: () => void; onDelete: (index: number) => void
 }) {
-  const confirmDelete = useDeleteConfirmation()
-  checks = checks.map(simplifyCheck)
-  const [adding, setAdding] = useState(false)
-  const addedField = useRef<string | undefined>(undefined)
-  const patch = (id: string, value: Partial<EvalCheck>) => onChange(checks.map(c => c.id === id ? { ...c, ...value } : c))
-  return <section className="eval-check-editor" aria-label={label}>
-    <div className="eval-toolbar"><div className="eval-field-heading"><h3 className="eval-section-title">{label} <span className="eval-section-count">（{checks.length}）</span></h3></div>
-      <div className="eval-check-add">
-        <DropdownMenu open={adding} onOpenChange={setAdding} placement="bottom-end" gutter={4}>
-          <DropdownMenu.Trigger className="eval-add-action" data-component="button" data-variant="ghost"><Icon name="plus-small" size="small" />添加标准</DropdownMenu.Trigger>
-          <DropdownMenu.Portal><DropdownMenu.Content className="eval-select-menu" onCloseAutoFocus={event => { const id = addedField.current; if (id) { event.preventDefault(); addedField.current = undefined; requestAnimationFrame(() => document.getElementById(id)?.focus()) } }} aria-label="选择标准类型">
-            {([['natural', '语义判断'], ['keyword', '关键词匹配'], ['regex', '正则匹配'], ['file', '文件存在性']] as const).map(([kind, name]) => <DropdownMenu.Item key={kind} onSelect={() => {
-              const id = crypto.randomUUID()
-              addedField.current = fieldProps(id, "", "").id
-              flushSync(() => { onChange([...checks, { id, kind, operator: kind === "file" ? "exists" : kind === "regex" ? "regex" : "all", text: "", required: true, files: [] }]); setAdding(false) })
-            }}><CheckTypeIcon kind={kind} /><DropdownMenu.ItemLabel>{name}</DropdownMenu.ItemLabel></DropdownMenu.Item>)}
-          </DropdownMenu.Content></DropdownMenu.Portal>
-        </DropdownMenu>
-      </div>
-    </div>
-    {label === "整体验收标准" ? <p className="eval-muted">检查跨轮一致性或整个任务是否完成，无需重复各轮标准。</p> : !checks.length && <p className="eval-muted">写清这一轮怎样才算做对。例如：缺少单号时先询问，不自行编造。</p>}
-    {checks.some(c => c.kind === "keyword" || c.kind === "regex") && <span className="eval-muted">文本检查范围：{label === "整体验收标准" ? "最后一轮最终回复" : "本轮最终回复"}。</span>}
-    {checks.some(c => c.kind === "file") && <span className="eval-muted">文件存在性范围：仅检查产物文件是否存在，不检查内容。</span>}
-    {checks.map((check, index) => {
-      const props = fieldProps(check.id, `${label} ${index + 1}`, `请填写${label} ${index + 1}，不能仅包含空格。`)
-      return <div className="eval-standard-item" key={check.id}>
-        <label className="eval-standard-number" htmlFor={props.id}>{index + 1}</label>
-        <div className="eval-standard-field" data-kind={check.kind || "natural"}>
-          <span className="eval-check-kind"><CheckTypeIcon kind={check.kind || "natural"} />{{ natural: "语义判断", text: "文本检查", keyword: "关键词匹配", regex: "正则匹配", file: "文件存在性" }[check.kind || "natural"]}</span>
-          {check.kind && check.kind !== "natural" && <EvaluationSelect label={`标准 ${index + 1} 检查方式`} value={check.operator || (check.kind === "file" ? "exists" : check.kind === "regex" ? "regex" : "all")} onChange={value => patch(check.id, { operator: value as EvalCheck["operator"] })} options={(check.kind === "file" ? ["exists", "not_exists"] as const : check.kind === "regex" ? ["regex", "not_regex"] as const : ["all", "any", "none"] as const).map(op => ({ value: op, label: checkOperators[op] }))} />}
-          <div className={`eval-check-value${check.kind === "regex" ? " eval-regex-value" : ""}`}>
-            {check.kind === "keyword" ? <KeywordInput key={`${check.id}-keywords`} field={props} value={check.text} onChange={text => patch(check.id, { text })} /> : <StandardInput {...props} required placeholder={check.kind === "file" ? "相对工作区的文件路径，如 outputs/对账报告.xlsx" : check.kind === "regex" ? "输入正则表达式，无需两侧斜杠" : "例如：缺少组织信息时，应先询问用户"} value={check.text} onChange={e => patch(check.id, { text: e.target.value })} />}
-            {fieldError(check.id)}
-          </div>
-        </div>
-        <Tooltip value="删除标准"><button type="button" className="eval-standard-delete" aria-label={`删除${label} ${index + 1}`} onClick={() => confirmDelete(`删除${label} ${index + 1}？`, "将移除这条评测标准，保存用例后生效。", () => onChange(checks.filter(c => c.id !== check.id)), !!(check.text.trim() || check.files?.length))}><Icon name="trash-16" size="small" /></button></Tooltip>
-      </div>
-    })}
-  </section>
+  return <div className="eval-sc-tabs">
+    {scenes.map((scene, index) => <span className="eval-sc-tabwrap" key={scene.id}>
+      {index > 0 && <span className="eval-sc-or">或</span>}
+      <button type="button" className="eval-sc-tab" data-on={index === active || undefined} onClick={() => onSelect(index)}>场景{clarifySceneNames[index]}</button>
+      {scenes.length > 1 && <span role="button" tabIndex={0} className="eval-scx" title="删除该场景" onClick={() => onDelete(index)}
+        onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onDelete(index) } }}>×</span>}
+    </span>)}
+    {scenes.length < maxClarifyScenes && <button type="button" className="eval-sc-addtab" onClick={onAdd}>+ 添加场景</button>}
+  </div>
 }
+
 export function CaseEditor({ draft, update, save, cancel, editing }: { draft: EvalCase; update: (c: EvalCase) => void; save: (c: EvalCase) => void; cancel: () => void; editing: boolean }) {
   const confirmDelete = useDeleteConfirmation()
-  const prefix = useId()
   const [uploadingCount, setUploadingCount] = useState(0)
-  const onUploadingChange = useCallback((uploading: boolean) => {
-    setUploadingCount(count => count + (uploading ? 1 : -1))
-  }, [])
-  const [errors, setErrors] = useState<Record<string, string>>({})
-  const fieldProps = (key: string, label: string, message: string) => ({
-    id: `${prefix}-${key}`, name: key, autoComplete: "off", "aria-label": label, "data-required-message": message,
-    "aria-invalid": !!errors[`${prefix}-${key}`],
-    "aria-describedby": errors[`${prefix}-${key}`] ? `${prefix}-${key}-error` : undefined,
-  })
-  const fieldError = (key: string) => errors[`${prefix}-${key}`] ? <span className="eval-field-error" id={`${prefix}-${key}-error`} role="alert">{errors[`${prefix}-${key}`]}</span> : null
-  const formRef = useRef<HTMLFormElement>(null)
+  const onUploadingChange = useCallback((uploading: boolean) => setUploadingCount(count => count + (uploading ? 1 : -1)), [])
+  const [formError, setFormError] = useState("")
+  const [checkErrors, setCheckErrors] = useState<Record<string, string>>({})
   const currentDraft = useRef(draft)
   currentDraft.current = draft
-  const turns = turnsOf(draft).map((t, i, list) => ({ ...t, checks: [...checksOf(t, i && t.inherit ? list[0].expected : undefined), ...(list.length === 1 ? draft.checks || [] : [])].map(simplifyCheck) }))
-  const [expanded, setExpanded] = useState<Record<string, boolean>>(() => Object.fromEntries(turns.map((t, i) => [t.id, i === 0])))
-  const allExpanded = turns.every(t => expanded[t.id] ?? true)
-  const hasTurnErrors = (turn: typeof turns[number]) => [
-    `${turn.id}-input`, ...turn.checks.map(c => c.id),
-    ...turn.rules.flatMap(r => [`${r.id}-match`, ...r.responses.map((_, n) => `${r.id}-response-${n}`)]),
-  ].some(key => !!errors[`${prefix}-${key}`])
+  const turns = turnsOf(draft)
   const setTurn = (index: number, patch: Partial<EvalTurn>) => update({ ...currentDraft.current, turns: turnsOf(currentDraft.current).map((t, i) => i === index ? { ...t, ...patch } : t) })
-  function move(index: number, delta: number) {
-    const next = [...turns]; [next[index], next[index + delta]] = [next[index + delta], next[index]]
-    next[0] = { ...next[0], inherit: false }; update({ ...draft, turns: next })
+  const [activeScene, setActiveScene] = useState<Record<string, number>>({})
+  const blankScene = (): EvalClarifyScene => ({ id: crypto.randomUUID(), match: "", responses: [""], pickMode: "input", post: "output", checks: [] })
+  const setScenes = (index: number, scenes: EvalClarifyScene[]) => setTurn(index, { rules: scenes })
+  const setScene = (index: number, sceneIndex: number, patch: Partial<EvalClarifyScene>) =>
+    setScenes(index, scenesOf(turnsOf(currentDraft.current)[index]).map((scene, i) => i === sceneIndex ? { ...scene, ...patch } : scene))
+  const addScene = (index: number) => {
+    const current = scenesOf(turnsOf(currentDraft.current)[index])
+    if (current.length >= maxClarifyScenes) return
+    setScenes(index, [...current, blankScene()])
+    setActiveScene(prev => ({ ...prev, [turnsOf(currentDraft.current)[index].id]: current.length }))
   }
-  return <form ref={formRef} className="eval-form" noValidate onSubmit={e => {
-    e.preventDefault()
-    if (uploadingCount > 0 || e.currentTarget.querySelector('input[type="file"]:disabled')) return
-    const fields = Array.from(e.currentTarget.querySelectorAll('textarea[required], input[required], input[data-check-field]')) as (HTMLInputElement | HTMLTextAreaElement)[]
-    const nextErrors: Record<string, string> = {}
-    let firstInvalid: HTMLInputElement | HTMLTextAreaElement | undefined
-    const configuredChecks = [...(draft.checks || []), ...turns.flatMap(t => t.checks)]
-    for (const f of fields) {
-      const check = configuredChecks.find(c => `${prefix}-${c.id}` === f.id)
-      f.setCustomValidity(check ? checkValidation(check) : f.value.trim() ? "" : f.dataset.requiredMessage || "请填写此项")
-      if (!f.checkValidity()) {
-        nextErrors[f.id] = f.validationMessage
-        firstInvalid ??= f
+  const removeScene = (index: number, sceneIndex: number) => {
+    const current = scenesOf(turnsOf(currentDraft.current)[index])
+    if (current.length <= 1) return
+    setScenes(index, current.filter((_, i) => i !== sceneIndex))
+    setActiveScene(prev => ({ ...prev, [turnsOf(currentDraft.current)[index].id]: Math.max(Math.min(sceneIndex, current.length - 2), 0) }))
+  }
+  const expectResponse = (index: number, value: "output" | "clarify") => {
+    const turn = turnsOf(currentDraft.current)[index]
+    setTurn(index, value === "clarify" && !turn.rules.length
+      ? { expectedResponse: value, rules: [blankScene()] }
+      : { expectedResponse: value })
+  }
+  const addCheck = (target: "overall" | number) => {
+    const id = crypto.randomUUID()
+    const check: EvalCheck = { id, kind: "natural", text: "", required: true, files: [] }
+    if (target === "overall") update({ ...currentDraft.current, checks: [...(currentDraft.current.checks || []), check] })
+    else setTurn(target, { checks: [...checksOf(turnsOf(currentDraft.current)[target]), check] })
+    return id
+  }
+  function removeTurn(index: number) {
+    const next = turnsOf(currentDraft.current).filter((_, i) => i !== index)
+    if (next.length) { next[0] = { ...next[0], inherit: false }; update({ ...currentDraft.current, turns: next }) }
+  }
+  function move(index: number, delta: number) {
+    const next = [...turnsOf(currentDraft.current)]
+    ;[next[index], next[index + delta]] = [next[index + delta], next[index]]
+    next[0] = { ...next[0], inherit: false }
+    update({ ...currentDraft.current, turns: next })
+  }
+  /** 一个澄清场景卡：澄清校验（澄清提问 / 澄清选择）+ 期望澄清后响应 + 该场景输出校验。 */
+  function sceneCard(turn: EvalTurn, index: number, scene: EvalClarifyScene, si: number, active: boolean) {
+    const ask = scene.check || { id: `${scene.id}-ask`, kind: "natural" as const, text: "", required: true, files: [] }
+    const sceneChecks = sceneChecksOf(turn, scene)
+    const label = `第 ${index + 1} 轮场景${clarifySceneNames[si] || si + 1}输出校验`
+    const name = `场景${clarifySceneNames[si] || si + 1}`
+    const writeChecks = (checks: EvalCheck[]) => setScene(index, si, { checks })
+    return <div className="eval-scard" key={scene.id} hidden={!active}>
+      <div className="eval-glab">澄清校验</div>
+      <div className="eval-nrow"><span className="eval-nk">澄清提问</span>
+        <div className="eval-ckr">
+          <select className="eval-sel" aria-label={`${name}澄清提问类型`} value={checkTypeKey(ask)} onChange={e => setScene(index, si, { check: applyCheckType(ask, e.target.value) })}>
+            {typeOptions.map(option => <option key={option.key} value={option.key}>{option.label}</option>)}
+          </select>
+          <input className="eval-inp" aria-label={`${name}澄清提问判据`} placeholder="期望 AI 先澄清什么" value={ask.text}
+            onChange={e => setScene(index, si, { check: { ...ask, text: e.target.value } })} />
+        </div>
+      </div>
+      {checkErrors[ask.id] && <p className="eval-form-error" role="alert">{checkErrors[ask.id]}</p>}
+      <div className="eval-nrow"><span className="eval-nk">澄清选择</span>
+        <div className="eval-ckr">
+          <select className="eval-sel" aria-label={`${name}澄清选择方式`} value={scene.pickMode || "input"} onChange={e => setScene(index, si, { pickMode: e.target.value as ClarifyPickMode })}>
+            {(Object.keys(clarifyPickModes) as ClarifyPickMode[]).map(key => <option key={key} value={key}>{clarifyPickModes[key]}</option>)}
+          </select>
+          <input className="eval-inp" aria-label={`${name}澄清选择`} placeholder="模拟用户的选择或补充" value={scene.match}
+            onChange={e => setScene(index, si, { match: e.target.value, responses: [e.target.value] })} />
+        </div>
+      </div>
+      <div className="eval-nrow"><span className="eval-nk">期望澄清后响应</span>
+        <div className="eval-response-seg" role="radiogroup" aria-label={`${name}期望澄清后响应`}>
+          {(["output", "clarify"] as const).map(value => <button key={value} type="button" role="radio" aria-checked={(scene.post || "output") === value} className="eval-response-seg-item" data-on={(scene.post || "output") === value || undefined} onClick={() => setScene(index, si, { post: value })}>{value === "output" ? "内容输出" : "继续澄清"}</button>)}
+        </div>
+      </div>
+      <div className="eval-glab">输出校验</div>
+      <div className="eval-ckr-list">
+        {sceneChecks.map((check, checkIndex) => <CheckRow key={check.id} check={check} index={checkIndex} label={label} error={checkErrors[check.id]}
+          onChange={next => writeChecks(sceneChecks.map(c => c.id === next.id ? next : c))}
+          onDelete={() => confirmDelete(`删除${name}校验 ${checkIndex + 1}？`, "将移除这条校验，保存用例后生效。", () => writeChecks(sceneChecks.filter(c => c.id !== check.id)), !!check.text.trim())} />)}
+      </div>
+      <button type="button" className="eval-nadd" onClick={() => {
+        const check: EvalCheck = { id: crypto.randomUUID(), kind: "natural", text: "", required: true, files: [] }
+        writeChecks([...sceneChecks, check])
+        requestAnimationFrame(() => document.querySelector<HTMLInputElement>(`[aria-label="${label} ${sceneChecks.length + 1} 判据"]`)?.focus())
+      }}>+ 添加一条校验</button>
+    </div>
+  }
+  function submit() {
+    if (uploadingCount > 0) { setFormError("附件上传中，请等待完成后保存"); return }
+    setFormError(""); setCheckErrors({})
+    const turnsValue = turnsOf(draft)
+    const errors: Record<string, string> = {}
+    if (!draft.name.trim()) { setFormError("用例名称必填，不能仅包含空格。"); return }
+    for (const [i, turn] of turnsValue.entries()) {
+      if (!turn.input.trim()) { setFormError(`第 ${i + 1} 轮用户输入必填，不能仅包含空格。`); return }
+      for (const [si, scene] of scenesOf(turn).entries()) {
+        if (!scene.match.trim()) { setFormError(`第 ${i + 1} 轮场景${clarifySceneNames[si] || si + 1}的澄清选择不能为空。`); return }
       }
+      if (isClarifyTurn(turn) && !scenesOf(turn).length) { setFormError(`第 ${i + 1} 轮期望澄清，请至少添加一个澄清场景。`); return }
+      for (const check of isClarifyTurn(turn) ? clarifyChecksOf(turn) : checksOf(turn)) { const issue = checkValidation(check); if (issue) errors[check.id] = issue }
     }
-    flushSync(() => {
-      setErrors(nextErrors)
-      const id = firstInvalid?.closest<HTMLElement>("[data-turn-id]")?.dataset.turnId
-      if (id) setExpanded(prev => ({ ...prev, [id]: true }))
+    for (const check of draft.checks || []) { const issue = checkValidation(check); if (issue) errors[check.id] = issue }
+    if (Object.keys(errors).length) { setCheckErrors(errors); setFormError("请先修正校验项的填写问题。"); return }
+    const normalizeScene = (scene: EvalClarifyScene): EvalClarifyScene => ({
+      ...scene,
+      check: scene.check?.text.trim() ? scene.check : undefined,
+      checks: (scene.checks || []).filter(check => check.text.trim()),
+      // 澄清选择即执行时的自动应答文本，保存时保持一致。
+      responses: [scene.match.trim()],
     })
-    if (firstInvalid) {
-      firstInvalid.scrollIntoView({ block: "center", behavior: "auto" })
-      firstInvalid.focus({ preventScroll: true })
-      return
-    }
-    if (!(draft.checks?.length || turns.some(t => t.checks.length))) {
-      flushSync(() => { setErrors({ ...nextErrors, checks: "请至少添加一条评测标准。" }); setExpanded(prev => ({ ...prev, [turns[0].id]: true })) })
-      formRef.current?.querySelector<HTMLElement>(".eval-check-editor")?.scrollIntoView({ block: "center" })
-      formRef.current?.querySelector<HTMLButtonElement>(".eval-check-editor [data-component=button]")?.focus()
-      return
-    }
-    const validation = caseValidation(draft)
-    if (validation) { setErrors({ ...nextErrors, checks: validation }); return }
-    const normalized = turns.map(t => ({ ...t, inherit: false, expected: t.checks.map(checkDescription).join("；") }))
-    save({ ...draft, name: draft.name.trim(), input: turns[0].input, expected: normalized[0].expected, turns: normalized, checks: turns.length === 1 ? [] : draft.checks?.map(simplifyCheck), demo: false })
-  }} onInput={e => { const el = e.target as HTMLInputElement
-    if (!el.setCustomValidity) return
-    el.setCustomValidity("")
-    if (el.value.trim()) setErrors(prev => { const next = { ...prev }; delete next[el.id]; return next }) }}>
-    <h3>{editing ? "编辑用例" : "新增用例"}</h3>
-    <p className="eval-muted">先填写名称、用户输入和至少一条评测标准。附件、澄清回复和多轮对话按需添加。</p>
-    <label>用例名称<input {...fieldProps("name", "用例名称", "请填写用例名称，不能仅包含空格。")} name="case-name" required placeholder="例如：缺少单号时先询问" value={draft.name} onChange={e => update({ ...draft, name: e.target.value })} />{fieldError("name")}</label>
-    <AttachmentInput onUploadingChange={onUploadingChange} label="会话附件" tip={sessionAttachmentTip} files={draft.attachments || []} onChange={attachments => update({ ...currentDraft.current, attachments })} />
-    <div className="eval-toolbar"><h3>对话轮次（{turns.length}）</h3><div className="eval-actions">{turns.length > 1 && <Button variant="ghost" onClick={() => setExpanded(Object.fromEntries(turns.map(t => [t.id, !allExpanded])))}>{allExpanded ? "全部折叠" : "全部展开"}</Button>}</div></div>
-    {turns.map((turn, index) => <TurnCard key={turn.id} turnId={turn.id} number={index + 1} input={turn.input}
-      meta={(expanded[turn.id] ?? true) ? "" : [turn.attachments.length && `附件 ${turn.attachments.length}`, turn.rules.length && `澄清回复 ${turn.rules.length}`, turn.checks.length && `评测标准 ${turn.checks.length}`].filter(Boolean).join(" · ")}
-      status={!(expanded[turn.id] ?? true) && hasTurnErrors(turn) ? <span className="eval-field-error">有未填项</span> : null}
-      open={expanded[turn.id] ?? true} toggle={() => setExpanded(prev => ({ ...prev, [turn.id]: !(prev[turn.id] ?? true) }))}
-      actions={turns.length > 1 ? <><Button variant="ghost" disabled={!index} onClick={() => move(index, -1)}>上移</Button><Button variant="ghost" disabled={index === turns.length - 1} onClick={() => move(index, 1)}>下移</Button>{turns.length > 1 && <Button variant="ghost" className="eval-danger-action" onClick={() => confirmDelete(`删除第 ${index + 1} 轮对话？`, "将移除本轮输入、附件、澄清回复及标准，保存用例后生效。", () => { const next = turnsOf(currentDraft.current).filter(t => t.id !== turn.id); if (next.length) { next[0] = { ...next[0], inherit: false }; update({ ...currentDraft.current, turns: next }) } })}>删除轮次</Button>}</> : undefined}>
-      <AttachmentInput onUploadingChange={onUploadingChange} label="附件" files={turn.attachments} onChange={attachments => { const i = turnsOf(currentDraft.current).findIndex(t => t.id === turn.id); if (i >= 0) setTurn(i, { attachments }) }}>
-        <StandardInput className="eval-user-input" rows={2} {...fieldProps(`${turn.id}-input`, "用户输入", `请填写第 ${index + 1} 轮的用户输入，不能仅包含空格。`)} required value={turn.input} onChange={e => setTurn(index, { input: e.target.value })} />{fieldError(`${turn.id}-input`)}
-      </AttachmentInput>
-      <section className="eval-clarification-section"><div className="eval-toolbar"><div className="eval-field-heading"><h3 className="eval-section-title">澄清回复</h3></div><Button variant="ghost" className="eval-add-action" icon="plus-small" onClick={() => setTurn(index, { rules: [...turn.rules, { id: crypto.randomUUID(), match: "", responses: [""] }] })}>添加澄清回复</Button></div>
-      <p className="eval-muted">技能或智能体追问时，让评测按这里的配置自动回答，无需你在运行时逐条回复。</p>
-      {turn.rules.length > 0 && <div className="eval-clarification-list">
-        <div className="eval-clarification-columns" aria-hidden="true"><span /><span>预期追问</span><span>自动回复</span><span /></div>
-        {turn.rules.map((rule, ruleIndex) => <section className="eval-clarification-row" key={rule.id} aria-label={`澄清回复 ${ruleIndex + 1}`}>
-          <span className="eval-clarification-number">{ruleIndex + 1}</span>
-          <div className="eval-clarification-cell eval-clarification-prompt">
-            <label className="eval-clarification-mobile-label" htmlFor={`${prefix}-${rule.id}-match`}>预期追问</label>
-            <StandardInput {...fieldProps(`${rule.id}-match`, "预期追问", `请填写第 ${index + 1} 轮澄清回复的追问内容，不能仅包含空格。`)} required value={rule.match} placeholder="例如：需要查询哪个核算组织？" onChange={e => setTurn(index, { rules: turn.rules.map(r => r.id === rule.id ? { ...r, match: e.target.value } : r) })} />
-            {fieldError(`${rule.id}-match`)}
+    const normalized = turnsValue.map((t, i) => {
+      const scenes = scenesOf(t).map(normalizeScene)
+      const own = scenes.length ? scenes.flatMap(scene => [...(scene.check ? [scene.check] : []), ...(scene.checks || [])]) : checksOf(t)
+      return { ...t, inherit: false, rules: scenes, expected: (own.length ? own : checksOf(t, i ? t.inherit ? turnsValue[0].expected : undefined : undefined)).map(checkDescription).join("；") }
+    })
+    const saved: EvalCase = { ...draft, name: draft.name.trim(), input: turnsValue[0].input, expected: normalized[0].expected, turns: normalized, checks: draft.checks?.length ? draft.checks : undefined, background: draft.background?.length ? draft.background : undefined, demo: false }
+    const validation = caseValidation(saved)
+    if (validation) { setFormError(validation); return }
+    save({ ...saved, summary: caseBriefOf(saved) })
+  }
+  return <div className="eval-ovlay" onClick={e => { if (e.target === e.currentTarget) cancel() }}>
+    <form className="eval-ncard" noValidate onSubmit={e => { e.preventDefault(); submit() }}>
+      <div className="eval-nh"><b>{editing ? "编辑用例" : "新增用例"}</b><span className="eval-libsp" /><button type="button" className="eval-nx" aria-label="关闭" onClick={cancel}>×</button></div>
+      <div className="eval-nlab">用例名称</div>
+      <input className="eval-inp" required aria-label="用例名称" placeholder="如：提交超预算采购申请" value={draft.name} onChange={e => update({ ...draft, name: e.target.value })} />
+      <div className="eval-nlab">案例背景知识</div>
+      <UploadField label="案例背景知识" files={draft.background || []} onChange={background => update({ ...currentDraft.current, background })} onUploadingChange={onUploadingChange} />
+      <div className="eval-nlab">对话</div>
+      {turns.map((turn, index) => {
+        const scenes = scenesOf(turn)
+        const active = Math.min(activeScene[turn.id] || 0, Math.max(scenes.length - 1, 0))
+        const clarify = isClarifyTurn(turn)
+        return <div className="eval-nrd" key={turn.id}>
+        <div className="eval-rno">第 {index + 1} 轮
+          {turns.length > 1 && <button type="button" className="eval-del" onClick={() => confirmDelete(`删除第 ${index + 1} 轮对话？`, "将移除本轮输入、背景知识、澄清场景及校验，保存用例后生效。", () => removeTurn(index), !!turn.input.trim() || !!turn.attachments?.length || !!turn.rules.length || !!checksOf(turn).length)}>删除本轮</button>}
+        </div>
+        <div className="eval-nrow"><span className="eval-nk">固定输入</span>
+          <textarea className="eval-inp" rows={2} required aria-label={`第 ${index + 1} 轮用户输入`} placeholder="用户说出口的话" value={turn.input} onChange={e => setTurn(index, { input: e.target.value })} />
+        </div>
+        <div className="eval-nrow"><span className="eval-nk">本轮背景知识</span>
+          <UploadField label="本轮背景知识" files={turn.attachments} onChange={attachments => setTurn(index, { attachments })} onUploadingChange={onUploadingChange} />
+        </div>
+        <div className="eval-cks">
+          <div className="eval-rno">校验内容</div>
+          <div className="eval-nrow"><span className="eval-nk">期望响应</span>
+            <div className="eval-response-seg" role="radiogroup" aria-label={`第 ${index + 1} 轮期望响应`}>
+              {(["output", "clarify"] as const).map(value => <button key={value} type="button" role="radio" aria-checked={clarify === (value === "clarify")} className="eval-response-seg-item" data-on={clarify === (value === "clarify") || undefined} onClick={() => expectResponse(index, value)}>{expectedResponseLabels[value]}</button>)}
+            </div>
           </div>
-          <div className="eval-clarification-cell eval-clarification-answer">
-            <label className="eval-clarification-mobile-label" htmlFor={`${prefix}-${rule.id}-response`}>自动回复</label>
-            {rule.responses.map((response, answerIndex) => <div key={answerIndex}>
-              {rule.responses.length > 1 && <span className="eval-muted">问题 {answerIndex + 1} 的答案</span>}
-              <StandardInput {...fieldProps(`${rule.id}-response-${answerIndex}`, `自动回复 ${answerIndex + 1}`, "请填写自动回复，不能仅包含空格。")} required value={response} placeholder="例如：华东公司" onChange={e => setTurn(index, { rules: turn.rules.map(r => r.id === rule.id ? { ...r, responses: r.responses.map((v, n) => n === answerIndex ? e.target.value : v) } : r) })} />
-              {fieldError(`${rule.id}-response-${answerIndex}`)}
-              {rule.responses.length > 1 && <Button variant="ghost" onClick={() => setTurn(index, { rules: turn.rules.map(r => r.id === rule.id ? { ...r, responses: r.responses.filter((_, n) => n !== answerIndex) } : r) })}>删除此答案</Button>}
-            </div>)}
-            <Button variant="ghost" onClick={() => setTurn(index, { rules: turn.rules.map(r => r.id === rule.id ? { ...r, responses: [...r.responses, ""] } : r) })}>添加下一问题的答案</Button>
-            <p className="eval-muted">一次提出多个问题时，按问题顺序分别填写答案。</p>
-          </div>
-          <div className="eval-clarification-remove-slot"><Tooltip value="删除澄清回复"><button type="button" className="eval-standard-delete eval-clarification-remove" aria-label={`删除澄清回复 ${ruleIndex + 1}`} onClick={() => confirmDelete(`删除澄清回复 ${ruleIndex + 1}？`, "将移除这组预期追问和自动回复，保存用例后生效。", () => setTurn(index, { rules: turn.rules.filter(r => r.id !== rule.id) }), !!(rule.match.trim() || rule.responses.some(v => v.trim())))}><Icon name="trash-16" size="small" /></button></Tooltip></div>
-        </section>)}
-      </div>}
-      </section>
-      <CheckEditor label={turns.length > 1 ? "本轮评测标准" : "评测标准"} checks={turn.checks} onChange={checks => turns.length === 1 ? update({ ...currentDraft.current, checks: [], turns: [{ ...turn, checks, inherit: false }] }) : setTurn(index, { checks, inherit: false })} fieldProps={fieldProps} fieldError={fieldError} />
-    </TurnCard>)}
-    <Button variant="ghost" className="eval-add-turn eval-add-action" icon="plus-small" onClick={() => {
-      const id = crypto.randomUUID()
-      flushSync(() => { update({ ...draft, checks: turns.length === 1 ? [] : draft.checks, turns: [...turns, { id, input: "", expected: "", attachments: [], rules: [] }] }); setExpanded(prev => ({ ...prev, [id]: true })) })
-      formRef.current?.querySelector<HTMLTextAreaElement>(`[data-turn-id="${id}"] textarea`)?.focus()
-    }}>添加一轮对话</Button>
-    <div data-global-checks className={turns.length > 1 ? "eval-overall-checks" : undefined}>
-      {turns.length > 1 && <CheckEditor label="整体验收标准" checks={draft.checks || []} onChange={checks => { update({ ...currentDraft.current, checks }); setErrors(prev => ({ ...prev, checks: "" })) }} fieldProps={fieldProps} fieldError={fieldError} />}{errors.checks && <p className="eval-field-error" role="alert">{errors.checks}</p>}</div>
-    <div className="eval-actions eval-form-footer"><BrandButton type="submit" variant="primary" disabled={uploadingCount > 0}>保存</BrandButton>{uploadingCount > 0 && <span role="status" className="eval-muted">附件上传中，请等待完成后保存</span>}<Button variant="ghost" onClick={cancel}>取消</Button></div>
-  </form>
+          {clarify ? <>
+            <SceneTabs scenes={scenes} active={active}
+              onSelect={si => setActiveScene(prev => ({ ...prev, [turn.id]: si }))}
+              onAdd={() => addScene(index)}
+              onDelete={si => confirmDelete(`删除场景${clarifySceneNames[si]}？`, "将移除该场景的澄清校验与输出校验，保存用例后生效。", () => removeScene(index, si), !!(scenes[si]?.match.trim() || scenes[si]?.check?.text.trim()))} />
+            {scenes.map((scene, si) => sceneCard(turn, index, scene, si, si === active))}
+          </> : <>
+            <div className="eval-glab">输出校验</div>
+            <div className="eval-ckr-list">
+              {checksOf(turn).map((check, checkIndex) => <CheckRow key={check.id} check={check} index={checkIndex} label={`第 ${index + 1} 轮输出校验`} error={checkErrors[check.id]}
+                onChange={check => setTurn(index, { checks: checksOf(turn).map(c => c.id === check.id ? check : c) })}
+                onDelete={() => confirmDelete(`删除第 ${index + 1} 轮校验 ${checkIndex + 1}？`, "将移除这条校验，保存用例后生效。", () => setTurn(index, { checks: checksOf(turn).filter(c => c.id !== check.id) }), !!check.text.trim())} />)}
+            </div>
+            <button type="button" className="eval-nadd" onClick={() => { addCheck(index); requestAnimationFrame(() => document.querySelector<HTMLInputElement>(`[aria-label="第 ${index + 1} 轮输出校验 ${checksOf(turn).length + 1} 判据"]`)?.focus()) }}>+ 添加一条校验</button>
+          </>}
+        </div>
+        {turns.length > 1 && <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+          <Button variant="ghost" disabled={!index} onClick={() => move(index, -1)}>上移</Button>
+          <Button variant="ghost" disabled={index === turns.length - 1} onClick={() => move(index, 1)}>下移</Button>
+        </div>}
+      </div> })}
+      <button type="button" className="eval-nadd" onClick={() => {
+        const id = crypto.randomUUID()
+        update({ ...draft, turns: [...turnsOf(draft), { id, input: "", expected: "", attachments: [], rules: [], checks: [] }] })
+        requestAnimationFrame(() => document.querySelector<HTMLTextAreaElement>(`[aria-label="第 ${turns.length + 1} 轮用户输入"]`)?.focus())
+      }}>+ 添加一轮</button>
+      <div className="eval-nlab">案例整体校验</div>
+      {(draft.checks || []).length ? (draft.checks || []).map((check, index) => <CheckRow key={check.id} check={check} index={index} label="案例整体校验" error={checkErrors[check.id]}
+        leading={<select className="eval-sel" aria-label={`案例整体校验 ${index + 1} 分类`} value={check.overall || "final"} onChange={e => update({ ...currentDraft.current, checks: (draft.checks || []).map(c => c.id === check.id ? { ...c, overall: e.target.value as OverallCategory } : c) })}>
+          {(Object.keys(overallCategories) as OverallCategory[]).map(key => <option key={key} value={key}>{overallCategories[key]}</option>)}
+        </select>}
+        onChange={check => update({ ...currentDraft.current, checks: (currentDraft.current.checks || []).map(c => c.id === check.id ? check : c) })}
+        onDelete={() => confirmDelete(`删除案例整体校验 ${index + 1}？`, "将移除这条校验，保存用例后生效。", () => update({ ...currentDraft.current, checks: (currentDraft.current.checks || []).filter(c => c.id !== check.id) }), !!check.text.trim())} />
+      ) : null}
+      <button type="button" className="eval-nadd" onClick={() => { addCheck("overall"); requestAnimationFrame(() => document.querySelector<HTMLInputElement>(`[aria-label="案例整体校验 ${(draft.checks || []).length + 1} 判据"]`)?.focus()) }}>+ 添加一条</button>
+      {formError && <p className="eval-form-error" role="alert">{formError}</p>}
+      <div className="eval-nfoot">
+        <Button variant="secondary" onClick={cancel}>取消</Button>
+        <BrandButton type="submit" variant="primary" disabled={uploadingCount > 0}>{editing ? "保存" : "创建用例"}</BrandButton>
+      </div>
+      {uploadingCount > 0 && <p role="status" className="eval-sc-note">附件上传中，请等待完成后保存</p>}
+    </form>
+  </div>
 }
