@@ -16,7 +16,7 @@ import { evaluationRepairObject, repairDisabledReason, repairPrompt, registerEva
 import { EvaluationSelect } from "./EvaluationSelect"
 import { RunEvaluationDialog } from "./RunEvaluationDialog"
 import { ImportCases } from "./ImportCases"
-import { exportCasesWorkbook } from "@/services/evaluation-export"
+import { exportTemplateWorkbook } from "@/services/evaluation-export"
 import { resolveRerunModels, defaultJudgingModelId, evaluationExecutionDefault, evaluationModelText, initialEvaluationModelIds, type EvalModelIds, type EvalRunModels } from "@/services/evaluation-models"
 import { useBlocker, useSearchParams, useNavigate, createSearchParams, type SetURLSearchParams } from "react-router"
 import { EvaluationChat } from "./EvaluationChat"
@@ -427,22 +427,22 @@ export function EvaluationPanel({ objectId, name, heading, onEnvironmentChange, 
     }
     setNotice("已添加 7 条示例用例", true)
   }
-  const [exportingCases, setExportingCases] = useState(false)
+  const [exportingTemplate, setExportingTemplate] = useState(false)
   function newCase() {
     setDraft({ id: crypto.randomUUID(), name: "", input: "", expected: "", source: "none", outcome: "passed", turns: [{ id: crypto.randomUUID(), input: "", expected: "", attachments: [], rules: [] }], attachments: [], demo: false })
   }
-  async function exportCases() {
-    setExportingCases(true)
+  async function exportTemplate() {
+    setExportingTemplate(true)
     try {
-      const blob = await exportCasesWorkbook(cases)
+      const blob = await exportTemplateWorkbook()
       const url = URL.createObjectURL(blob)
       const a = document.createElement("a")
       a.href = url
-      a.download = `评测用例-${runFileTime(Date.now())}.xlsx`
+      a.download = `评测用例导入模板-${runFileTime(Date.now())}.xlsx`
       a.click()
       setTimeout(() => URL.revokeObjectURL(url), 1000)
-      setNotice(`已导出 ${cases.length} 条用例；附件仅导出文件名，重新导入时需按名选择本地文件`, true)
-    } catch { setNotice("导出用例失败，请重试") } finally { setExportingCases(false) }
+      setNotice("已下载导入模板；按“填写说明”工作表填好后，可通过「导入用例」批量导入", true)
+    } catch { setNotice("导出模板失败，请重试") } finally { setExportingTemplate(false) }
   }
   function exportReport(run: EvalRun) {
     if (isActiveRun(run)) return
@@ -630,7 +630,7 @@ export function EvaluationPanel({ objectId, name, heading, onEnvironmentChange, 
                   <div className="eval-libbtns">
                     <Button variant="secondary" onClick={newCase}>新增用例</Button>
                     <Button variant="secondary" onClick={() => setImportOpen(true)}>导入用例</Button>
-                    <Button variant="secondary" disabled={exportingCases} onClick={() => void exportCases()}>导出用例</Button>
+                    <Button variant="secondary" disabled={exportingTemplate} onClick={() => void exportTemplate()}>导出模板</Button>
                     <BrandButton variant="primary" disabled={!busy && !cases.length} onClick={() => { if (activeRun) openView({ section: "runs", runId: activeRun.id }); else configureRun(selectedCases.length ? selectedCases : cases, selectedCases.length ? "selected" : "all") }}>
                       {busy ? "查看当前运行" : selectedCases.length ? `运行选中（${selectedCases.length}）` : `运行全部（${cases.length}）`}
                     </BrandButton>
