@@ -1,4 +1,4 @@
-import type { EvalRun } from "./evaluation"
+import { caseVersionLabel, type EvalRun } from "./evaluation"
 
 /** 报告卡指标：分母口径与设计稿一致——已完成报告按已执行数，进行中报告按用例集全量。 */
 export interface RunStats { total: number; executed: number; passed: number; failed: number; unknown: number }
@@ -23,7 +23,20 @@ export function completedRuns(runs: EvalRun[]): EvalRun[] {
   return runs.filter(isCompletedRun).sort((a, b) => b.started - a.started)
 }
 
+/** 列表项文案（对齐设计稿 repLabel）：编码 · 全量/部分 · 用例集 版本（数量） · 执行/评测模型。 */
 export function runLabelText(run: EvalRun) {
+  const stats = runStats(run)
+  const full = stats.total > 0 && stats.executed >= stats.total
+  const qty = full ? `（共 ${stats.total}）` : `（${stats.executed}/${stats.total}）`
+  const models = run.models
+  const modelText = !models ? "模型未记录"
+    : models.execution?.id === models.judging?.id ? `执行/评测 ${models.execution?.name || "未记录"}`
+    : `执行 ${models.execution?.name || "未记录"} / 评测 ${models.judging?.name || "未记录"}`
+  return [runCodeLabel(run), full ? "全量" : "部分", `用例集 ${caseVersionLabel(run)}${qty}`, modelText].join(" · ")
+}
+
+/** 报告短编码：对比标签与下拉摘要用（设计稿中为 ER-xxxx）。 */
+export function runCodeLabel(run: EvalRun) {
   return run.code || new Date(run.started).toLocaleString("zh-CN")
 }
 
@@ -38,13 +51,6 @@ export function runDiff(current: EvalRun, reference: EvalRun) {
     else if (before.verdict === "passed" && c.verdict === "unknown") degraded++
   }
   return { newFailed, fixed, degraded }
-}
-
-/** 执行/评测模型不同时提示：结论变化可能来自模型而不是被测对象。 */
-export function modelsDiffer(a: EvalRun, b: EvalRun) {
-  const left = a.models, right = b.models
-  if (!left || !right) return false
-  return left.execution?.id !== right.execution?.id || left.judging?.id !== right.judging?.id
 }
 
 /** 仅当被对比报告的「用例版本」不同时提示“用例更新”（执行方式不影响可比性）。 */

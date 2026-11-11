@@ -2,6 +2,7 @@ import { evaluationRegex, matchEvaluationText, normalizeEvaluationText } from ".
 import { create } from "zustand"
 import { persist } from "zustand/middleware"
 import type { EvalRunModels } from "./evaluation-models"
+import { objectSnapshotOf, type ObjectSnapshot } from "./evaluation-snapshot"
 export type Source = "tenant" | "thirdParty" | "personal" | "none"
 export type EvalEnvironment = "sandbox" | "production"
 // 原型环境来源；接入执行器时由本地测试连接上下文提供，不由用例填写。
@@ -18,18 +19,79 @@ export type Outcome = "passed" | "failed" | "blocked"
 export interface EvalAttachment { id: string; name: string; size: number; data: string }
 export type CheckKind = "natural" | "text" | "keyword" | "regex" | "file"
 export const checkOperators = { all: "包含全部关键词", any: "包含任一关键词", none: "不包含任一关键词", regex: "匹配正则表达式", not_regex: "不匹配正则表达式", exists: "存在", not_exists: "不存在" }
-export interface EvalCheck { kind?: CheckKind; operator?: keyof typeof checkOperators; id: string; text: string; required: boolean; condition?: string; reference?: string; files: EvalAttachment[] }
+/** 整体验收标准分类：最终结果只看任务完成情况，全程贯穿约束整个过程，跨轮一致要求各轮信息一致。 */
+export type OverallCategory = "final" | "throughout" | "consistent"
+export const overallCategories: Record<OverallCategory, string> = { final: "最终结果", throughout: "全程贯穿", consistent: "跨轮一致" }
+export const expectedResponseLabels = { output: "内容输出", clarify: "澄清" } as const
+export interface EvalCheck { kind?: CheckKind; operator?: keyof typeof checkOperators; overall?: OverallCategory; id: string; text: string; required: boolean; condition?: string; reference?: string; files: EvalAttachment[] }
 export interface FileEvidence { path: string; exists: boolean; checkedAt?: number; content?: string }
 export interface CheckResult extends EvalCheck { fileEvidence?: FileEvidence; verdict: "passed" | "failed" | "unknown" | "na" | "skipped"; actual: string; evidence: string }
 /** 仅原型：预先编写的执行材料与语义依据，不从预期结论倒推回复或文件。 */
 export interface DemoJudgment { check: Pick<EvalCheck, "text" | "condition" | "reference">; verdict: CheckResult["verdict"]; actual: string; evidence: string }
 export interface DemoTurnEvidence { response: string; tool?: string; toolResult?: string; clarification: string; files: string[]; judgments: DemoJudgment[] }
-export interface EvalTurn { checks?: EvalCheck[]; id: string; input: string; expected: string; inherit?: boolean; attachments: EvalAttachment[]; rules: { id: string; match: string; responses: string[] }[] }
+/** 澄清选择方式：语义输入按澄清选择自由补充，固定文本按预设文本应答。 */
+export type ClarifyPickMode = "input" | "fixed"
+export const clarifyPickModes: Record<ClarifyPickMode, string> = { input: "语义输入", fixed: "固定文本" }
+export const clarifySceneNames = ["一", "二", "三"] as const
+export const maxClarifyScenes = clarifySceneNames.length
+/**
+ * 一个澄清场景：期望被测对象先提出追问（澄清校验），按澄清回复自动应答，
+ * 再按期望澄清后响应校验该场景的输出校验。同一轮的多个场景互为「或」。
+ */
+export interface EvalClarifyScene {
+  id: string
+  /** 澄清校验：期望被测对象提出的追问。 */
+  check?: EvalCheck
+  /** 澄清选择：模拟用户的选择或补充。 */
+  match: string
+  /** 澄清选择方式：语义输入 / 固定文本。 */
+  pickMode?: ClarifyPickMode
+  /** 执行时按澄清选择自动应答的文本；界面与 match 保持一致。 */
+  responses: string[]
+  /** 期望澄清后响应：内容输出（默认）或继续澄清。 */
+  post?: "output" | "clarify"
+  /** 该场景的输出校验；未单独配置时沿用轮次校验。 */
+  checks?: EvalCheck[]
+}
+export interface EvalTurn {
+  checks?: EvalCheck[]; id: string; input: string; expected: string; inherit?: boolean;
+  /** 期望响应：内容输出（默认）或澄清回复。期望澄清时按澄清场景自动应答，输出校验校验澄清后的响应。 */
+  expectedResponse?: "output" | "clarify";
+  attachments: EvalAttachment[];
+  /** 澄清场景，每个场景互为「或」；有场景即视为期望澄清。 */
+  rules: EvalClarifyScene[];
+}
+/** 期望澄清：显式标记优先，未标记时已配置澄清场景即视为澄清轮（兼容历史用例数据）。 */
+export function isClarifyTurn(turn: Pick<EvalTurn, "expectedResponse" | "rules">): boolean {
+  if (turn.expectedResponse) return turn.expectedResponse === "clarify"
+  return !!turn.rules?.length
+}
+export function scenesOf(turn: EvalTurn): EvalClarifyScene[] {
+  return turn.rules || []
+}
+/** 场景的输出校验：优先场景自身配置，历史数据沿用轮次校验。 */
+export function sceneChecksOf(turn: EvalTurn, scene?: EvalClarifyScene): EvalCheck[] {
+  return scene?.checks?.length ? scene.checks : checksOf(turn)
+}
+/** 执行判定：按命中的第一个澄清场景判定澄清提问与该场景输出校验，其余场景视为未执行。 */
+export function executedChecksOf(turn: EvalTurn, inherited?: string): EvalCheck[] {
+  if (!isClarifyTurn(turn)) return checksOf(turn, inherited)
+  const scene = scenesOf(turn)[0]
+  return scene ? [...(scene.check ? [scene.check] : []), ...sceneChecksOf(turn, scene)] : checksOf(turn, inherited)
+}
+/** 澄清场景涉及的校验总数（澄清提问 + 输出校验）。 */
+export function clarifyChecksOf(turn: EvalTurn): EvalCheck[] {
+  return scenesOf(turn).flatMap(scene => [...(scene.check ? [scene.check] : []), ...sceneChecksOf(turn, scene)])
+}
 export function turnsOf(c: EvalCase): EvalTurn[] {
   return c.turns?.length ? c.turns : [{ id: c.id + "-turn", input: c.input, expected: c.expected, attachments: [], rules: [] }]
 }
 export interface EvalCase {
   code?: string
+  /** 案例背景知识：全程对被测对象可用，与轮次附件区分。 */
+  background?: EvalAttachment[]
+  /** 案例精要：保存时按用例内容生成的一句话总结（原型模拟 AI），仅用于列表速览。 */
+  summary?: string
   demoEvidence?: { turns: DemoTurnEvidence[]; overall: DemoJudgment[] }
   demoJudgingFailure?: "timeout" | "invalid"
   demoJudgingDelayMs?: number
@@ -92,6 +154,10 @@ export interface EvalRun {
   models?: EvalRunModels
   pointsQuery?: { status: PointsStatus; queriedAt?: number; valueComplete?: boolean; amount?: PointsAmount }
   objectContentSummary?: string
+  /** 运行时冻结的被测配置快照（提示词/知识库/技能/工具），历史报告缺失时按未记录展示。 */
+  objectSnapshot?: ObjectSnapshot
+  /** 执行人；原型未接入账号上下文的报告留空，按未记录展示。 */
+  executor?: string
   checkPolicySnapshot?: string
   environment?: EvalEnvironment
   objectType?: "skill" | "agent"
@@ -111,6 +177,8 @@ export const evaluationObjectUnavailable = (key: string) => deletingEvaluationOb
 interface State {
   reportSequences?: Record<string, number>
   caseCodes?: Record<string, Record<string, string>>
+  /** 用例集状态：案例修改/新增时 version+1 且 executed=false；执行任意一条后 executed=true（对齐设计稿 CASE_SET）。 */
+  caseSets?: Record<string, { version: number; executed: boolean; baseline?: EvalCase[] }>
   deletedObjects?: Record<string, true>
   drafts: Record<string, EvalCase | undefined>
   cases: Record<string, EvalCase[]>
@@ -119,8 +187,9 @@ interface State {
 }
 /** 字段顺序不影响内容；用例顺序保留，运行结果字段不参与版本比较。 */
 export function caseContentKey(cases: EvalCase[]): string {
+  // summary 由内容派生，不参与版本比较，避免归档版本无意义 +1。
   const canonical = (value: unknown): unknown => Array.isArray(value) ? value.map(canonical)
-    : value && typeof value === "object" ? Object.fromEntries(Object.entries(value).filter(([key, v]) => v !== undefined && key !== "outcome" && key !== "code").sort(([a], [b]) => a.localeCompare(b)).map(([key, v]) => [key, canonical(v)])) : value
+    : value && typeof value === "object" ? Object.fromEntries(Object.entries(value).filter(([key, v]) => v !== undefined && key !== "outcome" && key !== "code" && key !== "summary").sort(([a], [b]) => a.localeCompare(b)).map(([key, v]) => [key, canonical(v)])) : value
   return JSON.stringify(canonical(cases))
 }
 /** 内存中共享不可变快照，旧记录按内容合并，报告编号及结果不变。 */
@@ -181,7 +250,7 @@ const isLocalPrototype = () => typeof window !== "undefined" && ["127.0.0.1", "l
 export const useEvaluation = create<State>()(
   persist((): State => ({ drafts: {}, cases: {}, runs: {}, error: false }), {
     name: "lingee.evaluation.v1",
-    partialize: ({ cases, runs, drafts, deletedObjects, caseCodes, reportSequences }) => ({ reportSequences, caseCodes, cases, ...packCaseVersions(restorePointQueries(runs)), drafts, deletedObjects }),
+    partialize: ({ cases, runs, drafts, deletedObjects, caseCodes, reportSequences, caseSets }) => ({ reportSequences, caseCodes, cases, ...packCaseVersions(restorePointQueries(runs)), drafts, deletedObjects, caseSets }),
     storage: {
       getItem: (key) => {
         try {
@@ -198,6 +267,7 @@ export const useEvaluation = create<State>()(
             const state = saved.state as State
             state.caseCodes ||= {}
             state.reportSequences ||= {}
+            state.caseSets ||= {}
             for (const key of new Set([...Object.keys(state.cases || {}), ...Object.keys(state.runs || {})])) {
               const registry = state.caseCodes[key] ||= {}
               let sequence = Math.max(state.reportSequences[key] || 0, ...(state.runs[key] || []).map(r => Number(r.code?.slice(3)) || 0))
@@ -245,13 +315,24 @@ export function saveCases(key: string, cases: EvalCase[]) {
   const previous = useEvaluation.getState()
   const registry = { ...previous.caseCodes?.[key] }
   const assigned = assignCaseCodes(cases, registry)
-  useEvaluation.setState(s => ({ cases: { ...s.cases, [key]: assigned }, caseCodes: { ...s.caseCodes, [key]: registry } }))
+  // 用例集内容变化时版本 +1 并标记未执行（执行任意一条后恢复已执行，见 startRun）。
+  const set = previous.caseSets?.[key]
+  const changed = caseContentKey(previous.cases[key] || []) !== caseContentKey(assigned)
+  const nextSet = changed
+    ? { version: (set?.version ?? latestSnapshotVersion(key, previous)) + 1, executed: false, baseline: set?.baseline }
+    : set ?? { version: latestSnapshotVersion(key, previous), executed: false }
+  useEvaluation.setState(s => ({ cases: { ...s.cases, [key]: assigned }, caseCodes: { ...s.caseCodes, [key]: registry }, caseSets: { ...s.caseSets, [key]: nextSet } }))
   if (!storageWriteSucceeded) {
-    useEvaluation.setState({ cases: previous.cases, caseCodes: previous.caseCodes, error: true })
+    useEvaluation.setState({ cases: previous.cases, caseCodes: previous.caseCodes, caseSets: previous.caseSets, error: true })
     return false
   }
   useEvaluation.setState({ error: false })
   return true
+}
+/** 用例集当前版本号：优先取已记录的 caseSets，其次回退到最近一次运行快照的版本号。 */
+function latestSnapshotVersion(key: string, state: { caseSets?: State["caseSets"]; runs: State["runs"] }) {
+  return state.caseSets?.[key]?.version
+    ?? (Number(state.runs[key]?.find(run => run.caseSnapshot)?.caseSnapshot?.version.slice(1)) || 1)
 }
 export function failedRunResults(run: EvalRun) {
   return run.results.filter(c => verdictLabel(c) === "不通过")
@@ -265,6 +346,7 @@ export function runCases(run: EvalRun): EvalCase[] {
   return structuredClone((run.caseSnapshot ? run.results.flatMap(result => run.caseSnapshot!.cases.filter(c => c.id === result.id)) : undefined) ?? run.results.map(c => ({
     id: c.id, code: c.code, businessId: c.businessId, name: c.name, input: c.input, expected: c.expected,
     source: c.source, outcome: c.outcome, turns: c.turns, attachments: c.attachments, checks: c.checks,
+    background: c.background, summary: c.summary,
     demo: c.demo, demoEvidence: c.demoEvidence, demoFailure: c.demoFailure,
     demoJudgingFailure: c.demoJudgingFailure, demoJudgingDelayMs: c.demoJudgingDelayMs,
   })))
@@ -306,6 +388,7 @@ export function startRun(key: string, name: string, cases: EvalCase[], environme
     ...(models ? { models: structuredClone(models) } : {}),
     environment,
     objectType: key.startsWith("agent:") ? "agent" : "skill",
+    objectSnapshot: objectSnapshotOf(key),
     name,
     hardRuleStop: true,
     checkPolicySnapshot: evaluationCheckPolicy,
@@ -314,7 +397,12 @@ export function startRun(key: string, name: string, cases: EvalCase[], environme
     status: "running",
     results: cases.map((c) => ({ ...structuredClone(c), timing: {}, overallJudgingPoints: c.demo ? 0 : undefined, verdict: undefined, execution: undefined, checkResults: undefined, roundResults: structuredClone(turnsOf(c)).map((turn, i) => ({ ...turn, points: c.demo ? { execution: 0, judging: 0 } : undefined, checkResults: undefined, expected: i && turn.inherit ? turnsOf(c)[0].expected : turn.expected, status: "pending", responseRecorded: false, response: "", evidence: "", clarification: "" })), status: "pending", responseRecorded: false, response: "", evidence: "", tool: "" })),
   }
-  useEvaluation.setState((s) => ({ reportSequences: { ...s.reportSequences, [key]: sequence }, runs: { ...s.runs, [key]: [run, ...records] } }))
+  useEvaluation.setState((s) => ({
+    reportSequences: { ...s.reportSequences, [key]: sequence },
+    runs: { ...s.runs, [key]: [run, ...records] },
+    // 执行过案例集（任意一条）即恢复已执行状态，并记录本次执行的用例内容作为新增/修改标识的比对基线。
+    caseSets: { ...s.caseSets, [key]: { ...(s.caseSets?.[key] ?? { version: latestSnapshotVersion(key, s) }), executed: true, baseline: structuredClone(fullCases) } },
+  }))
   if (!storageWriteSucceeded) {
     useEvaluation.setState({ runs: previous, error: true })
     return undefined
@@ -347,7 +435,7 @@ export function cancelRun(key: string, id: string, terminal: "cancelled" | "erro
                   evidence: c.evidence || (c.status === "pending" ? "运行已停止，本用例未执行。" : "用户停止了本用例，已取得的证据和判定保留。"),
                   roundResults: c.roundResults?.map(t => t.status === "pending" || t.status === "running" ? {
                     ...t, status: t.status === "pending" ? "skipped" : "cancelled",
-                    checkResults: completeStoppedChecks(checksOf(t), t.checkResults),
+                    checkResults: completeStoppedChecks(executedChecksOf(t), t.checkResults),
                     evidence: t.evidence || (t.status === "pending" ? "运行已停止，本轮未执行。" : "本轮已停止，已取得的证据保留。"),
                   } : t) }
               }),
@@ -357,10 +445,126 @@ export function cancelRun(key: string, id: string, terminal: "cancelled" | "erro
     },
   }))
 }
+const demoEvidenceText = { passed: "示例报告：回复与预期一致，关键结果完整。", failed: "示例报告：回复缺少预期中的关键结果。", unknown: "示例报告：缺少判定依据，无法判定。" } as const
+
+/** 原型兜底：澄清轮缺少实际澄清记录时，按用例配置生成澄清校验内容（澄清提问 + 澄清选择）。 */
+function mockClarificationOf(turn: EvalTurn): string {
+  const scene = scenesOf(turn)[0]
+  if (!isClarifyTurn(turn) || !scene) return "本轮未发生澄清。"
+  return `澄清提问：${scene.check?.text.trim() ? checkDescription(scene.check) : "需要确认哪些关键信息？"}\n澄清选择：${scene.match || "按用例预设选择"}`
+}
+
+function demoCheckResults(checks: EvalCheck[] | undefined, kind: "passed" | "failed" | "unknown"): CheckResult[] | undefined {
+  if (!checks?.length) return undefined
+  const actual = kind === "failed" ? "示例判定：回复缺少预期中的关键结果。" : kind === "unknown" ? "未取得可核验的执行结果（示例）" : "回复与标准一致（示例）"
+  return checks.map(check => ({ ...structuredClone(check), verdict: kind, actual, evidence: demoEvidenceText[kind] }))
+}
+
+/** 原型演示：按当前用例集填充 6 份示例报告（不带真实执行）；用例集版本随时间递增，最新一份不小于之前任何一份。 */
+export function fillDemoReports(key: string, name: string) {
+  if (evaluationObjectUnavailable(key)) return false
+  const state = useEvaluation.getState()
+  const cases = state.cases[key] || []
+  if (!cases.length || state.runs[key]?.some(isActiveRun)) return false
+  const previous = state.runs
+  const registry = { ...state.caseCodes?.[key] }
+  const snapshotCases = assignCaseCodes(structuredClone(cases), registry)
+  const total = snapshotCases.length
+  // 演示版本随时间递增（早期 V(n+1) → 最新 V(n+3)），最新一份的用例集版本不小于之前任何一份。
+  const prevMax = Math.max(0, ...(previous[key] || []).map(run => Number(run.caseSnapshot?.version.slice(1)) || 0))
+  const mkSnapshot = (step: number, minutesAgo: number, mutate?: (cs: EvalCase[]) => void): CaseSnapshot => {
+    const casesB = structuredClone(snapshotCases)
+    mutate?.(casesB)
+    return { version: `V${prevMax + step}`, capturedAt: Date.now() - minutesAgo * 60_000, cases: casesB }
+  }
+  const snapV1 = mkSnapshot(1, 295, cs => { if (cs[0]) cs[0].expected = `${cs[0].expected}（早期口径示例）` })
+  const snapV2 = mkSnapshot(2, 175, cs => { if (cs[0]) cs[0].expected = `${cs[0].expected}（上一轮口径示例）` })
+  const snapV3 = mkSnapshot(3, 4)
+  const demoModels: EvalRunModels = {
+    execution: { id: "demo-exec", name: "deepseek-v3.2（演示）", provider: "demo" },
+    judging: { id: "demo-judge", name: "deepseek-v3.2（演示）", provider: "demo" },
+  }
+  type DemoKind = "passed" | "failed" | "unknown" | "skip"
+  const plan = (kinds: DemoKind[]): DemoKind[] => [...kinds.slice(0, total), ...Array(Math.max(0, total - kinds.length)).fill("skip") as DemoKind[]]
+  const demoResult = (c: EvalCase, kind: DemoKind): EvalResult => {
+    const verdict = kind === "skip" ? undefined : kind
+    const status = kind === "skip" ? "skipped" : kind === "unknown" ? "blocked" : kind
+    const turnStatus = kind === "skip" ? "skipped" : kind === "unknown" ? "blocked" : kind
+    return {
+      ...structuredClone(c), timing: {}, judging: false,
+      verdict: verdict as EvalResult["verdict"],
+      execution: kind === "skip" ? undefined : "completed",
+      checkResults: demoCheckResults(c.checks, kind === "skip" ? "unknown" : kind),
+      status: status as EvalResult["status"], responseRecorded: kind !== "skip",
+      response: kind === "skip" ? "" : "（示例回复）已按用例输入生成结果。",
+      evidence: kind === "skip" ? "示例报告：本用例未执行。" : demoEvidenceText[kind as "passed"],
+      tool: "",
+      roundResults: turnsOf(c).map(turn => {
+        // 澄清轮的示例澄清记录带上澄清提问内容，供「澄清校验」前的模型输出展示。
+        const scene = isClarifyTurn(turn) ? scenesOf(turn)[0] : undefined
+        return {
+          ...structuredClone(turn), status: turnStatus as EvalTurnResult["status"], responseRecorded: kind !== "skip",
+          response: kind === "skip" ? "" : "（示例回复）已按本轮输入生成结果。",
+          evidence: kind === "skip" ? "示例报告：本轮未执行。" : demoEvidenceText[kind as "passed"],
+          clarification: kind === "skip" || !scene ? "本轮未发生澄清。"
+            : `示例澄清提问：${scene.check?.text.trim() ? checkDescription(scene.check) : "需要确认哪些关键信息？"}\n澄清选择：${scene.match || "按用例预设选择"}`,
+          checkResults: demoCheckResults(executedChecksOf(turn), kind === "skip" ? "unknown" : kind),
+        }
+      }),
+    }
+  }
+  const demoRun = (kinds: DemoKind[], status: EvalRun["status"], minutesAgo: number, extra: Partial<EvalRun> = {}, models: EvalRunModels = demoModels, caseSnapshot: CaseSnapshot): EvalRun => ({
+    id: crypto.randomUUID(),
+    caseSnapshot: structuredClone(caseSnapshot),
+    models: structuredClone(models),
+    environment: currentEvaluationEnvironment,
+    objectType: key.startsWith("agent:") ? "agent" : "skill",
+    objectSnapshot: objectSnapshotOf(key),
+    name,
+    hardRuleStop: true,
+    checkPolicySnapshot: evaluationCheckPolicy,
+    started: Date.now() - minutesAgo * 60_000,
+    ended: Date.now() - (minutesAgo - 1) * 60_000,
+    status,
+    results: snapshotCases.map((c, index) => demoResult(c, kinds[index])),
+    ...extra,
+  })
+  const demoRuns: EvalRun[] = [
+    // 按时间从旧到新：版本 V(n+1) → V(n+2) → V(n+3)，最新一份版本不小于之前任何一份。
+    // ER-0001 异常中止（最早）。
+    demoRun(plan(Array.from({ length: Math.max(1, Math.floor(total * 0.4)) }, (_, index) => (index === 0 ? "failed" : "passed") as DemoKind)), "error", 300, { stopReason: "模型调用超时（示例）" }, demoModels, snapV1),
+    // ER-0002 手动停止。
+    demoRun(plan(Array.from({ length: Math.max(1, Math.floor(total * 0.5)) }, () => "passed" as DemoKind)), "cancelled", 240, {}, demoModels, snapV1),
+    // ER-0003 全量完成，多条不通过 + 无法判定，演示问题清单聚合。
+    demoRun(plan(Array.from({ length: total }, (_, index) => ((index === 1 || index === 3) ? "failed" : index === 5 ? "unknown" : "passed") as DemoKind)), "completed", 180, {}, demoModels, snapV2),
+    // ER-0004 部分执行已完成（70%），参与对比。
+    demoRun(plan(Array.from({ length: Math.max(1, Math.floor(total * 0.7)) }, (_, index) => (index === 0 ? "failed" : index === Math.max(1, Math.floor(total * 0.7)) - 1 ? "unknown" : "passed") as DemoKind)), "completed", 130, {}, demoModels, snapV2),
+    // ER-0005 全量完成，两条不通过。
+    demoRun(plan(Array.from({ length: total }, (_, index) => (index === 2 || index === 4 ? "failed" : "passed") as DemoKind)), "completed", 65, {}, demoModels, snapV3),
+    // ER-0006 最新：全量完成，多条不通过 + 无法判定。
+    demoRun(plan(Array.from({ length: total }, (_, index) => ((index === 1 || index === 3) ? "failed" : index === 5 ? "unknown" : "passed") as DemoKind)), "completed", 5, {}, demoModels, snapV3),
+  ]
+  const sequence = Math.max(state.reportSequences?.[key] || 0, ...(previous[key] || []).map(run => Number(run.code?.slice(3)) || 0))
+  const ordered = [...demoRuns].sort((a, b) => a.started - b.started)
+  ordered.forEach((run, index) => { run.code = `ER-${String(sequence + index + 1).padStart(4, "0")}` })
+  const before = useEvaluation.getState()
+  useEvaluation.setState(s => ({
+    caseCodes: { ...s.caseCodes, [key]: registry },
+    reportSequences: { ...s.reportSequences, [key]: sequence + ordered.length },
+    runs: { ...s.runs, [key]: [...ordered.reverse(), ...(s.runs[key] || [])] },
+    caseSets: { ...s.caseSets, [key]: { ...(s.caseSets?.[key] ?? { version: latestSnapshotVersion(key, s) }), version: Math.max(s.caseSets?.[key]?.version ?? 0, prevMax + 3), executed: true, baseline: structuredClone(cases) } },
+  }))
+  if (!storageWriteSucceeded) {
+    useEvaluation.setState({ runs: before.runs, caseCodes: before.caseCodes, reportSequences: before.reportSequences, caseSets: before.caseSets, error: true })
+    return false
+  }
+  useEvaluation.setState({ error: false })
+  return true
+}
+
 // Demo execution is clock-driven so leaving the panel does not lose a run.
 // A browser reload preserves the run and completes the remaining simulated steps.
-export function advanceRuns() {
-  // 模拟执行器已停止确认；真实接入须等待确认，不得按定时器推定。
+export function advanceRuns() {  // 模拟执行器已停止确认；真实接入须等待确认，不得按定时器推定。
   for (const [key, runs] of Object.entries(useEvaluation.getState().runs)) {
     for (const run of runs) if (run.status === "stopping") {
       if (!run.demoStopUnconfirmed) cancelRun(key, run.id)
@@ -398,7 +602,7 @@ export function advanceRuns() {
               checkResults: completeStoppedChecks(item.checks || [], item.checkResults, evidence),
               roundResults: rounds?.map((turn, index) => ({ ...turn, points: { execution: index ? 0 : 0.18, judging: 0 }, status: index ? "skipped" : "blocked", issue: index ? undefined : issue,
                 responseRecorded: false, response: "", tool: "", clarification: !index && issue === "clarification_unmatched" ? "实际追问：请确认查询所用的核算组织\n未找到匹配的自动回复" : "",
-                evidence: index ? "前序轮次执行异常，本轮未执行" : evidence, checkResults: completeStoppedChecks(checksOf(turn), turn.checkResults, index ? "前序轮次执行异常，本轮未执行，缺少所需证据，无法判定。" : evidence) })) }
+                evidence: index ? "前序轮次执行异常，本轮未执行" : evidence, checkResults: completeStoppedChecks(executedChecksOf(turn), turn.checkResults, index ? "前序轮次执行异常，本轮未执行，缺少所需证据，无法判定。" : evidence) })) }
           }
           let status: EvalResult["status"] = elapsed < offset ? "running" : item.outcome
           let hardFailedAt = -1
@@ -407,7 +611,7 @@ export function advanceRuns() {
               if (turn.status === "skipped") return turn
               changed = true
               return { ...turn, status: "skipped", response: "", responseRecorded: false, clarification: "", tool: undefined, toolResult: undefined, points: item.demo ? { execution: 0, judging: 0 } : undefined,
-                evidence: "前序轮次硬规则不通过，本轮未执行。", checkResults: skippedChecks(checksOf(turn), "前序轮次硬规则不通过，本轮未执行。") }
+                evidence: "前序轮次硬规则不通过，本轮未执行。", checkResults: skippedChecks(executedChecksOf(turn), "前序轮次硬规则不通过，本轮未执行。") }
             }
             const turnStatus = elapsed < beginning + index * 2400 ? "pending" : elapsed < beginning + (index + 1) * 2400 ? "running" : item.outcome
             if (turnStatus === turn.status) {
@@ -417,7 +621,7 @@ export function advanceRuns() {
             changed = true
             const finished = !["running", "pending"].includes(turnStatus)
             const trace = item.demo ? item.demoEvidence?.turns[index] : undefined
-            const evaluated = finished ? evaluateChecks(checksOf(turn, index && turn.inherit ? rounds?.[0].expected : undefined), item, run.started + beginning + (index + 1) * 2400, trace, false, !!run.hardRuleStop) : undefined
+            const evaluated = finished ? evaluateChecks(executedChecksOf(turn, index && turn.inherit ? rounds?.[0].expected : undefined), item, run.started + beginning + (index + 1) * 2400, trace, false, !!run.hardRuleStop) : undefined
             if (run.hardRuleStop && hasHardFailure(evaluated || [])) hardFailedAt = index
             return { ...turn, status: hardFailedAt === index ? "failed" : turnStatus,
               points: item.demo ? { execution: finished ? Number((0.36 + turn.rules.length * 0.12 + index * 0.04).toFixed(2)) : 0.12, judging: finished ? (evaluated || []).filter(c => checkKind(c) === "natural" && c.verdict !== "skipped").length * 0.08 : 0 } : undefined,
@@ -427,7 +631,7 @@ export function advanceRuns() {
               responseRecorded: finished && !!trace,
               response: finished ? trace?.response ?? "" : "",
               evidence: finished ? trace?.toolResult || "未取得可核验的执行证据。" : "",
-              clarification: finished ? trace?.clarification || "未记录实际澄清过程。" : "" }
+              clarification: finished ? trace?.clarification || mockClarificationOf(turn) : "" }
           })
           if (hardFailedAt >= 0) {
             offset = beginning + (hardFailedAt + 1) * 2400
@@ -611,13 +815,31 @@ export function caseValidation(value: EvalCase): string {
   const turns = turnsOf(value)
   for (const [i, turn] of turns.entries()) {
     if (!turn.input.trim()) return `第 ${i + 1} 轮用户输入必填，不能仅包含空白。`
-    if (turn.rules.some(r => !r.match.trim() || !r.responses.length || r.responses.some(v => !v.trim()))) return `第 ${i + 1} 轮澄清追问和自动回复不能为空。`
+    for (const [si, scene] of scenesOf(turn).entries()) {
+      if (!scene.match.trim()) return `第 ${i + 1} 轮场景${clarifySceneNames[si] || si + 1}的澄清选择不能为空。`
+    }
+    if (isClarifyTurn(turn) && !scenesOf(turn).length) return `第 ${i + 1} 轮期望澄清，请至少添加一个澄清场景。`
   }
-  const checks = [...(value.checks || []), ...turns.flatMap(t => checksOf(t))]
+  const checks = [...(value.checks || []), ...turns.flatMap(t => isClarifyTurn(t) ? clarifyChecksOf(t) : checksOf(t))]
   if (!checks.length) return "请至少添加一条评测标准。"
   return checks.map(checkValidation).find(Boolean) || ""
 }
 
 export function clarificationResponses(responses: string[]): string {
   return responses.length > 1 ? responses.map((answer, i) => `问题 ${i + 1}：${answer}`).join("\n") : responses[0] || ""
+}
+
+const briefClip = (text: string, limit: number) => {
+  const value = text.replace(/\s+/g, " ").trim()
+  return value.length > limit ? `${value.slice(0, limit)}…` : value
+}
+
+/** 案例精要：对案例内容的一句话精要总结（业务做什么 + 期望结果 + 澄清要点），保存用例时写入；原型由前端按内容模拟 AI 生成。 */
+export function caseBriefOf(c: EvalCase): string {
+  const turns = turnsOf(c)
+  const scenario = briefClip(c.input || turns[0]?.input || "", 26).replace(/[。；.]+$/, "")
+  const goal = briefClip(c.expected || turns[0]?.expected || "", 34).replace(/[。；.]+$/, "")
+  const clarify = turns.some(turn => isClarifyTurn(turn) && scenesOf(turn).some(scene => scene.match.trim()))
+  const parts = [scenario, goal].filter(Boolean)
+  return parts.length ? `${parts.join("：")}${clarify ? "（含澄清场景）" : ""}。` : "案例内容待补充。"
 }

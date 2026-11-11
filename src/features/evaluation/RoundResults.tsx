@@ -8,7 +8,7 @@ import { TurnCard } from "./TurnCard"
 import { downloadAttachment } from "@/services/evaluation-attachments"
 import { Button, showToast, Icon, Tooltip } from "@/ui"
 import { useT } from "@/i18n"
-import { clarificationText, responseText, fileCheckTime, executionIssues, checkKind, checkOperators, checkDescription, aggregateChecks, checksOf, executionLabel, verdictLabel, type CheckResult, type EvalCheck, turnsOf, type EvalTurnResult, type EvalTurn, type EvalResult, type EvalAttachment } from "@/services/evaluation"
+import { clarificationText, responseText, fileCheckTime, executionIssues, checkKind, checkOperators, checkDescription, aggregateChecks, checksOf, executionLabel, verdictLabel, clarifyPickModes, type CheckResult, type EvalCheck, turnsOf, type EvalTurnResult, type EvalTurn, type EvalResult, type EvalAttachment } from "@/services/evaluation"
 function resultRounds(result: EvalResult): EvalTurnResult[] {
   return result.roundResults || turnsOf(result).map(turn => ({ ...turn, status: result.status, response: result.response, evidence: result.evidence, clarification: "" }))
 }
@@ -19,8 +19,6 @@ const verdicts = { passed: "通过", failed: "不通过", unknown: "无法判定
 export function CheckResults({ checks, results, label }: { checks: EvalCheck[]; results?: CheckResult[]; label: string }) {
   if (!checks.length) return null
   return <section className="eval-check-results"><h3 className="eval-section-title">{label} <span className="eval-section-count">（{checks.length}）</span></h3>
-    {checks.some(c => ["keyword", "regex"].includes(checkKind(c))) && <p className="eval-muted">文本检查范围：{label === "整体验收标准" ? "最后一轮最终回复" : "本轮最终回复"}。</p>}
-    {checks.some(c => checkKind(c) === "file") && <p className="eval-muted">只检查生成的文件是否存在，不检查文件内容。</p>}
     {checks.map((check, index) => {
     const result = results?.find(c => c.id === check.id)
     const kind = checkKind(check)
@@ -43,7 +41,7 @@ function checkText(checks: EvalCheck[], results?: CheckResult[]): string {
 }
 
 function ruleText(rule: EvalTurn["rules"][number], index: number) {
-  return `澄清回复配置 ${index + 1}\n预期追问：${rule.match}\n自动回复：${clarificationResponses(rule.responses)}`
+  return `澄清场景 ${index + 1}\n澄清选择（${clarifyPickModes[rule.pickMode || "input"]}）：${rule.match}`
 }
 function turnVerdict(turn: ReturnType<typeof resultRounds>[number], t: (key: string) => string) {
   if (["pending", "running", "cancelled", "skipped"].includes(turn.status)) return t(`proto.eval.${turn.status}`)
@@ -64,13 +62,13 @@ export function RoundResults({ result }: { result: EvalResult }) {
     <Files files={result.attachments || []} label="会话附件" />
     <div className="eval-toolbar"><h3>对话轮次（{rounds.length}）</h3><div className="eval-actions">{rounds.length > 1 && <Button variant="ghost" onClick={() => setAll(!allExpanded)}>{allExpanded ? "全部折叠" : "全部展开"}</Button>}</div></div>
     {rounds.map((turn, i) => <TurnCard key={turn.id} turnId={turn.id} number={i + 1} input={turn.input}
-      meta={isOpen(turn) ? "" : [turn.attachments.length && `附件 ${turn.attachments.length}`, turn.rules.length && `澄清回复配置 ${turn.rules.length}`, checksOf(turn).length && `评测标准 ${checksOf(turn).length}`].filter(Boolean).join(" · ")}
+      meta={isOpen(turn) ? "" : [turn.attachments.length && `附件 ${turn.attachments.length}`, turn.rules.length && `澄清场景 ${turn.rules.length}`, checksOf(turn).length && `评测标准 ${checksOf(turn).length}`].filter(Boolean).join(" · ")}
       status={<span className="eval-status" data-status={{ "通过": "passed", "不通过": "failed", "无法判定": "unknown" }[turnVerdict(turn, t)]}>{turnVerdict(turn, t)}</span>}
       open={isOpen(turn)} toggle={() => setExpanded(prev => ({ ...prev, [turn.id]: { status: turn.status, open: !isOpen(turn) } }))}>
 
       <div className="eval-input-group"><div className="eval-message eval-report-text-field"><strong>用户输入</strong><p>{turn.input}</p></div>
       <Files files={turn.attachments} label="附件" /></div>
-      {!!turn.rules.length && <details className="eval-result-rules"><summary className="eval-section-title">澄清回复配置 <span className="eval-section-count">（{turn.rules.length}）</span></summary>
+      {!!turn.rules.length && <details className="eval-result-rules"><summary className="eval-section-title">澄清场景 <span className="eval-section-count">（{turn.rules.length}）</span></summary>
         <ClarificationReplies rules={turn.rules} />
       </details>}
       <details className="eval-message" open><summary>本次澄清过程</summary><p>{clarificationText(turn)}</p></details>
@@ -82,5 +80,5 @@ export function RoundResults({ result }: { result: EvalResult }) {
   </div>
 }
 export function reportBody(result: EvalResult, t: (key: string) => string) {
-  return `${result.name}\n用例编号：${result.id}\n执行：${executionLabel(result)} · 结论：${verdictLabel(result)}\n整体验收标准：\n${checkText(result.checks || [], result.checkResults)}\n会话附件：${(result.attachments || []).map(f => f.name).join("、") || "无"}\n` + resultRounds(result).map((turn, i) => `第 ${i + 1} 轮：${turnVerdict(turn, t)}\n用户输入：${turn.input}\n附件：${turn.attachments.map(f => f.name).join("、") || "无"}\n澄清回复配置：${turn.rules.map(ruleText).join("\n\n") || "无"}\n本次澄清过程：${clarificationText(turn)}\n工具返回：${turn.toolResult || "未记录"}\n回复：${responseText(turn, t)}\n评测标准：\n${checkText(checksOf(turn), "checkResults" in turn ? turn.checkResults as CheckResult[] : undefined)}\n依据：${turn.evidence ? t(turn.evidence) : turn.status === "skipped" ? "本轮未执行。" : turn.status === "cancelled" ? "本轮已停止，未生成判定依据。" : t("proto.eval.waiting")}`).join("\n\n")
+  return `${result.name}\n用例编号：${result.id}\n执行：${executionLabel(result)} · 结论：${verdictLabel(result)}\n整体验收标准：\n${checkText(result.checks || [], result.checkResults)}\n会话附件：${(result.attachments || []).map(f => f.name).join("、") || "无"}\n` + resultRounds(result).map((turn, i) => `第 ${i + 1} 轮：${turnVerdict(turn, t)}\n用户输入：${turn.input}\n附件：${turn.attachments.map(f => f.name).join("、") || "无"}\n澄清场景：${turn.rules.map(ruleText).join("\n\n") || "无"}\n本次澄清过程：${clarificationText(turn)}\n工具返回：${turn.toolResult || "未记录"}\n回复：${responseText(turn, t)}\n评测标准：\n${checkText(checksOf(turn), "checkResults" in turn ? turn.checkResults as CheckResult[] : undefined)}\n依据：${turn.evidence ? t(turn.evidence) : turn.status === "skipped" ? "本轮未执行。" : turn.status === "cancelled" ? "本轮已停止，未生成判定依据。" : t("proto.eval.waiting")}`).join("\n\n")
 }

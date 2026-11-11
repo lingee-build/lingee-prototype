@@ -1,13 +1,17 @@
 import type { EvalRun } from "@/services/evaluation"
-import { caseVersionChanged, modelsDiffer, previousRunIn, runDiff, runLabelText, runPassRate } from "@/services/evaluation-comparison"
+import { caseVersionChanged, previousRunIn, runCodeLabel, runPassRate } from "@/services/evaluation-comparison"
 
 /**
- * 报告卡上的两块对比信息：与对比范围内更早的最近一份（vs上一版）/ 与基线版本。
- * 未完成报告不参与通过率对比。
+ * 报告卡上的两块对比信息（并列两行）：vs上一版（时间最近的前一份已完成报告）/ vs 基线。
+ * 未完成报告不参与对比，两块同样展示，说明为「未完成，不参与对比」。
+ * 本次没有「模型更新」判断逻辑，仅保留「用例集更新」提示。
  */
 export function ReportDelta({ run, pool, baselineId, baselineRun }: { run: EvalRun; pool: EvalRun[]; baselineId?: string; baselineRun?: EvalRun }) {
   if (run.status !== "completed") {
-    return <div className="eval-dp"><span className="eval-dp-label">vs上一版</span><div className="eval-dp-value eval-dp-flat">未完成，不参与通过率对比</div></div>
+    return <>
+      <div className="eval-dp"><span className="eval-dp-label">vs上一版</span><div className="eval-dp-value eval-dp-flat">未完成，不参与对比</div></div>
+      <div className="eval-dp"><span className="eval-dp-label">vs 基线{baselineRun ? ` ${runCodeLabel(baselineRun)}` : ""}</span><div className="eval-dp-value eval-dp-flat">{baselineRun ? "未完成，不参与对比" : "未设置基线版本"}</div></div>
+    </>
   }
   const rate = runPassRate(run) ?? 0
   return <>
@@ -17,20 +21,14 @@ export function ReportDelta({ run, pool, baselineId, baselineRun }: { run: EvalR
 }
 
 function PreviousDelta({ run, pool, rate }: { run: EvalRun; pool: EvalRun[]; rate: number }) {
-  if (!pool.length) {
-    return <div className="eval-dp"><span className="eval-dp-label">vs上一版</span><div className="eval-dp-value eval-dp-flat">未选择报告</div></div>
-  }
   const previous = previousRunIn(pool, run)
   if (!previous) {
-    const onlySelf = pool.length === 1 && pool[0].id === run.id
-    return <div className="eval-dp"><span className="eval-dp-label">vs上一版</span><div className="eval-dp-value eval-dp-flat">{onlySelf ? "所选范围内只有本报告" : "所选范围内没有更早的报告"}</div></div>
+    return <div className="eval-dp"><span className="eval-dp-label">vs上一版</span><div className="eval-dp-value eval-dp-flat">没有更早的已完成报告</div></div>
   }
   const previousRate = runPassRate(previous) ?? 0
-  const { newFailed, fixed, degraded } = runDiff(run, previous)
   return <DeltaLine
-    label={<>vs上一版 {runLabelText(previous)}{caseVersionChanged(run, previous) && <span className="eval-upd" title="对比报告用的是另一版用例集，通过率变化包含用例变更的影响">用例更新</span>}{modelsDiffer(run, previous) && <span className="eval-upd eval-upd-warn" title="模型不同：结论变化可能来自模型而不是被测对象">模型不同</span>}</>}
-    delta={rate - previousRate} from={previousRate} to={rate}
-    parts={[newFailed ? `新增失败 ${newFailed}` : "", fixed ? `已修复 ${fixed}` : "", degraded ? `退化为无法判定 ${degraded}` : ""]}
+    label={<>vs上一版 {runCodeLabel(previous)}{caseVersionChanged(run, previous) && <span className="eval-upd" title="对比报告用的是另一版用例集，通过率变化包含用例变更的影响">用例更新</span>}</>}
+    delta={rate - previousRate}
   />
 }
 
@@ -46,14 +44,12 @@ function BaselineDelta({ run, baselineId, baselineRun, rate }: { run: EvalRun; b
   }
   const baselineRate = runPassRate(baselineRun) ?? 0
   return <DeltaLine
-    label={<>vs 基线 {runLabelText(baselineRun)}{caseVersionChanged(run, baselineRun) && <span className="eval-upd" title="对比报告用的是另一版用例集，通过率变化包含用例变更的影响">用例更新</span>}</>}
-    delta={rate - baselineRate} from={baselineRate} to={rate} parts={[]}
+    label={<>vs 基线 {runCodeLabel(baselineRun)}{caseVersionChanged(run, baselineRun) && <span className="eval-upd" title="对比报告用的是另一版用例集，通过率变化包含用例变更的影响">用例更新</span>}</>}
+    delta={rate - baselineRate}
   />
 }
 
-function DeltaLine({ label, delta, from, to, parts }: { label: React.ReactNode; delta: number; from: number; to: number; parts: string[] }) {
-  const notes = parts.filter(Boolean)
-  notes.push(`${from}% → ${to}%`)
+function DeltaLine({ label, delta }: { label: React.ReactNode; delta: number }) {
   return (
     <div className="eval-dp">
       <span className="eval-dp-label">{label}</span>
@@ -61,7 +57,6 @@ function DeltaLine({ label, delta, from, to, parts }: { label: React.ReactNode; 
         <span className="eval-delta" data-direction={delta > 0 ? "up" : delta < 0 ? "down" : "flat"}>
           {delta > 0 ? "↑ +" : delta < 0 ? "↓ " : "± "}{Math.abs(delta)}pp
         </span>
-        <small> · {notes.join(" · ")}</small>
       </div>
     </div>
   )

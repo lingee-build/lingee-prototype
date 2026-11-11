@@ -1,18 +1,47 @@
 import JSZip from "jszip"
 import ExcelJS from "exceljs"
-import { caseValidation, checkValidation, checkOperators, type EvalCase, type EvalTurn, type EvalCheck } from "./evaluation"
+import { caseValidation, checkValidation, checkOperators, type EvalCase, type EvalTurn, type EvalCheck, type CheckKind } from "./evaluation"
 export const importHeaders = ["用例编号", "用例名称", "作用范围", "对话轮次", "用户输入", "澄清回复", "标准类型", "检查方式", "评测标准", "会话附件", "附件"]
 export interface ImportIssue { row: number; field: string; message: string }
 export interface ImportPreview { cases: EvalCase[]; errors: ImportIssue[]; references: { row: number; field: string; names: string[]; caseId: string; turnId?: string }[] }
+const importKinds: Record<string, CheckKind> = { 语义判断: "natural", 关键词匹配: "keyword", 正则匹配: "regex", 文件存在性: "file" }
+/** 场景内的校验（澄清提问 / 输出校验）：与表格列同一套类型与检查方式。 */
+function parseSceneCheck(raw: unknown, label: string): EvalCheck | undefined {
+  if (raw == null) return undefined
+  const item = raw as { type?: string; method?: string; text?: string }
+  const kind = importKinds[item.type || ""]
+  if (!kind) throw Error(`${label}的 type 须为 语义判断 / 关键词匹配 / 正则匹配 / 文件存在性`)
+  const operator = (Object.keys(checkOperators) as (keyof typeof checkOperators)[]).find(key => checkOperators[key] === item.method)
+  const allowed = kind === "keyword" ? ["all", "any", "none"] : kind === "regex" ? ["regex", "not_regex"] : ["exists", "not_exists"]
+  if (kind === "natural" ? !!item.method : !operator || !allowed.includes(operator)) throw Error(`${label}的 method 与 type 不匹配；语义判断须留空`)
+  if (typeof item.text !== "string" || !item.text.trim()) throw Error(`${label}的 text 须为非空字符串`)
+  const check: EvalCheck = { id: crypto.randomUUID(), kind, operator, text: item.text, required: true, files: [] }
+  const issue = checkValidation(check)
+  if (issue) throw Error(`${label}：${issue}`)
+  return check
+}
 export function parseClarification(value: string): EvalTurn["rules"] {
   if (!value.trim()) return []
   const data: unknown = JSON.parse(value)
   if (!Array.isArray(data)) throw Error("须填写 JSON 数组")
-  return data.map(item => {
+  return data.map((item, index) => {
     if (!item || typeof item.matchDescription !== "string" || !item.matchDescription.trim()) throw Error("matchDescription 须为非空字符串")
     const responses = typeof item.response === "string" ? [item.response] : item.response
-    if (!Array.isArray(responses) || !responses.length || responses.some(v => typeof v !== "string" || !v.trim())) throw Error("response 须为非空字符串或非空字符串数组（多个问题的顺序答案）")
-    return { id: crypto.randomUUID(), match: item.matchDescription, responses }
+    if (!Array.isArray(responses) || !responses.length || responses.some((v: unknown) => typeof v !== "string" || !v.trim())) throw Error("response 须为非空字符串或非空字符串数组（多个问题的顺序答案）")
+    const label = `第 ${index + 1} 个场景`
+    const raw = item as { pickMode?: string; clarifyCheck?: unknown; expectedPost?: string; outputChecks?: unknown }
+    const outputChecks = Array.isArray(raw.outputChecks)
+      ? raw.outputChecks.map((check: unknown, i: number) => parseSceneCheck(check, `${label}输出校验 ${i + 1}`)).filter((check): check is EvalCheck => !!check)
+      : undefined
+    return {
+      id: crypto.randomUUID(),
+      match: item.matchDescription,
+      responses: responses as string[],
+      pickMode: raw.pickMode === "fixed" ? "fixed" as const : raw.pickMode === "input" ? "input" as const : undefined,
+      check: parseSceneCheck(raw.clarifyCheck, `${label}澄清校验`),
+      post: raw.expectedPost === "clarify" ? "clarify" as const : undefined,
+      checks: outputChecks,
+    }
   })
 }
 /** 模板使用合法的 x: 命名空间前缀；ExcelJS 需要无前缀的 SpreadsheetML 标签。仅规范标签，不改变单元格文本。 */
@@ -98,7 +127,7 @@ export async function parseEvaluationWorkbook(data: ArrayBuffer): Promise<Import
         if (number !== group.rows.size + 1) error(r, 4, "对话轮次须从 1 连续递增")
         turn = { id: crypto.randomUUID(), input, expected: "", checks: [], rules: [], attachments: [] }
         if (!input.trim()) error(r, 5, "用户输入不能为空")
-        try { turn.rules = parseClarification(clarification) } catch (e) { error(r, 6, e instanceof Error ? e.message : "JSON 格式错误") }
+        try { turn.rules = parseClarification(clarification); if (turn.rules.length) turn.expectedResponse = "clarify" } catch (e) { error(r, 6, e instanceof Error ? e.message : "JSON 格式错误") }
         group.rows.set(number, { turn, signature }); group.item.turns!.push(turn)
         if (attachment.trim()) result.references.push({ row: r, field: "附件", names: attachment.split(/\r?\n/).map(v => v.trim()).filter(Boolean), caseId: group.item.id, turnId: turn.id })
       }
