@@ -75,6 +75,13 @@ export interface AgentVersion {
   lines: string[]
 }
 
+export interface AgentDisplayInfo {
+  targetAudience: string[]
+  detailedIntroduction: { coreValue: string; coreAdvantage: string }
+  businessScenarios: Array<{ title: string; problem: string; solution: string }>
+  exampleQuestion: string
+}
+
 export interface Agent {
   /** 智能体编码，同时是目录名 */
   id: string
@@ -89,6 +96,7 @@ export interface Agent {
   rejectionRemark?: string
   domain: string
   createdAt: string
+  displayInfo?: AgentDisplayInfo
   allowModelSwitch?: boolean
   defaultModelLevel?: ModelLevel
   role: string
@@ -210,6 +218,18 @@ export const agents: Agent[] = [
   {
     id: "expense-advisor", projectId: "workspace", name: "财务报销顾问", desc: "指导员工按制度填写报销单，自动识别票据并校验费用标准。", avatar: "/preset-agent-avatar-3.png",
     status: "saved", domain: "finance", createdAt: "2026-09-30T08:00:00Z",
+    displayInfo: {
+      targetAudience: ["报销申请人", "财务审核员"],
+      detailedIntroduction: {
+        coreValue: "把费用制度转成可操作的报销步骤，帮助员工在提交前补齐材料。",
+        coreAdvantage: "结合票据信息和费用标准检查填报内容，并说明超标费用的审批要求。",
+      },
+      businessScenarios: [
+        { title: "差旅报销", problem: "出差回来后，不清楚交通和住宿需要哪些票据。", solution: "根据差旅日期和费用类型列出所需材料，并提示需要补充的信息。" },
+        { title: "超标费用处理", problem: "实际住宿金额超出标准，不知道是否可以报销。", solution: "说明超标金额与对应制度，提示额外审批流程。" },
+      ],
+      exampleQuestion: "上周出差的住宿费超标了，怎么报销？",
+    },
     role: role("财务报销顾问", "帮助员工按公司费用制度完成报销。", ["先问清费用类型与发生日期", "超过标准的费用提示需要额外审批", "票据不清晰时请用户重新上传"]),
     skills: [skillRef("sk_expense"), skillRef("sk_delivery", "marketplace"), skillRef("sk_price", "marketplace")], knowledge: [catalog("kc_fin_expense", "费用报销制度", "财务制度/费用报销制度")],
     changelog: { pending: [{ createdAt: "2026-09-30T08:00:00Z", operator: "梁平先", summary: "创建智能体" }], versions: [] },

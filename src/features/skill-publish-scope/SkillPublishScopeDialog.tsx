@@ -187,8 +187,8 @@ export function MarketScopeStep(props: { skill: Skill; scope: SkillScope; onChan
   )
 }
 
-/** 「更多信息」里的发布范围两项：每次打开从 Console 取；未发布的技能不显示 */
-export function ScopeInfoItems(props: { skill: Skill }) {
+/** 详情里的发布范围：每次打开从 Console 获取，未发布时保留明确的空状态。 */
+export function SkillScopeInfo(props: { skill: Skill }) {
   const query = useQuery({
     queryKey: ["consoleScope", props.skill.name],
     queryFn: () => consoleScopeService.get(props.skill.name),
@@ -197,16 +197,23 @@ export function ScopeInfoItems(props: { skill: Skill }) {
     gcTime: 0,
     retry: false,
   })
-  if (!props.skill.everPublished) return null
-  if (query.isError)
-    return (
-      <li className="text-[var(--orange-600)]">
-        发布范围加载失败
-        <button type="button" className="ml-2 cursor-pointer border-none bg-transparent p-0 text-[14px] text-[#495DFF]" onClick={() => void query.refetch()}>重试</button>
-      </li>
-    )
-  if (query.isPending) return <li>发布范围：加载中…</li>
-  return <li className="col-span-2" title={SCOPE_HINT_CONSOLE}>发布范围：{scopeLabels(query.data).join("、")}</li>
+  return (
+    <div className="flex items-center justify-between gap-4">
+      <div className="flex min-w-0 flex-col gap-1">
+        <span className="text-[14px] leading-5 text-text-strong">发布范围</span>
+        <span className="text-[12px] leading-4 text-text-weak">{SCOPE_HINT_FIRST}</span>
+      </div>
+      {!props.skill.everPublished ? (
+        <span className="shrink-0 px-2 text-[14px] leading-5 text-text-weak">{props.skill.personalInstalled ? "仅个人自用" : "暂未发布"}</span>
+      ) : query.isError ? (
+        <button type="button" className="shrink-0 cursor-pointer border-none bg-transparent p-0 text-[13px] text-[var(--orange-600)]" onClick={() => void query.refetch()}>加载失败，重试</button>
+      ) : query.isPending ? (
+        <span className="h-4 w-24 shrink-0 animate-pulse rounded bg-[var(--neutral-130)]" />
+      ) : (
+        <ScopeChecks value={query.data} onChange={() => undefined} readOnly />
+      )}
+    </div>
+  )
 }
 
 /** 智能体提交前校验：引用的技能都已发布且没有未提交的修改，智能体才能提交 */

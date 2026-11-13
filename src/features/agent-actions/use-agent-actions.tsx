@@ -1,3 +1,4 @@
+import { displayInfoErrors } from "@/features/agent-config/display-info"
 import { exportArtifactPackage } from "@/features/artifact-config/package-export"
 import { guardArtifactConfig } from "@/features/artifact-config/config-state"
 import { evaluationDeletionNotice } from "@/services/evaluation-deletion"
@@ -90,6 +91,10 @@ export function useAgentActions(onChanged: () => void) {
     },
 
     submit(agent: Agent) {
+      if (Object.keys(displayInfoErrors(agent.displayInfo)).length) {
+        showToast({ variant: "error", title: t("proto.agentDisplay.submitMissing") })
+        return
+      }
       // 只提交智能体本身；引用的技能须全部已发布且无未提交修改
       const submitAgent = () => void run("submit", async () => {
         await agentService.submit(agent.id)

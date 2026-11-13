@@ -1,5 +1,6 @@
 import type { Translate } from "@/i18n"
-import type { Agent, ModelLevel } from "@/mock/fixtures/dev"
+import { normalizeDisplayInfo } from "./display-info"
+import type { Agent, AgentDisplayInfo, ModelLevel } from "@/mock/fixtures/dev"
 import { domainI18nKeys } from "@/vendor/kcode-web/src/utils/agent-domain"
 
 export { domainI18nKeys }
@@ -12,6 +13,7 @@ export const MODEL_POLICY_DEFAULTS: { allowModelSwitch: boolean; defaultModelLev
 
 /** 配置面板里可编辑的字段 */
 export type AgentForm = Pick<Agent, "name" | "desc" | "domain" | "avatar" | "role" | "skills" | "knowledge"> & {
+  displayInfo: AgentDisplayInfo
   allowModelSwitch: boolean
   defaultModelLevel: ModelLevel
 }
@@ -25,6 +27,7 @@ export interface TabProps {
 }
 
 export const formOf = (agent: Agent): AgentForm => ({
+  displayInfo: normalizeDisplayInfo(agent.displayInfo),
   name: agent.name,
   desc: agent.desc,
   domain: agent.domain || "general",
@@ -58,6 +61,8 @@ export function diffChanges(before: AgentForm, after: AgentForm, t: Translate) {
   const domainName = (value: string) => (domainI18nKeys[value] ? t(domainI18nKeys[value]) : value)
 
   return [
+    JSON.stringify(normalizeDisplayInfo(before.displayInfo)) !== JSON.stringify(normalizeDisplayInfo(after.displayInfo)) &&
+      t("proto.agentDisplay.changed"),
     before.name !== after.name && field("name", clip(after.name)),
     before.desc !== after.desc && field("desc", clip(after.desc)),
     before.avatar !== after.avatar && field("avatar", ""),

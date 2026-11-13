@@ -14,7 +14,7 @@ function Chevron() {
   return <svg aria-hidden="true" className="changelog-chevron shrink-0 text-text-weak" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="m9 5 7 7-7 7" /></svg>
 }
 
-function VersionEntry(props: { entry: Version; latest?: boolean }) {
+function VersionEntry(props: { entry: Version; latest?: boolean; publishedLabel?: string }) {
   const t = useT()
   const { entry } = props
   return (
@@ -23,6 +23,7 @@ function VersionEntry(props: { entry: Version; latest?: boolean }) {
         <span className="flex min-w-0 flex-col gap-1">
           <span className="flex flex-wrap items-center gap-2">
             <span className="text-[14px] font-medium text-text-strong">v{entry.version}</span>
+            {props.publishedLabel && <span className="text-[12px] text-text-weak">{props.publishedLabel}</span>}
             {props.latest && <span className="changelog-badge">{t("kcode.agentChangelog.publishedTag")}</span>}
             <span className="text-[12px] text-text-weak">{formatTime(entry.releasedAt)} · {entry.operator}</span>
           </span>
@@ -38,20 +39,20 @@ function VersionEntry(props: { entry: Version; latest?: boolean }) {
 }
 
 /** 版本时间线：展示待发布修改与各版本，最新版本展开，旧版本可展开查看。 */
-export function ChangelogSection(props: { changelog: Agent["changelog"]; compact?: boolean }) {
+export function ChangelogSection(props: { changelog: Agent["changelog"]; compact?: boolean; embedded?: boolean; pendingLabel?: string; publishedLabel?: string }) {
   const t = useT()
   const pending = [...props.changelog.pending].sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))
   const versions = [...props.changelog.versions].reverse()
 
   return (
     <section aria-label={t("kcode.agentChangelog.title")}>
-      <h3 className="agent-config-section-title mb-3">{t("kcode.agentChangelog.title")}</h3>
-      <div className="agent-changelog agent-config-surface">
+      {!props.embedded && <h3 className="agent-config-section-title mb-3">{t("kcode.agentChangelog.title")}</h3>}
+      <div className={cx("agent-changelog", !props.embedded && "agent-config-surface")}>
         {!pending.length && !versions.length && <div className="py-2 text-[13px] text-text-weak">{t("kcode.agentChangelog.empty")}</div>}
         {pending.length > 0 && (
           <div className="changelog-entry changelog-entry-pending">
             <div className="flex flex-wrap items-center gap-2 mb-1.5">
-              <span className="font-medium text-[14px] text-text-strong">{t("kcode.agentChangelog.pendingLabel")}</span>
+              <span className="font-medium text-[14px] text-text-strong">{props.pendingLabel ?? t("kcode.agentChangelog.pendingLabel")}</span>
               <span className="text-[12px] text-text-weak">{t("kcode.agentChangelog.pendingCount", { count: pending.length })}</span>
             </div>
             <div className="flex flex-col gap-3">
@@ -65,7 +66,7 @@ export function ChangelogSection(props: { changelog: Agent["changelog"]; compact
 
           </div>
         )}
-        {versions.map((entry, index) => <VersionEntry key={entry.version} entry={entry} latest={index === 0} />)}
+        {versions.map((entry, index) => <VersionEntry key={entry.version} entry={entry} latest={index === 0} publishedLabel={props.publishedLabel} />)}
       </div>
     </section>
   )

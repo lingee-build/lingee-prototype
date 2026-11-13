@@ -6,6 +6,7 @@ import { AgentDevPage } from "./agent/AgentDevPage"
 import { McpAppDevPage } from "./mcp-app/McpAppDevPage"
 import { SkillDevPage } from "./skill/SkillDevPage"
 import { WorkflowDevPage } from "./workflow/WorkflowDevPage"
+import { LegacyFrame } from "./legacy/LegacyFrame"
 
 /** /dev/:mode 的分发页。已实现的开发页直接渲染，其余入口先放占位 */
 export function Component() {
@@ -21,6 +22,12 @@ export function Component() {
         <WorkflowDevPage />
       ) : mode === "mcpapp" ? (
         <McpAppDevPage />
+      ) : mode === "app" ? (
+        // 应用开发：嵌入旧版原型的应用开发视图（应用卡片/新建应用/应用会话）
+        <LegacyFrame view="apps" title={t("kcode.nav.appDev")} />
+      ) : mode === "collab" ? (
+        // 协作开发：嵌入旧版原型的协作开发视图（任务/工作台/评审/专家/团队/设置）
+        <LegacyFrame view="collab" title={t("proto.nav.collabDev")} />
       ) : (
         <div className="size-full flex items-center justify-center">
           <Empty description={`${t(NAV_ITEMS.find((x) => x.id === mode)?.labelKey ?? "ui.empty.description")} · 原型待建`} />

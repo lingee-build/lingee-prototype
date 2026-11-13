@@ -2,6 +2,7 @@ import { useId, useLayoutEffect, useRef } from "react"
 
 export interface InputProps {
   label?: string
+  ariaLabel?: string
   required?: boolean
   readOnly?: boolean
   disabled?: boolean
@@ -44,6 +45,7 @@ export function Input(props: InputProps) {
 
   const shared = {
     id,
+    "aria-label": props.ariaLabel,
     "data-slot": "form-input-field",
     "data-readonly": props.readOnly ? "" : undefined,
     "data-disabled": props.disabled ? "" : undefined,

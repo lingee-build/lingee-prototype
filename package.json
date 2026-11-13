@@ -11,6 +11,7 @@
     "typecheck": "tsc",
     "sync": "bun scripts/sync-from-lingee.ts",
     "sync:runtime": "node scripts/sync-runtime-source.mjs",
+    "sync:legacy": "node scripts/sync-legacy-prototype.mjs",
     "test:runtime": "node scripts/check-runtime.mjs"
   },
   "dependencies": {

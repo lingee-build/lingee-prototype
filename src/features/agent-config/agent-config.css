@@ -63,3 +63,76 @@
 .agent-config-identity-row { display: flex; align-items: center; gap: 12px; }
 .agent-config-avatar-field { display: flex; align-items: center; }
 .agent-config-identity-row .agent-header-avatar { width: 52px; height: 52px; }
+
+/* —— 展示信息（适用人群 / 示例问法 / 详细介绍 / 业务场景）——
+ * 沿用配置面板的「分区标题 + 卡片」：标题 14px，卡片同 agent-config-surface，
+ * 字段用公共 Input / Tag / IconButton / BrandButton，不另设颜色。 */
+.agent-display-overview { display: flex; flex-direction: column; gap: var(--agent-config-section-gap); min-width: 0; }
+.agent-display-overview { container-type: inline-size; }
+.agent-display-group { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.agent-basic-info { gap: var(--agent-config-section-gap); }
+.agent-display-hint { color: var(--text-weak); font-size: 12px; line-height: 18px; }
+/* 运行时主题把 --text-on-critical-base 推导成了黑色，公共 Input 的错误文字会显示成黑字；
+ * 配置面板内改用与必填星号相同的 --text-on-error-base。 */
+.agent-config-panel [data-component="form-input"] [data-slot="form-input-error"],
+.agent-display-error { color: var(--text-on-error-base, #ff293b); font-size: 12px; line-height: 18px; }
+
+/* 只读：标签列定宽 84px（可容纳 6 个字），各卡片内容起点对齐；窄容器改为上下排列 */
+.agent-info-list { display: flex; flex-direction: column; gap: 12px; min-width: 0; margin: 0; }
+.agent-info-row { display: grid; grid-template-columns: 84px minmax(0, 1fr); column-gap: 16px; align-items: start; }
+.agent-info-row > dt { color: var(--text-weak); font-size: 14px; line-height: 22px; }
+.agent-info-row > dd { margin: 0; min-width: 0; color: var(--text-strong); font-size: 14px; line-height: 22px; white-space: pre-wrap; overflow-wrap: anywhere; }
+@container (max-width: 420px) {
+  .agent-info-row { grid-template-columns: minmax(0, 1fr); row-gap: 2px; }
+}
+.agent-audience-tags { display: flex; flex-wrap: wrap; gap: 6px; min-width: 0; }
+.agent-audience-tag[data-component="tag"] { max-width: 100%; border-radius: 6px; white-space: nowrap; }
+.agent-info-question { display: flex; align-items: flex-start; gap: 4px; min-width: 0; }
+.agent-info-question > [data-component="tooltip-trigger"] { display: inline-flex; flex-shrink: 0; margin-top: -1px; }
+
+
+/* 编辑：字数放在标签行右侧 */
+.agent-counted-field { position: relative; min-width: 0; }
+.agent-field-count { color: var(--text-weak); font-size: 12px; line-height: 20px; font-variant-numeric: tabular-nums; }
+.agent-field-count[data-over] { color: var(--text-on-error-base, #ff293b); }
+.agent-counted-field > .agent-field-count { position: absolute; top: 0; right: 0; }
+.agent-audience-field [data-slot="form-input-label-row"] > .agent-field-count { margin-left: auto; }
+
+/* 适用人群：输入框内显示标签，外框、悬停、聚焦、出错状态都来自公共 form-input */
+[data-component="form-input"] .agent-tag-input[data-slot="form-input-wrapper"] {
+  height: auto;
+  min-height: 36px;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 6px 8px;
+  cursor: text;
+}
+[data-component="form-input"] .agent-tag-input [data-slot="form-input-field"] { flex: 1 0 160px; width: auto; min-width: 0; height: 22px; padding: 0 4px; }
+[data-component="form-input"] .agent-tag-input [data-slot="form-input-field"]:disabled { cursor: default; }
+.agent-tag-input .agent-audience-tag { gap: 2px; padding-right: 3px; cursor: default; }
+.agent-audience-tag > button {
+  --icon-fill: var(--neutral-500);
+  display: inline-flex;
+  flex-shrink: 0;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.agent-audience-tag > button:hover { --icon-fill: var(--neutral-600); background: var(--surface-base-hover); }
+
+/* 业务场景：产品下划线页签（tabs alt），这里只去掉它为面板顶栏准备的高度、内边距和底色 */
+.agent-scenario-panel { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+[data-component="tabs"].agent-scenario-tabs { height: auto; background: transparent; overflow: visible; }
+[data-component="tabs"][data-variant="alt"].agent-scenario-tabs [data-slot="tabs-list"] { height: 36px; padding-inline: 0; gap: 20px; border-bottom-color: var(--border-weak-base); }
+.agent-scenario-tabs [data-slot="tabs-trigger-wrapper"] { display: flex; align-items: center; height: 100%; }
+.agent-scenario-tabs [data-slot="tabs-trigger"] { display: inline-flex; align-items: center; gap: 4px; padding-inline: 0 !important; font-size: 14px; line-height: 22px; white-space: nowrap; max-width: 160px; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
+.agent-scenario-add { color: var(--text-weak); }
+.agent-scenario-add:hover { color: var(--text-strong); }
+/* 编辑：场景区用浅边框框起，和上方介绍字段区分，页签行与表单同在框内 */
+.agent-scenario-editor { gap: 0; border: 1px solid color-mix(in srgb, var(--border-base) 55%, transparent); border-radius: var(--agent-config-field-radius); }
+.agent-scenario-editor [data-component="tabs"][data-variant="alt"] [data-slot="tabs-list"] { height: 44px; padding: 8px 16px 0; border-bottom-color: var(--border-weak-base); }
+.agent-scenario-form { padding: 16px; }
+.agent-scenario-editor [data-slot="tabs-trigger-close-button"] { margin-left: 2px; }
+.agent-tab-dot { flex-shrink: 0; width: 6px; height: 6px; border-radius: 50%; background: var(--text-on-error-base, #ff293b); }
+.agent-scenario-body { display: flex; flex-direction: column; gap: 6px; font-size: 14px; line-height: 22px; color: var(--text-strong); overflow-wrap: anywhere; }
+
+.agent-config-drawer .agent-config-tab-scroll [data-slot="segmented-control-item"] { padding-inline: 10px; }

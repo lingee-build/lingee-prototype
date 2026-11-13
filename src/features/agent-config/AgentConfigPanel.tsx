@@ -1,3 +1,4 @@
+import { displayInfoErrors, normalizeDisplayInfo } from "./display-info"
 import { usePanel } from "@/stores/panel"
 import { useParams } from "react-router"
 import { evaluationRepairTarget } from "@/services/evaluation-repair"
@@ -35,8 +36,6 @@ interface Props {
   subHeader?: ReactNode
   /** 顶部提示条（如本地修改未提交），显示在页签上方 */
   banner?: ReactNode
-  /** 隐藏基础信息里的头像 + 名称卡片（subHeader 已经展示过） */
-  hideIdentity?: boolean
   onRefresh?: () => void
   onNameChange?: (name: string) => void
   onSaved?: (agent: Agent) => void
@@ -67,9 +66,26 @@ export const AgentConfigPanel = forwardRef<AgentConfigHandle, Props>(function Ag
   // 上一次落盘的内容：用来判断有没有未保存的改动、生成改动摘要
   const saved = useRef(formOf(props.agent))
   const readonly = !!props.readonly
+  const [displayAttempt, setDisplayAttempt] = useState(0)
+  const sections = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!displayAttempt || tab !== "basic") return
+    // 等编辑器切到出错的场景页签后再定位
+    const frame = window.setTimeout(() => {
+    const target = sections.current?.querySelector<HTMLElement>("[data-invalid], [data-display-invalid]")
+    for (let parent = target?.parentElement; parent && parent !== sections.current; parent = parent.parentElement) {
+      if (parent instanceof HTMLDetailsElement) parent.open = true
+    }
+    const focus = target?.matches("input, textarea") ? target : target?.querySelector<HTMLElement>("input, button")
+    focus?.focus({ preventScroll: true })
+    target?.scrollIntoView({ block: "center", behavior: "instant" })
+    }, 50)
+    return () => window.clearTimeout(frame)
+  }, [displayAttempt, tab])
 
   // 换了一个智能体，或外部（会话里的模型）改了它：重置表单
   useEffect(() => {
+    setDisplayAttempt(0)
     saved.current = formOf(props.agent)
     setForm(formOf(props.agent))
   }, [props.agent])
@@ -84,9 +100,15 @@ export const AgentConfigPanel = forwardRef<AgentConfigHandle, Props>(function Ag
     async save() {
       if (form.name.length > 200) return void showToast({ variant: "error", title: t("kcode.agentConfig.nameTooLong") })
       if (!form.name.trim() || !form.desc.trim()) return void showToast({ variant: "error", title: t("kcode.agentConfig.submitMissing") })
-      const next = await agentService.save(props.agent.id, form, changes())
+      if (Object.keys(displayInfoErrors(form.displayInfo)).length) {
+        setTab("basic")
+        setDisplayAttempt(attempt => attempt + 1)
+        return void showToast({ variant: "error", title: t("proto.agentDisplay.fix") })
+      }
+      const normalized = { ...form, displayInfo: normalizeDisplayInfo(form.displayInfo) }
+      const next = await agentService.save(props.agent.id, normalized, changes())
       if (!next) return void showToast({ variant: "error", title: t("kcode.agentConfig.saveFailed") })
-      saved.current = form
+      saved.current = normalized
       props.onSaved?.(next)
       return next
     },
@@ -123,9 +145,9 @@ export const AgentConfigPanel = forwardRef<AgentConfigHandle, Props>(function Ag
         </div>
       )}
       {tab === "basic" && (
-        <div className="agent-config-sections flex-1 min-h-0 overflow-y-auto pb-5">
-          <BasicInfoTab agentId={props.agent.id} form={form} set={set} readonly={readonly} hideIdentity={props.hideIdentity} />
-          <ChangelogSection changelog={props.agent.changelog} compact={props.hideIdentity} />
+        <div ref={sections} className="agent-config-sections flex-1 min-h-0 overflow-y-auto pb-5">
+          <BasicInfoTab agentId={props.agent.id} form={form} set={set} readonly={readonly} displayAttempt={displayAttempt}
+            history={<ChangelogSection changelog={props.agent.changelog} />} />
         </div>
       )}
       {tab === "skills" && (

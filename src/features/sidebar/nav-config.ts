@@ -1,6 +1,6 @@
 import type { IconName } from "@/ui"
 
-export type DevMode = "skill" | "agent" | "workflow" | "app" | "mcpapp" | "expert"
+export type DevMode = "skill" | "agent" | "workflow" | "app" | "collab" | "mcpapp" | "expert"
 
 /** 左侧开发导航：顺序、图标、文案 key 与线上一致；「工作流开发」为原型新增入口（proto.* 文案） */
 export const NAV_ITEMS: Array<{ id: DevMode; icon: IconName; labelKey: string }> = [
@@ -8,8 +8,9 @@ export const NAV_ITEMS: Array<{ id: DevMode; icon: IconName; labelKey: string }>
   { id: "agent", icon: "ai-partner", labelKey: "kcode.nav.agentDev" },
   { id: "workflow", icon: "git-branch-network", labelKey: "proto.nav.workflowDev" },
   { id: "app", icon: "app-grid", labelKey: "kcode.nav.appDev" },
+  // 协作开发：嵌入旧版 Lingee 原型的协作开发视图（public/legacy/index.html?view=collab）
+  { id: "collab", icon: "git-pr", labelKey: "proto.nav.collabDev" },
   { id: "mcpapp", icon: "cube", labelKey: "kcode.nav.mcpDev" },
-  { id: "expert", icon: "collab", labelKey: "kcode.nav.expertDev" },
 ]
 
 export type TopTab = "chat" | "work" | "dev"
