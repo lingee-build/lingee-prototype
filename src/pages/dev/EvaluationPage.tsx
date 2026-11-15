@@ -1,4 +1,3 @@
-import { EvaluationGuide } from "@/features/evaluation/EvaluationGuide"
 import { useEffect, useState } from "react"
 import { currentEvaluationEnvironment, environmentLabel, loadSalesEvaluationDemo, useEvaluation, type EvalEnvironment } from "@/services/evaluation"
 import { useQuery } from "@tanstack/react-query"
@@ -42,7 +41,6 @@ export function Component() {
           <span>{t("proto.eval.title")}</span>
 
         </h1>
-        <EvaluationGuide />
         </>} />
       ) : (
         <p className="p-8 text-text-weak" role="status">{deleted ? "被测对象及其评测数据已删除，无法查看或重新运行。" : t(isPending ? "proto.eval.loading" : "proto.eval.notFound")}</p>

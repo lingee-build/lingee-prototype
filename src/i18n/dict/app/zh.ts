@@ -3,10 +3,6 @@ import { dict as en } from "./en"
 type Keys = keyof typeof en
 
 export const dict = {
-  "evaluation.guide.title": "评测引导",
-  "evaluation.guide.replay": "重播",
-  "evaluation.guide.skip": "关闭",
-  "evaluation.guide.watch": "观看评测引导",
   "command.category.suggested": "建议",
   "command.category.view": "视图",
   "command.category.project": "项目",

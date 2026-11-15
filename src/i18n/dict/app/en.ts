@@ -1,8 +1,4 @@
 export const dict = {
-  "evaluation.guide.title": "Evaluation walkthrough",
-  "evaluation.guide.replay": "Replay",
-  "evaluation.guide.skip": "Close",
-  "evaluation.guide.watch": "Watch evaluation guide",
   "command.category.suggested": "Suggested",
   "command.category.view": "View",
   "command.category.project": "Project",
