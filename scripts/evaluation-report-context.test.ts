@@ -24,8 +24,8 @@ test('当前页面优先于旧指代，操作不可继承历史目标', () => {
  expect(resolveReportContext('继续分析', [b], undefined, ['a']).error).toBeTruthy()
 })
 test('跨报告比较按稳定 ID 匹配，引用摘要独立于随后变化的结果', () => {
- const first = {...a, results: [{id:'case',code:'EC-1',name:'查询',status:'failed',evidence:'缺少字段'}]} as EvalRun
- const last = {...b, results: [{id:'case',code:'EC-1',name:'查询',status:'passed',evidence:'字段齐全'}]} as EvalRun
+ const first = {...a, results: [{id:'case',code:'EC-1',name:'查询',status:'failed',evidence:'缺少字段',quality:{state:'质量未通过',scores:[0,0,0,0,0,0,0,0],evidence:'缺少字段'}}]} as EvalRun
+ const last = {...b, results: [{id:'case',code:'EC-1',name:'查询',status:'passed',evidence:'字段齐全',quality:{state:'质量通过',scores:[16,14,16,16,14,10,8,6],evidence:'字段齐全'}}]} as EvalRun
  const snapshot=reportEvidence(first)
  expect(compareReportText([last,first])).toContain('不通过转通过：EC-1 查询')
  first.results[0].evidence='后续变化'

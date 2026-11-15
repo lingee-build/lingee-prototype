@@ -1,9 +1,12 @@
+import { EvaluationSelect } from "./EvaluationSelect"
+import { CaseDetail } from "./CaseDetail"
 import { useRef, useState } from "react"
-import { Button, BrandButton } from "@/ui"
+import { Button, Icon } from "@/ui"
 import { saveCases, useEvaluation, turnsOf, type EvalAttachment } from "@/services/evaluation"
 import { saveAttachment, removeEvaluationAttachments } from "@/services/evaluation-attachments"
 import type { ImportPreview } from "@/services/evaluation-import"
-export function ImportCases({ objectId, close }: { objectId: string; close: () => void }) {
+export function ImportCases({ objectId, close, onImported }: { objectId: string; close: () => void; onImported: () => void }) {
+  const [mode, setMode] = useState<"append" | "overwrite">("append")
   const [preview, setPreview] = useState<ImportPreview>()
   const [files, setFiles] = useState<File[]>([])
   const [issues, setIssues] = useState<string[]>([])
@@ -13,9 +16,12 @@ export function ImportCases({ objectId, close }: { objectId: string; close: () =
   const attachmentInput = useRef<HTMLInputElement>(null)
   const locked = useRef(false)
   const cleanupPending = useRef<string[]>([])
-  const existing = useEvaluation(s => s.cases[objectId] || [])
-  const duplicate = preview?.cases.some(c => existing.some(e => e.name === c.name || e.businessId === c.businessId))
-  const requiredNames = [...new Set(preview?.references.flatMap(ref => ref.names) || [])]
+  const existing = useEvaluation(s => s.cases[objectId]) || []
+  const skipped = mode === "append" ? preview?.cases.filter(c => c.businessId && existing.some(e => e.businessId === c.businessId)).length ?? 0 : 0
+  const existingIds = new Set(existing.map(item => item.businessId).filter(Boolean))
+  const candidates = preview?.cases.filter(item => mode === "overwrite" || !item.businessId || !existingIds.has(item.businessId)) ?? []
+  const candidateIds = new Set(candidates.map(item => item.id))
+  const requiredNames = [...new Set(preview?.references.filter(ref => candidateIds.has(ref.caseId)).flatMap(ref => ref.names) ?? [])]
   const matches = requiredNames.map(name => ({ name, count: files.filter(file => file.name === name).length }))
   const matchedCount = matches.filter(item => item.count === 1).length
   const attachmentRows = [...new Set([...requiredNames, ...files.map(file => file.name)])].flatMap(name => {
@@ -24,34 +30,53 @@ export function ImportCases({ objectId, close }: { objectId: string; close: () =
     return selected.length ? selected.map(({ index }) => ({ name, index, status })) : [{ name, index: -1, status }]
   })
   const attachmentsReady = matchedCount === requiredNames.length
-  return <section className="eval-import eval-form" aria-label="导入用例">
-    <div className="eval-toolbar"><h3>导入用例</h3><Button variant="ghost" disabled={busy} onClick={close}>关闭导入</Button></div>
-    <p>先预览校验，确认后整批新增，不覆盖已有用例、不自动运行。重复导入可能产生同名用例。</p>
-    <section className="eval-import-files" aria-labelledby="import-files-title">
-      <h4 id="import-files-title">导入文件</h4>
-      <div className="eval-import-file-heading"><label htmlFor="eval-import-workbook">用例文件</label>
-        <a className="eval-add-action" href={`${import.meta.env.BASE_URL}templates/evaluation-v0.5.xlsx`} download="Build评测用例导入模板.xlsx">下载模板</a>
+  const selectImportFile = async (file: File) => {
+    if (busy) return
+    setPreview(undefined); setIssues([]); setFiles([]); setWorkbookName(file.name)
+    setBusy(true)
+    try {
+      const { openEvaluationImport } = await import("@/services/evaluation-import-package")
+      const { parseEvaluationWorkbook } = await import("@/services/evaluation-import")
+      const bundle = await openEvaluationImport(file, message => message)
+      const parsed = await parseEvaluationWorkbook(await bundle.workbook.arrayBuffer())
+      setFiles(await bundle.attachments(parsed.references.map(ref => ref.names).flat()))
+      setPreview(parsed)
+    } catch (error) {
+      setIssues([error instanceof Error ? error.message : "无法读取导入文件，请检查文件是否损坏或加密。"])
+    } finally { setBusy(false) }
+  }
+  return <section className="eval-import" aria-label="导入用例">
+    <Button variant="ghost" className="eval-return-to-list" disabled={busy} onClick={close}><Icon name="arrow-left" size="small" />返回用例列表</Button>
+    <header><h3>导入用例</h3><p className="eval-import-intro">核对预览后确认导入。</p></header>
+    <section className="eval-import-files" aria-label="用例文件">
+      <div className="eval-import-file-heading"><h4>用例文件</h4>
+        <a className="eval-add-action" href={`${import.meta.env.BASE_URL}templates/Build评测-问题集导入模板-v1.0.0.xlsx`} download="Build评测-问题集导入模板-v1.0.0.xlsx"><Icon name="spec-download" size="small" />下载模板</a>
       </div>
-      <p className="eval-muted">支持 .xlsx，请按模板填写</p>
-      <div className="eval-import-file-picker">
-        <Button variant="secondary" disabled={busy} onClick={() => workbookInput.current?.click()}>{workbookName ? "更换文件" : "选择文件"}</Button>
-        <span className="eval-import-filename">{workbookName || "尚未选择文件"}</span>
-      </div>
-      <input ref={workbookInput} id="eval-import-workbook" className="eval-import-native-input" type="file" accept=".xlsx" disabled={busy} onChange={async e => {
+      <button type="button" className="eval-import-drop" disabled={busy} aria-describedby="eval-import-formats"
+        onClick={() => workbookInput.current?.click()}
+        onDragOver={event => { event.preventDefault(); event.dataTransfer.dropEffect = busy ? "none" : "copy" }}
+        onDrop={event => {
+          event.preventDefault()
+          const file = event.dataTransfer.files[0]
+          if (!busy && file) void selectImportFile(file)
+        }}>
+        <Icon name="folder-plus-24" size="medium" />
+        <strong>{workbookName ? "更换文件" : "点击或拖拽上传用例文件"}</strong>
+        <span id="eval-import-formats" className="eval-muted">Excel（.xlsx）或包含用例和附件的 ZIP</span>
+        {workbookName && <span className="eval-import-filename">{workbookName}</span>}
+      </button>
+      <p className="eval-import-template-note eval-muted">请用自己的用例替换模板示例。</p>
+      <input ref={workbookInput} id="eval-import-workbook" className="eval-import-native-input" type="file" accept=".xlsx,.zip" disabled={busy} onChange={async e => {
         const file = e.target.files?.[0]; e.target.value = ""
         if (!file) return
-        setPreview(undefined); setIssues([]); setFiles([]); setWorkbookName(file.name)
-        if (!file.name.toLowerCase().endsWith(".xlsx") || file.size > 20 * 1024 * 1024) { setIssues(["请选择不超过 20 MB 的 .xlsx 模板文件"]); return }
-        setBusy(true)
-        try { const { parseEvaluationWorkbook } = await import("@/services/evaluation-import"); setPreview(await parseEvaluationWorkbook(await file.arrayBuffer())) }
-        catch { setIssues(["无法读取工作簿，请检查文件是否损坏或加密，并使用提供的模板"]); } finally { setBusy(false) }
+        void selectImportFile(file)
       }} />
-      {preview && <section className="eval-import-attachments" aria-labelledby="import-attachments-title">
+      {preview && (requiredNames.length > 0 || files.length > 0) && <section className="eval-import-attachments" aria-labelledby="import-attachments-title">
         <div className="eval-import-file-heading"><h4 id="import-attachments-title">引用附件</h4>
           {!!requiredNames.length && <span role="status">已匹配 {matchedCount}/{requiredNames.length}</span>}
         </div>
         {!requiredNames.length ? <p className="eval-muted">{preview.errors.length ? "暂未解析到附件引用，请先修正文件中的校验问题。" : "此文件未引用附件"}</p> : <>
-          <p className="eval-muted">根据 Excel 中填写的文件名匹配，可一次选择多个文件。补齐全部引用附件后才能确认新增。</p>
+          <p className="eval-muted">根据 Excel 中填写的文件名匹配，可一次选择多个文件。补齐全部引用附件后才能确认导入。</p>
           <ul className="eval-import-match-list" aria-label="附件匹配状态">
             {attachmentRows.map(({ name, index, status }) => <li key={`${name}-${index}`}>
               <span className="eval-import-filename">{name}</span>
@@ -59,7 +84,7 @@ export function ImportCases({ objectId, close }: { objectId: string; close: () =
               {index >= 0 ? <Button variant="ghost" disabled={busy} aria-label={`移除附件 ${name} 第 ${index + 1} 个`} onClick={() => { setFiles(current => current.filter((_, i) => i !== index)); setIssues([]) }}>移除</Button> : <span className="eval-import-no-action" aria-hidden="true">—</span>}
             </li>)}
           </ul>
-          <Button variant="secondary" disabled={busy} onClick={() => attachmentInput.current?.click()}>{files.length ? "继续选择附件" : "选择附件"}</Button>
+          <Button variant="secondary" disabled={busy} onClick={() => attachmentInput.current?.click()}>选择附件</Button>
           <input ref={attachmentInput} className="eval-import-native-input" type="file" aria-label="选择引用附件" multiple disabled={busy} onChange={e => {
             const added = Array.from(e.target.files || []); e.target.value = ""
             setFiles(current => [...current, ...added]); setIssues([])
@@ -67,30 +92,73 @@ export function ImportCases({ objectId, close }: { objectId: string; close: () =
         </>}
       </section>}
     </section>
+    <div className="eval-import-mode">
+      <label htmlFor="eval-import-mode">导入方式</label>
+      <EvaluationSelect
+        id="eval-import-mode"
+        describedBy="eval-import-mode-hint"
+        label="导入方式"
+        value={mode}
+        options={[
+          { value: "append", label: "增量导入" },
+          { value: "overwrite", label: "覆盖导入" },
+        ]}
+        disabled={busy}
+        onChange={value => setMode(value === "overwrite" ? "overwrite" : "append")}
+      />
+      <p id="eval-import-mode-hint" className="eval-muted">
+        {mode === "overwrite" ? "替换当前全部用例。" : "自动跳过已有用例 ID。"}
+      </p>
+    </div>
     {busy && <p role="status">正在处理，请稍候…</p>}
-    {preview && <><p>预览：{preview.cases.length} 条用例 · {preview.cases.reduce((n, c) => n + turnsOf(c).length, 0)} 个业务轮次 · {preview.cases.reduce((n, c) => n + (c.checks?.length || 0) + turnsOf(c).reduce((m, t) => m + (t.checks?.length || 0), 0), 0)} 条标准</p>
-      {preview.cases.map(c => <details key={c.id}><summary>{c.businessId} · {c.name}（{turnsOf(c).length} 轮）</summary>{turnsOf(c).map((t, i) => <p key={t.id}>第 {i + 1} 轮：{t.input} · 标准 {t.checks?.length || 0} 条 · 澄清回复 {t.rules.length} 组</p>)}<p>整体验收标准 {c.checks?.length || 0} 条</p></details>)}
-      {!!preview.errors.length && <ul role="alert">{preview.errors.map((e, i) => <li key={i}>评测用例 · 第 {e.row} 行 · {e.field}：{e.message}</li>)}</ul>}
-      {duplicate && <p role="status">已有同编号或同名用例。再次确认将新增独立用例，不覆盖已有内容。</p>}
-      <BrandButton variant="primary" disabled={busy || !!preview.errors.length || !preview.cases.length || !attachmentsReady} onClick={async () => {
+    {!!preview?.ignored.length && <section className="eval-import-ignored" aria-label="以下内容不会导入">
+      <strong role="status">以下内容不会导入（{preview.ignored.length}）</strong>
+      <p>Build 暂不支持这些字段。确认后只导入受支持的内容。</p>
+      <ul>{preview.ignored.map((item, index) => (
+        <li key={index}><bdi>{item.field}</bdi><span>Excel 行号 {item.rows.join(", ")}</span></li>
+      ))}</ul>
+    </section>}
+    {!!preview?.errors.length && <ul className="eval-import-errors eval-error" role="alert">{preview.errors.map((e, i) => <li key={i}>第 {e.row} · {e.field}：{e.message}</li>)}</ul>}
+    {!!issues.length && <ul className="eval-import-errors eval-error" role="alert">{issues.map((s, i) => <li key={i}>{s}</li>)}</ul>}
+    {preview && !preview.errors.length && attachmentsReady && <>
+      <section className="eval-import-results">
+        <h3>导入预览 · {candidates.length} 条</h3>
+        <p role="status">{mode === "overwrite" ? `将替换当前全部用例。 (${existing.length})` : `预计跳过的已有用例 (${skipped})`}</p>
+        {candidates.map(c => <details className="eval-import-preview" key={c.id}><summary><Icon name="chevron-down-16" size="small"/><strong>{c.name}</strong><span className="eval-muted">{turnsOf(c).length} 轮</span></summary><CaseDetail value={c} embedded /></details>)}
+      </section>
+      <footer className="eval-import-footer"><Button variant="primary" disabled={busy || !candidates.length} onClick={async () => {
         if (locked.current) return
         locked.current = true; setBusy(true); setIssues([])
+        const before = useEvaluation.getState().cases[objectId]
         const saved: EvalAttachment[] = []
         try {
           if (cleanupPending.current.length) { await removeEvaluationAttachments(cleanupPending.current); cleanupPending.current = [] }
           const { attachmentImportIssues } = await import("@/services/evaluation-import")
-          const errors = attachmentImportIssues(preview, files)
+          const ids = new Set((before ?? []).map(item => item.businessId).filter(Boolean))
+          const items = structuredClone(mode === "overwrite"
+            ? preview.cases
+            : preview.cases.filter(item => !item.businessId || !ids.has(item.businessId)))
+          const importing = new Set(items.map(item => item.id))
+          const references = preview.references.filter(ref => importing.has(ref.caseId))
+          const errors = attachmentImportIssues({ ...preview, references }, files)
           if (errors.length) { setIssues(errors.map(e => `评测用例 · 第 ${e.row} 行 · ${e.field}：${e.message}`)); return }
-          const items = structuredClone(preview.cases)
-          for (const name of new Set(preview.references.flatMap(r => r.names))) saved.push(await saveAttachment(files.find(f => f.name === name)!))
-          for (const ref of preview.references) {
+          for (const name of new Set(references.flatMap(r => r.names))) saved.push(await saveAttachment(files.find(f => f.name === name)!))
+          for (const ref of references) {
             const c = items.find(c => c.id === ref.caseId)!
             const attachments = ref.names.map(name => saved.find(f => f.name === name)!)
             if (ref.turnId) c.turns!.find(t => t.id === ref.turnId)!.attachments = attachments
-            else c.attachments = attachments
+            else c.attachments = [...(c.attachments||[]),...attachments.filter(a=>!c.attachments?.some(x=>x.id===a.id))]
           }
-          if (!saveCases(objectId, [...(useEvaluation.getState().cases[objectId] || []), ...items])) throw Error("用例保存失败，未加入任何用例，请重试")
-          close()
+          for(const c of items)for(const t of c.turns||[]) t.attachments=t.attachments.filter(a=>!c.attachments?.some(x=>x.id===a.id))
+          const latest = useEvaluation.getState().cases[objectId]
+          if (mode === "overwrite" && (latest !== before))
+            throw Error("当前用例列表已变化，请重新预览后确认覆盖。")
+          const next = mode === "overwrite" ? items : [
+            ...(latest ?? []),
+            ...items.filter(c => !c.businessId || !latest?.some(e => e.businessId === c.businessId)),
+          ]
+          if (!saveCases(objectId, next, mode === "overwrite")) throw Error("用例保存失败，请重试")
+          onImported()
         } catch (e) {
           cleanupPending.current = [...new Set([...cleanupPending.current, ...saved.map(f => f.id)])]
           let cleanupError = ""
@@ -98,7 +166,6 @@ export function ImportCases({ objectId, close }: { objectId: string; close: () =
           catch { cleanupError = "新存附件清理尚未完成，请恢复本地存储后重试；重试会先清理残留附件。" }
           setIssues([e instanceof Error ? e.message : "保存失败，请重试", cleanupError].filter(Boolean))
         } finally { locked.current = false; setBusy(false) }
-      }}>确认新增 {preview.cases.length} 条用例</BrandButton></>}
-    {!!issues.length && <ul role="alert">{issues.map((s, i) => <li key={i}>{s}</li>)}</ul>}
+      }}>{mode === "overwrite" ? "确认覆盖导入" : "确认增量导入"}</Button></footer></>}
   </section>
 }

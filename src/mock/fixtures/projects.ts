@@ -114,5 +114,6 @@ export const models: Model[] = [
   { id: "lingee-deep", name: "深度", provider: "kingdee-maas", modelLevel: "deep", consumptionCoefficient: "1" },
   { id: "lingee-expert", name: "专家", provider: "kingdee-maas", modelLevel: "expert", consumptionCoefficient: "3" },
   { id: "qwen3-max", name: "Qwen3-Max", provider: "kingdee-maas", consumptionCoefficient: "1.2" },
+  { id: "lg:production/build/fast/default/default", name: "deepseek-v4.1-flash-build", provider: "kingdee-maas" },
   { id: "deepseek-v3", name: "DeepSeek-V3", provider: "kingdee-maas", consumptionCoefficient: "0.8" },
 ]

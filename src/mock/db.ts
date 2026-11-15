@@ -13,10 +13,18 @@ export const db = {
 // Restore evaluation authoring sessions into the shared session list and timeline.
 try {
   const saved = JSON.parse(localStorage.getItem("lingee.evaluation-conversations.v1") || "null")
-  for (const item of Object.values(saved?.state?.items || {}) as { session: Session; messages: Message[] }[]) {
+  for (const item of Object.values(saved?.state?.items || {}) as { session: Session; messages: Message[]; testSources?: { session?: Session; messages?: Message[] }[] }[]) {
     if (item.session?.id && Array.isArray(item.messages)) {
       db.sessions.push({ ...item.session, status: "idle" })
       db.messages.push(...item.messages)
+    }
+    for (const source of item.testSources ?? []) {
+      if (source.session?.id && !db.sessions.some(session => session.id === source.session?.id)) {
+        db.sessions.push({ ...source.session, status: "idle" })
+      }
+      for (const message of source.messages ?? []) {
+        if (source.session && !db.messages.some(existing => existing.id === message.id)) db.messages.push(message)
+      }
     }
   }
 } catch { /* Ignore unavailable or malformed browser storage. */ }

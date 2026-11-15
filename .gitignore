@@ -9,3 +9,4 @@ dist
 
 # Local Lingee runtime state
 /.lingeebuild/
+/src/mock/evaluation/sales-evaluation.local.json

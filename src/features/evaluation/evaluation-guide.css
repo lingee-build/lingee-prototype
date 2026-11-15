@@ -1,0 +1,107 @@
+.evaluation-guide-player,
+.evaluation-guide-launcher {
+  --evaluation-guide-brand: #485cfb;
+}
+.evaluation-guide-player {
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--background-base);
+  color: var(--text-strong);
+}
+.evaluation-guide-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 20px;
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--border-weak-base);
+  font-size: 14px;
+}
+.evaluation-guide-header > div {
+  display: flex;
+  gap: 8px;
+}
+.evaluation-guide-header button,
+.evaluation-guide-launcher {
+  cursor: pointer;
+  color: var(--evaluation-guide-brand);
+  font: inherit;
+  border: 0;
+  background: none;
+  padding: 5px 8px;
+  border-radius: 6px;
+}
+.evaluation-guide-header button:hover,
+.evaluation-guide-launcher:hover {
+  background: var(--surface-base-hover);
+}
+.evaluation-guide-header button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.evaluation-guide-viewport {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+.evaluation-guide-viewport iframe {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 1068px;
+  height: 980px;
+  border: 0;
+  transform-origin: center;
+}
+.evaluation-guide-dialog[data-component="dialog"] [data-slot="dialog-container"] {
+  width: 90vw;
+}
+.evaluation-guide-dialog [data-slot="dialog-content"] {
+  height: 90dvh;
+  max-height: 90dvh;
+  padding: 0;
+  overflow: hidden;
+}
+.evaluation-guide-dialog [data-slot="dialog-body"] {
+  height: 100%;
+  min-height: 0;
+  padding: 0 !important;
+  overflow: hidden;
+}
+.evaluation-guide-host {
+  height: 100dvh !important;
+  overflow: hidden !important;
+}
+.evaluation-guide-host .evaluation-guide-player {
+  height: 100%;
+}
+.evaluation-guide-launcher {
+  color: var(--icon-fill);
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  white-space: nowrap;
+  margin-right: 8px;
+  gap: 6px;
+  height: 28px;
+  font-size: 12px;
+}
+.evaluation-guide-dialog [data-slot="dialog-header"] {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.evaluation-guide-header button:focus-visible,
+.evaluation-guide-launcher:focus-visible {
+  outline: 2px solid var(--evaluation-guide-brand);
+  outline-offset: 2px;
+}

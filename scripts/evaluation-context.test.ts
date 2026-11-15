@@ -40,16 +40,16 @@ test('停止请求与完成状态分开，运行阶段从实际记录读取', ()
 
 test('报告菜单自然语言明确来源及范围，并正确触发两类重跑', () => {
   const run = { id: 'source', code: 'ER-0020', name: '发货通知单查询', status: 'completed', results: [
-    { id: 'pass', status: 'passed', verdict: 'passed' },
-    { id: 'fail', status: 'failed', verdict: 'failed' },
+    { id: 'pass', status: 'passed', verdict: 'passed', quality:{state:'质量通过',scores:[16,14,16,16,14,10,8,6],evidence:'已评分'} },
+    { id: 'fail', status: 'failed', verdict: 'failed', quality:{state:'质量未通过',scores:[0,0,0,0,0,0,0,0],evidence:'已评分'} },
     { id: 'unknown', status: 'blocked', verdict: 'unknown' },
   ] } as EvalRun
   const all = reportRerunPrompt(run, false)
   const partial = reportRerunPrompt(run, true)
   expect(all).toContain('ER-0020')
   expect(all).toContain('本次全部用例，共 3 条')
-  expect(partial).toContain('不通过及无法判定用例，共 2 条')
-  expect(partial).toContain('不通过 1 条，无法判定 1 条')
+  expect(partial).toContain('未通过或未评分用例，共 2 条')
+  expect(partial).toContain('未通过 1 条，未评分 1 条')
   expect(evaluationIntent(all)).toBe('rerun')
   expect(evaluationIntent(partial)).toBe('rerun')
   expect(reportRerunIds(run, all)).toBeUndefined()

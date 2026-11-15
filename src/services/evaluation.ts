@@ -1,3 +1,6 @@
+import { resolveEvaluationCase, type EvaluationParameters } from "./evaluation-placeholders"
+import { qualityOf } from "./evaluation-quality"
+import { reviewExecution, judge, profile } from "../mock/evaluation/review"
 import { evaluationRegex, matchEvaluationText, normalizeEvaluationText } from "./evaluation-text"
 import { create } from "zustand"
 import { persist } from "zustand/middleware"
@@ -23,17 +26,28 @@ export interface FileEvidence { path: string; exists: boolean; checkedAt?: numbe
 export interface CheckResult extends EvalCheck { fileEvidence?: FileEvidence; verdict: "passed" | "failed" | "unknown" | "na" | "skipped"; actual: string; evidence: string }
 /** 仅原型：预先编写的执行材料与语义依据，不从预期结论倒推回复或文件。 */
 export interface DemoJudgment { check: Pick<EvalCheck, "text" | "condition" | "reference">; verdict: CheckResult["verdict"]; actual: string; evidence: string }
-export interface DemoTurnEvidence { response: string; tool?: string; toolResult?: string; clarification: string; files: string[]; judgments: DemoJudgment[] }
-export interface EvalTurn { checks?: EvalCheck[]; id: string; input: string; expected: string; inherit?: boolean; attachments: EvalAttachment[]; rules: { id: string; match: string; responses: string[] }[] }
+export const clarificationFallbackReasons = {
+  no_match: "没有匹配的澄清规则",
+  timeout: "澄清匹配超时",
+  model_error: "澄清匹配调用异常",
+}
+export type ClarificationFallbackReason = keyof typeof clarificationFallbackReasons
+export interface DemoTurnEvidence { clarificationFailure?: ClarificationFallbackReason; response: string; tool?: string; toolResult?: string; clarification: string; files: string[]; judgments: DemoJudgment[] }
+export interface EvalTurn { placeholderError?: string; sourceFields?: Record<string,string>; checks?: EvalCheck[]; id: string; input: string; expected: string; inherit?: boolean; attachments: EvalAttachment[]; rules: { id: string; match: string; responses: (string | string[])[] }[] }
 export function turnsOf(c: EvalCase): EvalTurn[] {
   return c.turns?.length ? c.turns : [{ id: c.id + "-turn", input: c.input, expected: c.expected, attachments: [], rules: [] }]
 }
 export interface EvalCase {
   code?: string
   demoEvidence?: { turns: DemoTurnEvidence[]; overall: DemoJudgment[] }
+  demoQualityFailure?: boolean
   demoJudgingFailure?: "timeout" | "invalid"
   demoJudgingDelayMs?: number
   demoFailure?: ExecutionIssue
+  reviewTrace?: {scenario:string; fixed:boolean; artifact?:string}
+  difficulty?: string
+  sourceMaterials?: string[]
+  sourceProject?: string
   businessId?: string
   checks?: EvalCheck[]
   demo?: boolean
@@ -62,8 +76,10 @@ export interface EvalTurnResult extends EvalTurn {
   response: string
   evidence: string
   clarification: string
+  clarificationFallbackReason?: ClarificationFallbackReason
 }
 export interface EvalResult extends EvalCase {
+  quality?: import("./evaluation-quality").Quality
   /** 仅新运行记录计时；历史缺失不按轮次数反推。 */
   timing?: { started?: number; ended?: number }
   pointsSnapshot?: PointsAmount
@@ -84,6 +100,16 @@ export interface EvalResult extends EvalCase {
 }
 export interface CaseSnapshot { version: string; capturedAt: number; cases: EvalCase[] }
 export interface EvalRun {
+  buildReport?: import("@/vendor/build-evaluation/report-html").ReportHtmlData
+  placeholderData?: EvaluationParameters["data"]
+  mcpSource?: string
+  batchId?: string
+  foundationClarificationFallback?: boolean
+  concurrency?: number
+  caseStartOffsets?: number[]
+  recovery?: boolean
+  awaitingContinueAt?: number
+  pausedDuration?: number
   code?: string
   conversationId?: string
   caseSnapshot?: CaseSnapshot
@@ -91,6 +117,8 @@ export interface EvalRun {
   hardRuleStop?: boolean
   models?: EvalRunModels
   pointsQuery?: { status: PointsStatus; queriedAt?: number; valueComplete?: boolean; amount?: PointsAmount }
+  scoring?: {profile:string;judge:string}
+  previousQuality?: Record<string,{total:number; evidence:string}>
   objectContentSummary?: string
   checkPolicySnapshot?: string
   environment?: EvalEnvironment
@@ -109,6 +137,9 @@ export interface EvalRun {
 export const deletingEvaluationObjects = new Set<string>()
 export const evaluationObjectUnavailable = (key: string) => deletingEvaluationObjects.has(key) || !!useEvaluation.getState().deletedObjects?.[key]
 interface State {
+  salesDemoLoaded?: boolean
+  importSnapshots?: Record<string, { capturedAt: number; cases: EvalCase[] }[]>
+  reviewFixes?: Record<string,string[]>
   reportSequences?: Record<string, number>
   caseCodes?: Record<string, Record<string, string>>
   deletedObjects?: Record<string, true>
@@ -181,7 +212,7 @@ const isLocalPrototype = () => typeof window !== "undefined" && ["127.0.0.1", "l
 export const useEvaluation = create<State>()(
   persist((): State => ({ drafts: {}, cases: {}, runs: {}, error: false }), {
     name: "lingee.evaluation.v1",
-    partialize: ({ cases, runs, drafts, deletedObjects, caseCodes, reportSequences }) => ({ reportSequences, caseCodes, cases, ...packCaseVersions(restorePointQueries(runs)), drafts, deletedObjects }),
+    partialize: ({ salesDemoLoaded, importSnapshots, cases, runs, drafts, deletedObjects, caseCodes, reportSequences, reviewFixes }) => ({ salesDemoLoaded, importSnapshots, reviewFixes, reportSequences, caseCodes, cases, ...packCaseVersions(restorePointQueries(runs)), drafts, deletedObjects }),
     storage: {
       getItem: (key) => {
         try {
@@ -232,6 +263,31 @@ export const useEvaluation = create<State>()(
     },
   }),
 )
+const salesDemoKey = "skill:sale-order-management-eval-demo"
+let salesDemoLoad: Promise<void> | undefined
+
+export function loadLocalSalesEvaluation(objectId: string) {
+  if (!import.meta.env.DEV || !isLocalPrototype() || objectId !== salesDemoKey || useEvaluation.getState().salesDemoLoaded) return
+  salesDemoLoad ??= (async () => {
+    const response = await fetch("/src/mock/evaluation/sales-evaluation.local.json")
+    if (!response.ok || !response.headers.get("content-type")?.includes("application/json")) return
+    const demo: { cases: EvalCase[]; runs: EvalRun[] } = await response.json()
+    const state = useEvaluation.getState()
+    if (state.salesDemoLoaded || evaluationObjectUnavailable(objectId)) return
+    const cases = state.cases[objectId] ?? []
+    const runs = state.runs[objectId] ?? []
+    const caseCodes = { ...state.caseCodes?.[objectId] }
+    for (const item of demo.cases) if (item.code) caseCodes[item.id] ??= item.code
+    useEvaluation.setState({
+      salesDemoLoaded: true,
+      cases: { ...state.cases, [objectId]: [...cases, ...demo.cases.filter(item => !cases.some(saved => saved.id === item.id))] },
+      runs: { ...state.runs, [objectId]: [...runs, ...demo.runs.filter(item => !runs.some(saved => saved.id === item.id || saved.code === item.code))].sort((a, b) => b.started - a.started) },
+      caseCodes: { ...state.caseCodes, [objectId]: caseCodes },
+    })
+  })().catch(() => {}).finally(() => { salesDemoLoad = undefined })
+  return salesDemoLoad
+}
+
 /** 注册表保留已删除 ID，确保编码不会被重新分配。导入携带的编码不作为分配依据。 */
 export function assignCaseCodes<T extends EvalCase>(cases: T[], registry: Record<string, string>): T[] {
   let sequence = Math.max(0, ...Object.values(registry).map(code => Number(code.slice(3)) || 0))
@@ -240,14 +296,18 @@ export function assignCaseCodes<T extends EvalCase>(cases: T[], registry: Record
     return { ...item, code: registry[item.id] }
   })
 }
-export function saveCases(key: string, cases: EvalCase[]) {
+export function saveCases(key: string, cases: EvalCase[], overwrite = false) {
   if (evaluationObjectUnavailable(key)) return false
   const previous = useEvaluation.getState()
   const registry = { ...previous.caseCodes?.[key] }
   const assigned = assignCaseCodes(cases, registry)
-  useEvaluation.setState(s => ({ cases: { ...s.cases, [key]: assigned }, caseCodes: { ...s.caseCodes, [key]: registry } }))
+  const importSnapshots = overwrite ? {
+    ...previous.importSnapshots,
+    [key]: [...(previous.importSnapshots?.[key] ?? []), { capturedAt: Date.now(), cases: structuredClone(previous.cases[key] ?? []) }],
+  } : previous.importSnapshots
+  useEvaluation.setState(s => ({ cases: { ...s.cases, [key]: assigned }, caseCodes: { ...s.caseCodes, [key]: registry }, importSnapshots }))
   if (!storageWriteSucceeded) {
-    useEvaluation.setState({ cases: previous.cases, caseCodes: previous.caseCodes, error: true })
+    useEvaluation.setState({ cases: previous.cases, caseCodes: previous.caseCodes, importSnapshots: previous.importSnapshots, error: true })
     return false
   }
   useEvaluation.setState({ error: false })
@@ -258,7 +318,7 @@ export function failedRunResults(run: EvalRun) {
 }
 /** 重跑未通过的终态用例；修复仍使用 failedRunResults。 */
 export function unsuccessfulRunResults(run: EvalRun) {
-  return run.results.filter(c => ["不通过", "无法判定"].includes(verdictLabel(c)))
+  return run.results.filter(c => { if (["pending","running"].includes(c.status) || c.judging) return false; const q = qualityOf(c); return q.total == null || q.total < 60 || q.state === "环境阻塞" })
 }
 /** 历史结果保留了输入字段；旧记录可查看，但不虚构版本编号。 */
 export function runCases(run: EvalRun): EvalCase[] {
@@ -279,8 +339,8 @@ export function snapshotRunCases(run: EvalRun, ids = run.results.map(c => c.id))
 export function latestConversationRun(runs: EvalRun[], conversationId?: string) {
   return conversationId ? runs.find(run => run.conversationId === conversationId) : undefined
 }
-export function startRun(key: string, name: string, cases: EvalCase[], environment: EvalEnvironment = currentEvaluationEnvironment, models?: EvalRunModels, sourceRunId?: string, conversationId?: string) {
-  if (evaluationObjectUnavailable(key) || environment !== "sandbox" || !cases.length || useEvaluation.getState().runs[key]?.some(isActiveRun)) return undefined
+export function startRun(key: string, name: string, cases: EvalCase[], environment: EvalEnvironment = currentEvaluationEnvironment, models?: EvalRunModels, sourceRunId?: string, conversationId?: string, scheduling?: { batchId: string; concurrency: number; offsets: number[]; parameters?: EvaluationParameters }) {
+  if (evaluationObjectUnavailable(key) || environment !== "sandbox" || !cases.length || useEvaluation.getState().runs[key]?.some(r => isActiveRun(r) && (!scheduling || r.batchId !== scheduling.batchId))) return undefined
   if (models && [models.execution, models.judging].some(model => !model?.id?.trim() || !model.name?.trim() || !model.provider?.trim())) return undefined
   const registry = { ...useEvaluation.getState().caseCodes?.[key] }
   cases = assignCaseCodes(cases, registry)
@@ -297,7 +357,16 @@ export function startRun(key: string, name: string, cases: EvalCase[], environme
   const existing = records.find(run => run.caseSnapshot && caseContentKey(run.caseSnapshot.cases) === content)?.caseSnapshot
   const snapshot = existing ?? { version: `V${Math.max(0, ...records.map(run => Number(run.caseSnapshot?.version.slice(1)) || 0)) + 1}`, capturedAt: Date.now(), cases: structuredClone(fullCases) }
   const sequence = Math.max(useEvaluation.getState().reportSequences?.[key] || 0, ...records.map(r => Number(r.code?.slice(3)) || 0)) + 1
+  const fixes = useEvaluation.getState().reviewFixes?.[key] || []
+  const started = Date.now()
+  const parameters = scheduling?.parameters
   const run: EvalRun = {
+    placeholderData: parameters?.data,
+    mcpSource: parameters?.mcpSource,
+    batchId: scheduling?.batchId, foundationClarificationFallback: true, concurrency: scheduling?.concurrency ?? 1, caseStartOffsets: scheduling?.offsets,
+    scoring: source?.scoring || {profile, judge},
+    objectContentSummary: name + (fixes.length ? " · 已确认修复的演示版本" : " · 当前保存的演示版本"),
+    previousQuality: source && Object.fromEntries(source.results.flatMap(r => { const q=qualityOf(r); return q.total == null ? [] : [[r.id,{total:q.total,evidence:q.evidence}]] })),
     code: `ER-${String(sequence).padStart(4, "0")}`,
     id: crypto.randomUUID(),
     caseSnapshot: snapshot,
@@ -310,9 +379,9 @@ export function startRun(key: string, name: string, cases: EvalCase[], environme
     hardRuleStop: true,
     checkPolicySnapshot: evaluationCheckPolicy,
     ruleSnapshot: "任一标准不通过，用例不通过；无不通过但存在无法判定，或所有标准均不适用时，用例无法判定；执行完整且所有适用标准通过，用例通过；执行异常或停止时保留已确定的不通过，否则无法判定。",
-    started: Date.now(),
+    started,
     status: "running",
-    results: cases.map((c) => ({ ...structuredClone(c), timing: {}, overallJudgingPoints: c.demo ? 0 : undefined, verdict: undefined, execution: undefined, checkResults: undefined, roundResults: structuredClone(turnsOf(c)).map((turn, i) => ({ ...turn, points: c.demo ? { execution: 0, judging: 0 } : undefined, checkResults: undefined, expected: i && turn.inherit ? turnsOf(c)[0].expected : turn.expected, status: "pending", responseRecorded: false, response: "", evidence: "", clarification: "" })), status: "pending", responseRecorded: false, response: "", evidence: "", tool: "" })),
+    results: cases.map(c => reviewExecution(key,c,fixes.includes(c.businessId || ""))).map(c => parameters ? resolveEvaluationCase(c, parameters.data, started, scheduling?.batchId ?? "", parameters.reuse ? source?.results.find(item => item.id === c.id) : undefined) : c).map((c) => ({ ...structuredClone(c), timing: {}, overallJudgingPoints: c.demo ? 0 : undefined, verdict: undefined, execution: undefined, checkResults: undefined, roundResults: structuredClone(turnsOf(c)).map((turn, i) => ({ ...turn, points: c.demo ? { execution: 0, judging: 0 } : undefined, checkResults: undefined, expected: i && turn.inherit ? turnsOf(c)[0].expected : turn.expected, status: "pending", responseRecorded: false, response: "", evidence: "", clarification: "" })), status: "pending", responseRecorded: false, response: "", evidence: "", tool: "" })),
   }
   useEvaluation.setState((s) => ({ reportSequences: { ...s.reportSequences, [key]: sequence }, runs: { ...s.runs, [key]: [run, ...records] } }))
   if (!storageWriteSucceeded) {
@@ -321,6 +390,53 @@ export function startRun(key: string, name: string, cases: EvalCase[], environme
   }
   useEvaluation.setState({ error: false })
   return run.id
+}
+/** 多模型分别成报告，批次共享 1–5 个执行槽位；原型按示例时长排队。 */
+export function startRunBatch(key: string, name: string, cases: EvalCase[], environment: EvalEnvironment, models: EvalRunModels[], concurrency = 1, sourceRunId?: string, conversationId?: string, parameters?: EvaluationParameters) {
+  if (!models.length || !Number.isInteger(concurrency) || concurrency < 1 || concurrency > 5 || useEvaluation.getState().runs[key]?.some(isActiveRun)) return undefined
+  const before = useEvaluation.getState()
+  const batchId = crypto.randomUUID()
+  const lanes = Array<number>(concurrency).fill(0)
+  const ids: string[] = []
+  for (const model of models) {
+    const offsets = cases.map(c => {
+      const lane = lanes.indexOf(Math.min(...lanes))
+      const offset = lanes[lane]
+      lanes[lane] += (c.outcome === "blocked" ? 1 : turnsOf(c).length) * 2400 + (c.demoJudgingDelayMs ?? 100)
+      return offset
+    })
+    const id = startRun(key, name, cases, environment, model, sourceRunId, conversationId, {batchId, concurrency, offsets, parameters})
+    if (!id) { useEvaluation.setState({runs: before.runs, reportSequences: before.reportSequences, caseCodes: before.caseCodes}); return undefined }
+    ids.push(id)
+  }
+  return ids
+}
+/** 仅恢复缺失质量评分，新报告引用原执行证据，来源报告保持不变。 */
+export function recoverReviewQuality(key:string, id:string) {
+  const records=useEvaluation.getState().runs[key] || []
+  const run=records.find(r=>r.id===id)
+  if (!run || run.status!=="completed" || records.some(isActiveRun) || records.some(r=>r.recovery && r.sourceRunId===id)) return undefined
+  let recovered=false
+  const results=structuredClone(run.results).map(r=>{
+    if (!r.demoQualityFailure || !r.reviewTrace || r.quality?.state!=="评分未完成") return r
+    const quality=qualityOf({...r,quality:undefined,demoQualityFailure:false})
+    if (quality.total===undefined) return r
+    recovered=true
+    return {...r,quality}
+  })
+  if (!recovered) return undefined
+  const sequence = Math.max(useEvaluation.getState().reportSequences?.[key] || 0, ...records.map(r => Number(r.code?.slice(3)) || 0)) + 1
+  const next: EvalRun = {...structuredClone(run), id:crypto.randomUUID(), code:`ER-${String(sequence).padStart(4,"0")}`, batchId:crypto.randomUUID(), sourceRunId:id, recovery:true, started:Date.now(), ended:Date.now(), results}
+  useEvaluation.setState(s=>({reportSequences:{...s.reportSequences,[key]:sequence},runs:{...s.runs,[key]:[next,...records]}}))
+  if (!storageWriteSucceeded) { useEvaluation.setState({runs:{...useEvaluation.getState().runs,[key]:records}, error:true}); return undefined }
+  return next.id
+}
+/** 演示进程恢复后等待用户继续，不丢失已经取得的证据。 */
+export function simulateAwaitingContinue(key: string, id: string) {
+  useEvaluation.setState(s=>({runs:{...s.runs,[key]:(s.runs[key] || []).map(r=>r.id===id && ["running","judging"].includes(r.status) && !r.awaitingContinueAt ? {...r,awaitingContinueAt:Date.now()} : r)}}))
+}
+export function continueRun(key: string, id: string) {
+  useEvaluation.setState(s=>({runs:{...s.runs,[key]:(s.runs[key] || []).map(r=>r.id===id && r.awaitingContinueAt && !r.stopRequestedAt ? {...r,pausedDuration:(r.pausedDuration || 0)+Date.now()-r.awaitingContinueAt,awaitingContinueAt:undefined} : r)}}))
 }
 /** 请求停止与执行器确认分开；本地模拟器在下一次推进时确认。 */
 export function requestCancelRun(key: string, id: string, demoStopUnconfirmed = false) {
@@ -375,20 +491,22 @@ export function advanceRuns() {
     Object.entries(state.runs).map(([key, list]) => [
       key,
       list.map((run) => {
-        if (run.status !== "running" && run.status !== "judging") return run
-        const elapsed = Date.now() - run.started
+        if (run.awaitingContinueAt || run.status !== "running" && run.status !== "judging") return run
+        const elapsed = Date.now() - run.started - (run.pausedDuration || 0)
         let offset = 0
         let completedAt = run.started
-        const results = run.results.map((item): EvalResult => {
+        const results = run.results.map((item, itemIndex): EvalResult => {
           const rounds = item.roundResults
           const count = rounds?.length || 1
-          const beginning = offset
-          offset += count * 2400
-          let completion = item.demo && item.outcome === "blocked" ? beginning + 2400 : offset + (item.demoJudgingDelayMs ?? 100)
+          const beginning = run.caseStartOffsets?.[itemIndex] ?? offset
+          offset = beginning + count * 2400
+          const fallback = item.demoEvidence?.turns[0]?.clarificationFailure ?? (item.demoFailure === "clarification_unmatched" ? "no_match" : undefined)
+          const simulatedFallback = run.foundationClarificationFallback && fallback
+          let completion = item.demo && item.outcome === "blocked" && !simulatedFallback ? beginning + 2400 : offset + (item.demoJudgingDelayMs ?? 100)
           if (elapsed < beginning) { completedAt = Math.max(completedAt, run.started + completion); return item }
           const timing = item.timing ? { started: item.timing.started ?? run.started + beginning, ended: elapsed >= completion ? item.timing.ended ?? run.started + completion : undefined } : undefined
           if (timing?.started !== item.timing?.started || timing?.ended !== item.timing?.ended) changed = true
-          if (item.demo && item.outcome === "blocked" && elapsed >= beginning + 2400) {
+          if (item.demo && item.outcome === "blocked" && !simulatedFallback && elapsed >= beginning + 2400) {
             completedAt = Math.max(completedAt, run.started + completion)
             const issue = item.demoFailure || "tool_unavailable"
             const detail = executionIssues[issue]
@@ -400,7 +518,7 @@ export function advanceRuns() {
                 responseRecorded: false, response: "", tool: "", clarification: !index && issue === "clarification_unmatched" ? "实际追问：请确认查询所用的核算组织\n未找到匹配的自动回复" : "",
                 evidence: index ? "前序轮次执行异常，本轮未执行" : evidence, checkResults: completeStoppedChecks(checksOf(turn), turn.checkResults, index ? "前序轮次执行异常，本轮未执行，缺少所需证据，无法判定。" : evidence) })) }
           }
-          let status: EvalResult["status"] = elapsed < offset ? "running" : item.outcome
+          let status: EvalResult["status"] = elapsed < offset ? "running" : simulatedFallback ? "passed" : item.outcome
           let hardFailedAt = -1
           const roundResults = rounds?.map((turn, index): EvalTurnResult => {
             if (hardFailedAt >= 0) {
@@ -409,14 +527,22 @@ export function advanceRuns() {
               return { ...turn, status: "skipped", response: "", responseRecorded: false, clarification: "", tool: undefined, toolResult: undefined, points: item.demo ? { execution: 0, judging: 0 } : undefined,
                 evidence: "前序轮次硬规则不通过，本轮未执行。", checkResults: skippedChecks(checksOf(turn), "前序轮次硬规则不通过，本轮未执行。") }
             }
-            const turnStatus = elapsed < beginning + index * 2400 ? "pending" : elapsed < beginning + (index + 1) * 2400 ? "running" : item.outcome
+            const turnStatus = elapsed < beginning + index * 2400 ? "pending" : elapsed < beginning + (index + 1) * 2400 ? "running" : simulatedFallback ? "passed" : item.outcome
+            if (turn.placeholderError && turnStatus !== "pending" && turnStatus !== "running") {
+              if (turn.status !== "skipped") changed = true
+              return { ...turn, status: "skipped", evidence: turn.placeholderError,
+                checkResults: skippedChecks(checksOf(turn), turn.placeholderError) }
+            }
             if (turnStatus === turn.status) {
               if (run.hardRuleStop && hasHardFailure(turn.checkResults || [])) hardFailedAt = index
               return turn
             }
             changed = true
             const finished = !["running", "pending"].includes(turnStatus)
-            const trace = item.demo ? item.demoEvidence?.turns[index] : undefined
+            const recorded = item.demo ? item.demoEvidence?.turns[index] : undefined
+            const trace = simulatedFallback && index === 0
+              ? { response: "", files: [], judgments: [], clarification: "实际追问：请确认查询所用的核算组织", clarificationFailure: fallback }
+              : recorded
             const evaluated = finished ? evaluateChecks(checksOf(turn, index && turn.inherit ? rounds?.[0].expected : undefined), item, run.started + beginning + (index + 1) * 2400, trace, false, !!run.hardRuleStop) : undefined
             if (run.hardRuleStop && hasHardFailure(evaluated || [])) hardFailedAt = index
             return { ...turn, status: hardFailedAt === index ? "failed" : turnStatus,
@@ -424,10 +550,15 @@ export function advanceRuns() {
               tool: finished ? trace?.tool : undefined,
               toolResult: finished ? trace?.toolResult : undefined,
               checkResults: evaluated,
-              responseRecorded: finished && !!trace,
+              responseRecorded: finished && !!trace?.response,
               response: finished ? trace?.response ?? "" : "",
               evidence: finished ? trace?.toolResult || "未取得可核验的执行证据。" : "",
-              clarification: finished ? trace?.clarification || "未记录实际澄清过程。" : "" }
+              clarificationFallbackReason: finished && run.foundationClarificationFallback ? trace?.clarificationFailure : undefined,
+              clarification: finished
+                ? trace?.clarificationFailure && run.foundationClarificationFallback
+                  ? `${trace.clarification || "实际追问"}\n${clarificationFallbackReasons[trace.clarificationFailure]}，已提交空答案并继续执行（模拟）。`
+                  : trace?.clarification || "未记录实际澄清过程。"
+                : "" }
           })
           if (hardFailedAt >= 0) {
             offset = beginning + (hardFailedAt + 1) * 2400
@@ -439,18 +570,24 @@ export function advanceRuns() {
           if (status !== item.status) changed = true
           const judging = hardFailedAt < 0 && status !== "running" && elapsed < offset + (item.demoJudgingDelayMs ?? 100)
           if (judging !== !!item.judging) changed = true
-          const finalTrace = item.demo ? item.demoEvidence?.turns[hardFailedAt >= 0 ? hardFailedAt : count - 1] : undefined
+          const lastRound = hardFailedAt >= 0 ? hardFailedAt : count - 1
+          const finalTrace = item.demo && !rounds?.[lastRound]?.placeholderError ? item.demoEvidence?.turns[lastRound] : undefined
           const checkResults = hardFailedAt >= 0 ? skippedChecks(item.checks || [], "本轮硬规则不通过，当前用例结束，整体判定跳过。") : status === "running" || judging ? undefined : item.checks?.length ? evaluateChecks(item.checks, item, run.started + offset, finalTrace, true, !!run.hardRuleStop) : []
+          const allUnsent = !!roundResults?.length && roundResults.every(turn => turn.placeholderError)
+          if (allUnsent && status !== "running") status = "skipped"
           const allChecks = [...(checkResults || []), ...(roundResults || []).flatMap(t => t.checkResults || [])]
           return { ...item, timing, roundResults, status, checkResults, judging,
             overallJudgingPoints: item.demo ? status === "running" ? 0 : (checkResults || []).filter(c => checkKind(c) === "natural" && c.verdict !== "skipped").length * 0.08 : undefined,
-            execution: status === "running" ? undefined : item.outcome === "blocked" ? "error" : "completed",
+            execution: status === "running" || allUnsent ? undefined : item.outcome === "blocked" && !simulatedFallback ? "error" : "completed",
             verdict: status === "running" || judging ? undefined : aggregateChecks(allChecks),
             responseRecorded: status !== "running" && !!finalTrace,
             response: status === "running" ? "" : finalTrace?.response ?? "",
             evidence: status === "running" ? "" : finalTrace?.toolResult || "未取得可核验的执行证据。",
             tool: status === "running" ? "" : finalTrace?.tool || "" }
         })
+        for (const r of results) {
+          if (!r.quality && !r.judging && !["pending","running","skipped","cancelled"].includes(r.status)) r.quality=qualityOf(r)
+        }
         const executed = results.every((c) => c.status !== "pending" && c.status !== "running")
         const done = executed && results.every(c => !c.judging)
         const nextStatus = done ? "completed" as const : executed ? "judging" as const : "running" as const
@@ -494,7 +631,7 @@ export function evaluateChecks(checks: EvalCheck[], item: EvalCase, checkedAt: n
     return checks.map(c => results.find(r => r.id === c.id)!)
   }
   return checks.map(c => {
-    if (!trace) return { ...c, verdict: "unknown", actual: "未取得可核验的执行结果。", evidence: item.demo ? "旧版示例未记录执行材料，请添加新版示例后运行；历史记录保持不变。" : "缺少回复、工具返回或产物证据，暂无法判定。" }
+    if (!trace) return { ...c, verdict: "unknown", actual: "未取得可核验的执行结果。", evidence: item.demo ? "此示例未记录执行材料，无法核对实际表现。" : "缺少回复、工具返回或产物证据，暂无法判定。" }
     if (item.demoJudgingFailure && checkKind(c) === "natural") return { ...c, verdict: "unknown", actual: item.demoJudgingFailure === "timeout" ? "判定服务超时，未取得有效判定。" : "判定服务返回无效结果，未取得有效判定。", evidence: item.demoJudgingFailure === "timeout" ? "判定服务超时，重试结束后仍失败，无法判定；未重新执行业务。" : "判定服务返回无效结果，重试结束后仍无效，无法判定；未重新执行业务。" }
     const kind = checkKind(c)
     if (kind === "keyword" || kind === "regex") {
@@ -611,13 +748,14 @@ export function caseValidation(value: EvalCase): string {
   const turns = turnsOf(value)
   for (const [i, turn] of turns.entries()) {
     if (!turn.input.trim()) return `第 ${i + 1} 轮用户输入必填，不能仅包含空白。`
-    if (turn.rules.some(r => !r.match.trim() || !r.responses.length || r.responses.some(v => !v.trim()))) return `第 ${i + 1} 轮澄清追问和自动回复不能为空。`
+    if (turn.rules.some(r => !r.match.trim() || !r.responses.length || r.responses.some(v => Array.isArray(v) ? !v.length || v.some(option => !option.trim()) : !v.trim()))) return `第 ${i + 1} 轮澄清追问和自动回复不能为空。`
   }
   const checks = [...(value.checks || []), ...turns.flatMap(t => checksOf(t))]
   if (!checks.length) return "请至少添加一条评测标准。"
   return checks.map(checkValidation).find(Boolean) || ""
 }
 
-export function clarificationResponses(responses: string[]): string {
-  return responses.length > 1 ? responses.map((answer, i) => `问题 ${i + 1}：${answer}`).join("\n") : responses[0] || ""
+export function clarificationResponses(responses: (string | string[])[]): string {
+  const labels = responses.map(answer => Array.isArray(answer) ? answer.join(" & ") : answer)
+  return labels.length > 1 ? labels.map((answer, i) => `问题 ${i + 1}：${answer}`).join("\n") : labels[0] || ""
 }

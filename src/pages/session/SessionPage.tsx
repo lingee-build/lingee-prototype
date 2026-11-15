@@ -1,13 +1,14 @@
+import { sessionService } from "@/services/session"
 import { SessionPromptDock } from "./composer/SessionPromptDock"
 import { useEvaluation } from "@/services/evaluation"
 import { evaluationRepairTarget, useEvaluationRepairs } from "@/services/evaluation-repair"
 import { useNavigate } from "react-router"
-import { RenderCard, Button } from "@/ui"
+import { RenderCard, Button, showToast } from "@/ui"
 import { EvaluationSession } from "@/features/evaluation/EvaluationSession"
-import { useEvaluationConversations } from "@/services/evaluation-conversations"
+import { saveEvaluationConversation, useEvaluationConversations } from "@/services/evaluation-conversations"
 import { procurementPrompt } from "@/services/procurement"
 import { guardUpgrade, legacySessions, useUpgradeStore } from "@/features/artifact-upgrade/UpgradeGate"
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { Navigate, useParams, useSearchParams } from "react-router"
 import { cx } from "@/lib/cx"
 import { useT } from "@/i18n"
@@ -85,6 +86,43 @@ export function Component() {
     if (item) useEvaluationRepairs.setState(s => ({ items: { ...s.items, [sessionId]: { ...item, session, messages: messages[sessionId] } } }))
   }, [sessionId, session, messages])
   const loaded = sessionId ? messages[sessionId] : undefined
+  const anchor = search.get("message")
+  useEffect(() => {
+    if (!anchor || !loaded?.some(message => message.id === anchor)) return
+    const frame = requestAnimationFrame(() =>
+      document.querySelector(`[data-message="${CSS.escape(anchor)}"]`)?.scrollIntoView({ block: "center" }))
+    return () => cancelAnimationFrame(frame)
+  }, [anchor, loaded])
+
+  const openingEvaluation = useRef(false)
+  async function openEvaluationFromTest(anchorMessageId: string) {
+    if (!session?.localTest || openingEvaluation.current) return
+    const objectId = session.localTest.objectId
+    const [kind, id] = objectId.split(":")
+    const object = kind === "skill" ? devStore.skills.find(item => item.id === id)?.displayName : devStore.agents.find(item => item.id === id)?.name
+    if (!object) return
+    openingEvaluation.current = true
+    let createdId: string | undefined
+    try {
+      const existing = Object.values(useEvaluationConversations.getState().items).find(value =>
+        value.objectId === objectId && value.testSources?.some(source => source.sessionId === session.id))
+      const evaluation = existing?.session ?? await sessionService.create(projectId, `评测 ${object}`)
+      if (!existing) createdId = evaluation.id
+      const messages = loaded?.map(message => ({
+        ...message, parts: message.parts.filter(part => part.type === "text"),
+      }))
+      const source = { sessionId: session.id, projectId, title: session.title, anchorMessageId, session, messages }
+      const sources = [...(existing?.testSources ?? []).filter(item => item.sessionId !== session.id), source]
+      saveEvaluationConversation({ ...(existing ?? { session: evaluation, objectId, objectName: object, messages: [], request: "", rule: "", files: [], drafts: [], adopted: {} }), testSources: sources })
+      useSync.getState().apply({ type: "session.updated", session: evaluation })
+      navigate(`/dev/${kind}/${encodeURIComponent(id)}/evaluation?conversation=${encodeURIComponent(evaluation.id)}`)
+    } catch (error) {
+      if (createdId) await sessionService.remove(createdId)
+      showToast({ variant: "error", title: error instanceof Error ? error.message : "无法打开评测会话" })
+    } finally {
+      openingEvaluation.current = false
+    }
+  }
 
   useEffect(() => {
     if (!sessionId && search.get("demo") === "procurement") setDraft(procurementPrompt)
@@ -138,6 +176,7 @@ export function Component() {
             {session ? (
               loaded ? (
                 <MessageTimeline session={session} messages={loaded}
+                  onEvaluate={session.localTest ? id => void openEvaluationFromTest(id) : undefined}
                   titleActions={repairTarget ? <div className={previewOpen ? "" : "pr-28"}><Button variant="ghost" className="eval-session-action" icon="arrow-left" onClick={() => returnUrl && navigate(returnUrl)}>返回评测</Button></div> : undefined}
                   titleDescription={repairTarget ? <div className="eval-repair-reference">
                     <span>本次修复依据：{repairRun ? <button type="button" className="text-text-brand hover:underline cursor-pointer" onClick={openRepairReport} aria-label={`查看报告 ${repairRun.code}`}>{repairRun.code}</button> : "报告不可用"}</span>
@@ -158,7 +197,9 @@ export function Component() {
               {sessionId ? (
                 <Composer
                   defaultSkill={repairTarget?.objectType === "skill" ? "skill-builder" : repairTarget?.objectType === "agent" ? "agent-builder" : undefined}
-                  placeholder={repairTarget ? "分析失败原因，或补充你的修复要求…" : undefined}
+                  placeholder={repairTarget ? "分析失败原因，或补充你的修复要求…" : session?.localTest
+                    ? t(session.localTest.objectId.startsWith("skill:") ? "prompt.placeholder.localTestSkill" : "prompt.placeholder.localTestAgent")
+                    : undefined}
                   projectId={projectId}
                   sessionId={sessionId}
                   working={session?.status === "running"}

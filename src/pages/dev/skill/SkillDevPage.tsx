@@ -107,7 +107,7 @@ export function SkillDevPage() {
         />
       ))
     },
-    onLocalTest: (skill) => startSession(`使用技能「${skill.displayName}」做一次本地测试`, skill.projectId),
+    onLocalTest: (skill) => startSession(`/${skill.name} `, skill.projectId, { objectId: `skill:${skill.id}`, name: skill.displayName }),
     onCloudTest: (skill) => showToast({ variant: "success", title: `${skill.displayName}：${t("kcode.skillPreview.action.test")}` }),
     onCheck: (skill) => openBatch({ mode: "check", skills: [skill], skipSelect: true }),
     onSubmit: (skill) => {

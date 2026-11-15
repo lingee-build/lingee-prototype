@@ -1,9 +1,9 @@
 import JSZip from "jszip"
 import ExcelJS from "exceljs"
-import { caseValidation, checkValidation, checkOperators, type EvalCase, type EvalTurn, type EvalCheck } from "./evaluation"
-export const importHeaders = ["用例编号", "用例名称", "作用范围", "对话轮次", "用户输入", "澄清回复", "标准类型", "检查方式", "评测标准", "会话附件", "附件"]
+import { type EvalCase, type EvalTurn } from "./evaluation"
+export const importHeaders = ["用例ID", "对话脚本（逐轮）", "每轮关键验证点（标准答案）", "澄清规则", "turn附件", "session附件"]
 export interface ImportIssue { row: number; field: string; message: string }
-export interface ImportPreview { cases: EvalCase[]; errors: ImportIssue[]; references: { row: number; field: string; names: string[]; caseId: string; turnId?: string }[] }
+export interface ImportPreview { cases: EvalCase[]; errors: ImportIssue[]; ignored: { field: string; rows: number[] }[]; references: { row: number; field: string; names: string[]; caseId: string; turnId?: string }[] }
 export function parseClarification(value: string): EvalTurn["rules"] {
   if (!value.trim()) return []
   const data: unknown = JSON.parse(value)
@@ -11,13 +11,17 @@ export function parseClarification(value: string): EvalTurn["rules"] {
   return data.map(item => {
     if (!item || typeof item.matchDescription !== "string" || !item.matchDescription.trim()) throw Error("matchDescription 须为非空字符串")
     const responses = typeof item.response === "string" ? [item.response] : item.response
-    if (!Array.isArray(responses) || !responses.length || responses.some(v => typeof v !== "string" || !v.trim())) throw Error("response 须为非空字符串或非空字符串数组（多个问题的顺序答案）")
+    if (!Array.isArray(responses) || !responses.length || responses.some(v => Array.isArray(v) ? !v.length || v.some(option => typeof option !== "string" || !option.trim()) : typeof v !== "string" || !v.trim())) throw Error("response 须为非空文本或按题序填写的数组，多选题使用嵌套文本数组")
     return { id: crypto.randomUUID(), match: item.matchDescription, responses }
   })
 }
 /** 模板使用合法的 x: 命名空间前缀；ExcelJS 需要无前缀的 SpreadsheetML 标签。仅规范标签，不改变单元格文本。 */
 export async function loadEvaluationWorkbook(data: ArrayBuffer) {
+  if(data.byteLength>20*1024*1024) throw Error("用例文件不能超过 20MB")
   const zip = await JSZip.loadAsync(data)
+  const entries=Object.values(zip.files)
+  if(entries.length>10000 || entries.reduce((n,e)=>n+((e as unknown as {_data?:{uncompressedSize?:number}})._data?.uncompressedSize||0),0)>40*1024*1024) throw Error("解压后的用例文件过大")
+  if(entries.some(e=>/vbaProject|externalLinks/i.test(e.name))) throw Error("不支持宏或外部链接")
   for (const entry of Object.values(zip.files)) {
     if (!entry.name.endsWith(".xml") || !entry.name.startsWith("xl/")) continue
     let xml = await entry.async("string")
@@ -33,92 +37,67 @@ export async function loadEvaluationWorkbook(data: ArrayBuffer) {
 }
 export async function parseEvaluationWorkbook(data: ArrayBuffer): Promise<ImportPreview> {
   const book = await loadEvaluationWorkbook(data)
-  const sheet = book.getWorksheet("评测用例")
-  const result: ImportPreview = { cases: [], errors: [], references: [] }
-  const error = (row: number, col: number, message: string) => result.errors.push({ row, field: importHeaders[col - 1] || "表结构", message })
-  if (!sheet) { error(1, 0, "缺少“评测用例”工作表，请下载模板"); return result }
-  if (book.worksheets.some(s => !["评测用例", "填写说明"].includes(s.name) && s.actualRowCount)) error(1, 0, "仅支持评测用例数据表与填写说明，请勿将标准或澄清回复另放工作表")
-  if (sheet.rowCount > 10001) { error(1, 0, "最多支持 10000 行数据"); return result }
-  const value = (row: number, col: number) => {
-    const cell = sheet.getCell(row, col)
-    const master = cell.isMerged ? cell.master : cell
-    const v = master.value
-    if (v == null) return ""
-    if (typeof v === "string" || typeof v === "number") return String(v)
-    error(row, col, "不支持公式、链接或其他复杂单元格值，请填写文本或数字")
-    return ""
-  }
-  for (let c = 1; c <= 11; c++) if (value(1, c) !== importHeaders[c - 1]) error(1, c, `表头须为“${importHeaders[c - 1]}”`)
-  if (sheet.getRow(1).values && sheet.getRow(1).cellCount > 11) error(1, 0, "模板仅支持固定的 11 列，请移除额外表头")
-  if (result.errors.length) return result
-  const rows: string[][] = []
-  for (let r = 2; r <= sheet.rowCount; r++) rows.push(Array.from({ length: 11 }, (_, c) => value(r, c + 1)))
-  for (const range of sheet.model.merges || []) {
-    const m = range.match(/^([A-Z]+)(\d+):([A-Z]+)(\d+)$/)
-    if (!m) continue
-    const [, first, top, last, bottom] = m
-    const col = first.charCodeAt(0) - 64, start = Number(top), end = Number(bottom)
-    if (first !== last || ![1, 2, 3, 4, 5, 6, 10, 11].includes(col) || start < 2) { error(start, col, "仅允许分组字段在数据区纵向合并，标准字段不得合并"); continue }
-    const groups = rows.slice(start - 2, end - 1).map(row => [row[0], ...([1, 2, 10].includes(col) ? [] : [row[2], row[3]])].join("\u0000"))
-    if (new Set(groups).size > 1) error(start, col, "合并范围跨越不同用例或轮次")
-  }
-  const groups = new Map<string, { item: EvalCase; rows: Map<number, { turn: EvalTurn; signature: string }>; session: string; overall: boolean; row: number }>()
-  let lastId = ""
-  const seen = new Set<string>()
-  rows.forEach((row, i) => {
-    const r = i + 2
-    if (!row.some(v => v.trim())) return
-    const [id, name, scope, round, input, clarification, type, method, standard, session, attachment] = row
-    if (!id.trim()) { error(r, 1, "用例编号不能为空；普通空白不会继承上一行"); return }
-    if (id !== lastId && seen.has(id)) error(r, 1, "同一用例必须连续填写")
-    seen.add(id); lastId = id
-    let group = groups.get(id)
-    if (!group) {
-      const item: EvalCase = { id: crypto.randomUUID(), businessId: id, name, input: "", expected: "", source: "none", outcome: "passed", turns: [], checks: [], attachments: [], demo: false }
-      group = { item, rows: new Map(), session, overall: false, row: r }; groups.set(id, group); result.cases.push(item)
-      if (session.trim()) result.references.push({ row: r, field: "会话附件", names: session.split(/\r?\n/).map(v => v.trim()).filter(Boolean), caseId: item.id })
+  const result: ImportPreview = { cases: [], errors: [], ignored: [], references: [] }
+  const fail = (row: number, field: string, message: string) => result.errors.push({ row, field, message })
+  const sheet = book.getWorksheet("评测用例总表") || book.getWorksheet("问题集")
+  if (!sheet || (sheet.rowCount > 10001 || sheet.columnCount>256)) { fail(1, "表结构", sheet ? "最多支持 10000 行数据" : "缺少“评测用例总表”，请使用共用问题集模板"); return result }
+  const headers = new Map<string, number>()
+  const unsupported: { field: string; index: number; rows: number[] }[] = []
+  for (let index = 1; index <= sheet.columnCount; index++) {
+    const cell = sheet.getRow(1).getCell(index)
+    const h = cell.text.trim()
+    if (!importHeaders.includes(h)) {
+      unsupported.push({ field: h || cell.address.replace(/1$/, ""), index, rows: [] })
+      continue
     }
-    if (name !== group.item.name || session !== group.session) error(r, 2, "同一用例的名称、会话附件须一致（可纵向合并）")
-    if (!name.trim()) error(r, 2, "用例名称不能为空")
-    let turn: EvalTurn | undefined
-    if (scope === "整体") {
-      group.overall = true
-      if ([round, input, clarification, attachment].some(v => v.trim())) error(r, 3, "整体标准的对话轮次、用户输入、澄清回复和附件须留空")
-    } else if (scope === "轮次") {
-      if (group.overall) error(r, 3, "整体标准须放在该用例末尾")
-      const number = Number(round)
-      if (!/^[1-9]\d*$/.test(round)) { error(r, 4, "对话轮次须为从 1 开始的连续正整数"); return }
-      const signature = JSON.stringify([input, clarification, attachment])
-      const previous = group.rows.get(number)
-      if (previous) {
-        if (previous.signature !== signature) error(r, 5, "同一轮次的用户输入、澄清回复和附件须一致")
-        if (number !== group.rows.size) error(r, 4, "同一轮次须连续填写")
-        turn = previous.turn
-      } else {
-        if (number !== group.rows.size + 1) error(r, 4, "对话轮次须从 1 连续递增")
-        turn = { id: crypto.randomUUID(), input, expected: "", checks: [], rules: [], attachments: [] }
-        if (!input.trim()) error(r, 5, "用户输入不能为空")
-        try { turn.rules = parseClarification(clarification) } catch (e) { error(r, 6, e instanceof Error ? e.message : "JSON 格式错误") }
-        group.rows.set(number, { turn, signature }); group.item.turns!.push(turn)
-        if (attachment.trim()) result.references.push({ row: r, field: "附件", names: attachment.split(/\r?\n/).map(v => v.trim()).filter(Boolean), caseId: group.item.id, turnId: turn.id })
-      }
-    } else { error(r, 3, "作用范围须为“轮次”或“整体”"); return }
-    if (!type && !method && !standard && turn) return
-    const kind = ({ 语义判断: "natural", 关键词匹配: "keyword", 正则匹配: "regex", 文件存在性: "file" } as const)[type as "语义判断" | "关键词匹配" | "正则匹配" | "文件存在性"]
-    if (!kind) { error(r, 7, "标准类型无效"); return }
-    const operator = (Object.keys(checkOperators) as (keyof typeof checkOperators)[]).find(k => checkOperators[k] === method)
-    const allowed = kind === "keyword" ? ["all", "any", "none"] : kind === "regex" ? ["regex", "not_regex"] : ["exists", "not_exists"]
-    if (kind === "natural" ? !!method : !operator || !allowed.includes(operator)) error(r, 8, "检查方式与标准类型不匹配；语义判断须留空")
-    const check: EvalCheck = { id: crypto.randomUUID(), kind, operator, text: standard, required: true, files: [] }
-    const issue = checkValidation(check); if (issue) error(r, 9, issue)
-    ;(turn ? turn.checks! : group.item.checks!).push(check)
-  })
-  for (const { item, row } of groups.values()) {
-    item.input = item.turns?.[0]?.input || ""
-    if (!item.turns?.length) error(row, 4, "至少需要一个业务轮次")
-    const issue = caseValidation(item); if (issue) error(row, 9, issue)
+    if (headers.has(h)) fail(1, h, "列名重复")
+    headers.set(h, index)
   }
-  if (!result.cases.length && !result.errors.length) error(2, 1, "没有可导入用例")
+  for (const h of importHeaders) if (!headers.has(h)) fail(1, h, "模板缺少此列")
+  if (result.errors.length) return result
+  const seen = new Set<string>()
+  let current: EvalCase | undefined
+  for (let r = 2; r <= sheet.rowCount; r++) {
+    const row = sheet.getRow(r)
+    const value = (h: string) => {
+      if(!headers.has(h)) return ""
+      const cell = row.getCell(headers.get(h)!)
+      if (cell.isMerged && cell.master.address !== cell.address) return ""
+      if (cell.value == null) return ""
+      if (!["string","number"].includes(typeof cell.value)) { fail(r,h,"请填写文本或数字，不能使用公式"); return "" }
+      return String(cell.value).trim()
+    }
+    const [id,input,expected,clarification,turnFiles,sessionFiles] = importHeaders.map(value)
+    if (id === '不清楚每一列含义时，请查看"模版规则说明"sheet' && !input) continue
+    for (const column of unsupported) {
+      const cell = row.getCell(column.index)
+      if (cell.isMerged && cell.master.address !== cell.address) continue
+      if (cell.value != null && (typeof cell.value !== "string" || cell.value.trim())) column.rows.push(r)
+    }
+    if (![id,input,expected,clarification,turnFiles,sessionFiles].some(Boolean)) continue
+    if (id) {
+      if (seen.has(id)) fail(r,"用例ID",id+" 在本文件中重复")
+      seen.add(id)
+
+      current = { id:crypto.randomUUID(),businessId:id,name:input || id,input,expected:"",source:"none",outcome:"passed",turns:[],checks:[],attachments:[] }
+      result.cases.push(current)
+    } else if (!current) { fail(r,"用例ID","首条用例缺少 ID，续行没有所属用例"); continue }
+
+    if (!current) continue
+    const issue = (field: string, message: string) => fail(r,field,current!.businessId+"："+message)
+    if (!input) issue("对话脚本（逐轮）","缺少本轮输入")
+    const standard = expected || current.turns!.at(-1)?.expected || ""
+    if (!standard) issue("每轮关键验证点（标准答案）","请填写可核对的预期")
+    const turn: EvalTurn = { id:crypto.randomUUID(),input,expected:standard,checks:standard?[{id:crypto.randomUUID(),kind:"natural",text:standard,required:true,files:[]}]:[],rules:[],attachments:[] }
+    try { turn.rules = parseClarification(clarification) } catch(e) { issue("澄清规则",e instanceof Error?e.message:"请检查规则") }
+    current.turns!.push(turn)
+    if(current.turns!.length>100)issue("对话脚本（逐轮）","每条用例最多支持 100 轮")
+    const names = (s:string) => [...new Set(s.split(/[,，\n]/).map(n=>n.trim()).filter(Boolean))]
+    if (sessionFiles) result.references.push({row:r,field:"session附件",names:names(sessionFiles),caseId:current.id})
+    if (turnFiles) result.references.push({row:r,field:"turn附件",names:names(turnFiles),caseId:current.id,turnId:turn.id})
+  }
+  result.ignored = unsupported.filter(column => column.rows.length).map(({ field, rows }) => ({ field, rows }))
+  if (!result.cases.length && !result.errors.length) fail(2,"用例ID","没有可导入用例")
   return result
 }
 export function attachmentImportIssues(preview: ImportPreview, files: File[]): ImportIssue[] {

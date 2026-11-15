@@ -1,0 +1,366 @@
+:root {
+  color-scheme: light;
+}
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+  background: light-dark(#fff, #23242e);
+}
+#eval-cinema {
+  --paper: light-dark(#fff, #23242e);
+  --bg: light-dark(#f6f6f9, #181921);
+  --ink: light-dark(#222431, #efeff9);
+  --muted: light-dark(#666b7d, #b5b9ca);
+  --line: light-dark(#e7e7ef, #434452);
+  --accent: light-dark(#485cfb, #a4adff);
+  font:
+    16px/1.65 -apple-system,
+    BlinkMacSystemFont,
+    "PingFang SC",
+    sans-serif;
+  color: var(--ink);
+  padding: 28px 30px;
+  max-width: 1500px;
+  margin: auto;
+}
+button,
+input {
+  font: inherit;
+}
+button {
+  cursor: pointer;
+  color: inherit;
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  padding: 8px 14px;
+}
+button:focus-visible,
+input:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 3px;
+}
+button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+p {
+  margin: 14px 0;
+}
+h1 {
+  font-size: 30px;
+  line-height: 1.4;
+  margin: 0 0 18px;
+}
+h2 {
+  font-size: 18px;
+  margin: 0 0 24px;
+  color: var(--muted);
+}
+h3 {
+  font-size: 17px;
+  margin: 16px 0 10px;
+}
+small {
+  color: var(--muted);
+}
+.film-header {
+  display: flex;
+  gap: 20px;
+  align-items: center;
+}
+.film-header strong {
+  font-size: 24px;
+  color: var(--accent);
+}
+#notice {
+  font-size: 12px;
+  color: var(--muted);
+  margin: 8px 0 20px;
+}
+#steps {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-bottom: 18px;
+}
+#steps button {
+  font-size: 13px;
+  padding: 7px 9px;
+  border-color: transparent;
+}
+#steps [aria-current="step"] {
+  color: var(--accent);
+  background: light-dark(#edf0ff, #313650);
+  border-color: var(--accent);
+}
+.film-stage {
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  overflow: hidden;
+  min-height: 620px;
+}
+.screen-head {
+  padding: 16px 22px;
+  background: var(--paper);
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 14px;
+}
+.screen-head strong {
+  color: var(--accent);
+}
+#scene {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  min-height: 560px;
+}
+#scene article {
+  padding: 26px 24px;
+  min-width: 0;
+}
+#scene article + article {
+  border-left: 1px solid var(--line);
+  background: var(--paper);
+}
+#scene.single {
+  display: block;
+}
+.intro {
+  max-width: 800px;
+  margin: auto;
+  padding: 30px 36px;
+}
+.order {
+  margin: 20px 0;
+  color: var(--muted);
+  font-size: 14px;
+}
+.answer-lines {
+  color: var(--ink);
+  font-size: 17px;
+  margin: 14px 0;
+}
+.answer-lines > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 8px;
+  border-bottom: 1px solid var(--line);
+}
+.answer-lines b {
+  white-space: nowrap;
+}
+.incorrect,
+.mistake {
+  color: light-dark(#b74228, #ffb29e);
+  background: light-dark(#fff0eb, #412b29);
+}
+.correct {
+  color: light-dark(#087752, #82d9b8);
+}
+.primary {
+  background: #485cfb;
+  color: #fff;
+  border-color: #485cfb;
+  margin-top: 18px;
+}
+.bubble,
+.evidence,
+.linked,
+.template {
+  padding: 18px;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  white-space: pre-line;
+}
+.template {
+  font-size: 14px;
+  background: var(--bg);
+}
+.hint {
+  color: var(--muted);
+  font-size: 14px;
+  border-left: 3px solid var(--accent);
+  padding-left: 14px;
+  margin-top: 24px;
+}
+.linked {
+  color: var(--accent);
+}
+.sample .answer-lines {
+  font-size: 14px;
+}
+.sample .answer-lines > div {
+  padding: 8px;
+}
+.report-id {
+  color: var(--muted);
+  font-size: 13px;
+}
+.score {
+  display: flex;
+  gap: 20px;
+  align-items: center;
+  margin-top: 24px;
+}
+.score strong {
+  font-size: 72px;
+  line-height: 1.2;
+}
+.score span {
+  color: var(--muted);
+  font-size: 14px;
+}
+.pass {
+  color: light-dark(#087752, #82d9b8);
+}
+.mistake {
+  padding: 16px;
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+.evidence {
+  margin-top: 24px;
+  font-size: 14px;
+}
+.confirmation {
+  margin: 28px 0 28px auto;
+  background: light-dark(#ecefff, #343955);
+  padding: 12px 20px;
+  width: fit-content;
+  border-radius: 10px;
+}
+.run-track {
+  height: 6px;
+  background: var(--line);
+  overflow: hidden;
+  margin: 36px 0 18px;
+}
+.run-track i {
+  display: block;
+  width: 35%;
+  height: 100%;
+  background: var(--accent);
+  animation: running 2s ease-in-out infinite;
+}
+.result {
+  font-size: 72px;
+  font-weight: 700;
+  color: var(--accent);
+  margin: 35px 0;
+}
+.result span {
+  color: var(--muted);
+  font-weight: 400;
+}
+.closing-value {
+  font-size: 24px;
+}
+#caption {
+  min-height: 60px;
+  margin: 20px 0 14px;
+  font-size: 17px;
+}
+.controls {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  font-size: 13px;
+}
+.controls input {
+  min-width: 80px;
+  flex: 1;
+  accent-color: var(--accent);
+}
+.controls output {
+  white-space: nowrap;
+  color: var(--muted);
+}
+@keyframes running {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(390%);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .run-track i {
+    animation: none;
+    width: 60%;
+  }
+}
+@media (max-width: 650px) {
+  #eval-cinema {
+    padding: 18px 14px;
+  }
+  #scene {
+    grid-template-columns: 1fr;
+  }
+  #scene article + article {
+    border-left: 0;
+    border-top: 1px solid var(--line);
+  }
+  #scene article {
+    padding: 20px;
+  }
+  .screen-head {
+    flex-direction: column;
+    gap: 2px;
+  }
+  .intro {
+    padding: 24px 20px;
+  }
+  .controls {
+    flex-wrap: wrap;
+  }
+  .controls input {
+    order: 2;
+    flex-basis: 75%;
+  }
+  .film-stage {
+    min-height: 0;
+  }
+  .score strong,
+  .result {
+    font-size: 54px;
+  }
+}
+/* Keep the controls visible inside the existing 1068 × 980 host frame. */
+#scene article {
+  padding: 20px 24px;
+}
+h2 {
+  margin-bottom: 16px;
+}
+h3 {
+  margin: 12px 0 8px;
+}
+.template {
+  padding: 12px;
+  margin: 10px 0;
+}
+.sample .answer-lines {
+  margin: 8px 0;
+}
+.sample .answer-lines > div {
+  padding: 6px;
+}
+.primary {
+  margin-top: 12px;
+}
+.run-track i {
+  animation-play-state: paused;
+}
+#eval-cinema[data-playing="true"] .run-track i {
+  animation-play-state: running;
+}

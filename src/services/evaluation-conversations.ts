@@ -4,6 +4,7 @@ import type { Message, Session } from "@/mock/types"
 import { caseValidation, evaluationObjectUnavailable, saveCases, useEvaluation, type EvalAttachment, type EvalCase } from "./evaluation"
 
 export interface EvaluationConversation {
+  testSources?: { sessionId: string; projectId: string; title: string; anchorMessageId: string; session?: Session; messages?: Message[] }[]
   lastView?: string
   lastVisited?: number
   repair?: { runId: string; focus: string; stage: "planned" | "completed"; summary: string }

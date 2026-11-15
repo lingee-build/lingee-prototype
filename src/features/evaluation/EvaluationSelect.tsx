@@ -2,17 +2,18 @@ import { DropdownMenu as Radix } from "radix-ui"
 import { DropdownMenu, Icon } from "@/ui"
 
 /** Shared selection control using the same menu surface as agent configuration. */
-export function EvaluationSelect({ id, label, value, options, onChange, disabled, title }: {
+export function EvaluationSelect({ id, label, value, options, onChange, disabled, title, describedBy }: {
   title?: string
   disabled?: boolean
   id?: string
+  describedBy?: string
   label: string
   value: string
   options: readonly { value: string; label: string }[]
   onChange: (value: string) => void
 }) {
   return <DropdownMenu placement="bottom-start" gutter={4}>
-    <DropdownMenu.Trigger disabled={disabled} title={title} id={id} className="eval-select" aria-label={label}>
+    <DropdownMenu.Trigger disabled={disabled} title={title} id={id} className="eval-select" aria-label={label} aria-describedby={describedBy}>
       <span>{options.find(option => option.value === value)?.label || value}</span>
       <Icon name="chevron-down-16" size="small" />
     </DropdownMenu.Trigger>

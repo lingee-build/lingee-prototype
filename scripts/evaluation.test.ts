@@ -253,10 +253,11 @@ test("报告重跑使用来源快照，修改和删除当前用例不影响历�
   expect(snapshotRunCases(original)).toHaveLength(2)
 })
 
-test("execution failures stay unknown, stop later rounds and appear in report", async () => {
+test("execution failures outside clarification fallback stay unknown, stop later rounds and appear in report", async () => {
   const { executionIssues } = await import("../src/services/evaluation")
-  const { buildReportDocument } = await import("../src/features/evaluation/report-document")
+  const { buildReportDocument, buildReportData } = await import("../src/features/evaluation/report-document")
   for (const demoFailure of Object.keys(executionIssues) as (keyof typeof executionIssues)[]) {
+    if (demoFailure === "clarification_unmatched") continue
     const turn = { id: "t1", input: "查询", expected: "返回结果", rules: [], attachments: [] }
     const key = `skill:${demoFailure}`
     startRun(key, "Test", [{ ...sample, demo: true, outcome: "blocked", demoFailure, turns: [turn, { ...turn, id: "t2" }] }])
@@ -276,7 +277,7 @@ test("execution failures stay unknown, stop later rounds and appear in report", 
 })
 
 test("file evidence distinguishes existence, missing artifacts and unavailable execution", async () => {
-  const { buildReportDocument } = await import("../src/features/evaluation/report-document")
+  const { buildReportDocument, buildReportData } = await import("../src/features/evaluation/report-document")
   for (const [key, demo, operator] of [["exists", true, "exists"], ["absent", true, "not_exists"], ["unknown", false, "exists"]] as const) {
     startRun(key, "File", [{ ...sample, demo, demoEvidence: stateEvidence("passed", key === "exists" ? ["outputs/result.txt"] : []), outcome: "passed", checks: [{ id: "file", kind: "file", operator, text: "outputs/result.txt", required: true, files: [] }] }])
     now += 3000; advanceRuns()
@@ -333,7 +334,7 @@ test("repair availability covers running, passed, unknown, stopped and unsupport
 
 test("points aggregate rounds and judging without treating missing records as zero", async () => {
   const { runPoints, casePoints, pointsText } = await import("../src/services/evaluation-points")
-  const { buildReportDocument } = await import("../src/features/evaluation/report-document")
+  const { buildReportDocument, buildReportData } = await import("../src/features/evaluation/report-document")
   const c = { ...sample, demo: true, outcome: "passed" as const, checks: [{ id: "overall", text: "正确", required: true, files: [] }], turns: [
     { id: "one", input: "查询", expected: "正确", rules: [], attachments: [] },
     { id: "two", input: "继续", expected: "正确", rules: [], attachments: [] },
@@ -348,7 +349,7 @@ test("points aggregate rounds and judging without treating missing records as ze
   expect(runPoints(run).execution).toBeCloseTo(0.76)
   expect(runPoints(run).judging).toBeCloseTo(0.24)
   expect(pointsText(runPoints(run))).toBe("消耗点数：1.00")
-  expect(buildReportDocument(run)).toContain("消耗点数：1.00")
+  expect(buildReportData(run).billing.knownTotal).toBe(1)
   const legacy = { ...run.results[0], overallJudgingPoints: undefined, roundResults: run.results[0].roundResults!.map(t => ({ ...t, points: undefined })) }
   expect(pointsText(casePoints(legacy))).toBe("消耗点数：暂未获取")
   expect(pointsText(runPoints({ ...run, results: [run.results[0], legacy] }))).toBe("已获取消耗点数：1.00 · 统计不完整")
@@ -413,7 +414,7 @@ test("完整性校验保留必填规则，不使用未确认的长度或容量�
 })
 
 test("P2 停止补齐逐项终态并保留已有失败，报告读取相同证据", async () => {
-  const { buildReportDocument } = await import("../src/features/evaluation/report-document")
+  const { buildReportDocument, buildReportData } = await import("../src/features/evaluation/report-document")
   const check = { id: "check", text: "要求", required: true, files: [] }
   const value = { ...sample, checks: [{ ...check, id: "overall" }], turns: [{ id: "turn", input: "请求", expected: "", attachments: [], rules: [], checks: [check] }] }
   const id = startRun("skill:p2", "对象", [value])!
@@ -464,7 +465,7 @@ test("failed persistence keeps saved cases unchanged and allows retry", () => {
 })
 
 test("tool failure finalizes unexecuted round checks as unknown in results and report", async () => {
-  const { buildReportDocument } = await import("../src/features/evaluation/report-document")
+  const { buildReportDocument, buildReportData } = await import("../src/features/evaluation/report-document")
   const check = { id: "check", kind: "natural" as const, text: "应返回查询结果", required: true, files: [] }
   const turn = { id: "t1", input: "查询", expected: "", attachments: [], rules: [], checks: [check] }
   startRun("skill:1", "Skill", [{ ...sample, demo: true, outcome: "blocked", demoFailure: "tool_unavailable", turns: [turn, { ...turn, id: "t2" }] }])
@@ -537,7 +538,7 @@ test("simulated judge failure preserves execution and permits later rounds", () 
 
 test("point queries preserve results and failed refresh keeps last successful query time", async () => {
   const { refreshRunPoints, pointsText, runPoints } = await import("../src/services/evaluation-points")
-  const { buildReportDocument } = await import("../src/features/evaluation/report-document")
+  const { buildReportDocument, buildReportData } = await import("../src/features/evaluation/report-document")
   const id = startRun("credits", "Skill", [{ ...sample, demo: true }])!
   now += 4000; advanceRuns()
   const original = structuredClone(useEvaluation.getState().runs.credits[0])
@@ -557,7 +558,7 @@ test("point queries preserve results and failed refresh keeps last successful qu
   expect(failed.results[0].checkResults).toEqual(original.results[0].checkResults)
   expect(failed.status).toBe(original.status)
   expect(useEvaluation.getState().runs.credits).toHaveLength(1)
-  expect(downloaded).toContain("点数更新时间")
+  expect(buildReportData(completed).billing.knownTotal).toBe(runPoints(completed).execution+runPoints(completed).judging)
   expect(downloaded).not.toContain("暂不可获取")
   await refreshRunPoints("credits", id, "pending")
   expect(pointsText(runPoints(useEvaluation.getState().runs.credits[0]))).toContain("统计中")
@@ -604,7 +605,7 @@ test("point query transient loading is recoverable from storage and legacy state
 
 test("point snapshot amount and time stay paired while execution advances", async () => {
   const { refreshRunPoints, runPoints, casePoints, turnPointsText, liveRunPoints } = await import("../src/services/evaluation-points")
-  const { buildReportDocument } = await import("../src/features/evaluation/report-document")
+  const { buildReportDocument, buildReportData } = await import("../src/features/evaluation/report-document")
   const id = startRun("snapshot-points", "Skill", [{ ...sample, demo: true }])!
   advanceRuns()
   await refreshRunPoints("snapshot-points", id)
@@ -624,8 +625,8 @@ test("point snapshot amount and time stay paired while execution advances", asyn
   const refreshed = useEvaluation.getState().runs["snapshot-points"][0]
   expect(refreshed.pointsQuery!.queriedAt).toBeGreaterThan(before.pointsQuery!.queriedAt!)
   expect(runPoints(refreshed).execution).toBe(liveRunPoints(refreshed).execution)
-  expect(downloaded).toContain("消耗点数：0.12")
-  expect(buildReportDocument(refreshed)).not.toContain("消耗点数：0.12")
+  expect(buildReportData(after).billing.knownTotal).toBeCloseTo(0.12)
+  expect(buildReportData(refreshed).billing.knownTotal).not.toBe(0.12)
 })
 
 test("finished case progress excludes judging and includes terminal unknown or stopped cases", async () => {
@@ -642,7 +643,7 @@ test("finished case progress excludes judging and includes terminal unknown or s
 
 test("partial round usage retains independent overall snapshot through failure and reload", async () => {
   const { refreshRunPoints, overallPoints, overallPointsText, runPoints } = await import("../src/services/evaluation-points")
-  const { buildReportDocument } = await import("../src/features/evaluation/report-document")
+  const { buildReportDocument, buildReportData } = await import("../src/features/evaluation/report-document")
   const key = "partial-overall"
   const check = { id: "overall", kind: "natural" as const, text: "满足要求", required: true, files: [] }
   const id = startRun(key, "Skill", [{ ...sample, demo: true, checks: [check] }])!
@@ -653,7 +654,7 @@ test("partial round usage retains independent overall snapshot through failure a
   expect(runPoints(saved).missing).toBe(true)
   expect(overallPoints(saved.results[0])).toBe(0.08)
   expect(overallPointsText(saved.results[0])).toBe("消耗点数：0.08")
-  expect(buildReportDocument(saved)).toContain("已获取消耗点数：0.08 · 统计不完整")
+  expect(buildReportData(saved).billing).toMatchObject({knownTotal:0.08,complete:false})
   expect(buildReportDocument(saved)).not.toContain("<h4>整体标准判定</h4>")
   useEvaluation.setState(s => ({ runs: { ...s.runs, [key]: s.runs[key].map(r => ({ ...r, results: r.results.map(c => ({ ...c, overallJudgingPoints: 0.16 })) })) } }))
   await refreshRunPoints(key, id, "unavailable")
@@ -672,7 +673,7 @@ test("partial round usage retains independent overall snapshot through failure a
 
 test("first query failure never claims a successful snapshot, later failure retains its source", async () => {
   const { refreshRunPoints, pointsSourceText, pointsText, runPoints } = await import("../src/services/evaluation-points")
-  const { buildReportDocument } = await import("../src/features/evaluation/report-document")
+  const { buildReportDocument, buildReportData } = await import("../src/features/evaluation/report-document")
   const key = "first-query-source"
   const id = startRun(key, "Skill", [{ ...sample, demo: true }])!
   now += 4000; advanceRuns()
@@ -685,7 +686,7 @@ test("first query failure never claims a successful snapshot, later failure reta
   expect(pointsSourceText(failed)).toBe("")
   expect(pointsText(runPoints(failed))).not.toContain("已查询点数")
   expect(failed.pointsQuery!.queriedAt).toBeUndefined()
-  expect(buildReportDocument(failed)).toContain("统计不完整")
+  expect(buildReportData(failed).billing.complete).toBe(false)
   await refreshRunPoints(key, id)
   const saved = useEvaluation.getState().runs[key][0].pointsQuery!
   expect(pointsSourceText(useEvaluation.getState().runs[key][0])).toContain("更新于")
@@ -884,6 +885,8 @@ test("报告重跑按历史范围选择，当前用例删除不影响任何范�
   const run = structuredClone(useEvaluation.getState().runs[key][0])
   run.status = "completed"
   run.results.forEach((r, i) => { r.status = "passed"; r.verdict = ["passed", "failed", "unknown"][i] as "passed" | "failed" | "unknown" })
+  run.results[0].quality = {state:"质量通过",scores:[16,14,16,16,14,10,8,6],evidence:"已核验"}
+  run.results[1].quality = {state:"质量未通过",scores:[0,0,0,0,0,0,0,0],evidence:"已核验"}
   const failures = failedRunResults(run).map(c => c.id)
   expect(failures).toEqual(["scope-1"])
   const retryIds = unsuccessfulRunResults(run).map(c => c.id)
@@ -997,7 +1000,7 @@ test("停止确认固定已开始用例耗时，未开始的不写零耗时；�
 
 test("首轮多个硬规则失败均留证据，跳过语义、后轮和整体，其他用例继续且历史不变", async () => {
   const { completeEvaluationSample } = await import("../src/services/evaluation-samples")
-  const { buildReportDocument } = await import("../src/features/evaluation/report-document")
+  const { buildReportDocument, buildReportData } = await import("../src/features/evaluation/report-document")
   const failed = completeEvaluationSample("硬规则失败")
   failed.demoEvidence!.turns[0].response = "不满足任何格式"
   const following = demoSample("passed")
@@ -1167,28 +1170,30 @@ test("报告编码按对象递增，重新运行分配新号，清空后不复�
   expect(useEvaluation.getState().runs[key][0].code).toBe("ER-10000")
 })
 
-test("统一报告支持运行中进度，单轮直显、多轮折叠，技能智能体一致", async () => {
-  const { buildReportDocument } = await import("../src/features/evaluation/report-document")
+test("统一四章报告保留进度、缺分状态、逐轮详情与停止完整性，技能智能体一致", async () => {
+  const { buildReportDocument, buildReportData } = await import("../src/features/evaluation/report-document")
   for (const key of ["skill:unified", "agent:unified"]) {
     const turn = { id: "t1", input: "查询", expected: "返回结果", rules: [], attachments: [] }
     startRun(key, "统一报告", [{ ...sample, turns: [turn] }, { ...sample, id: "multi", turns: [turn, { ...turn, id: "t2" }] }])
     const run = useEvaluation.getState().runs[key][0]
     const activeHtml = buildReportDocument(run)
-    expect(activeHtml).toContain("0 / 2 条用例已结束")
-    expect(activeHtml).toContain("最终结论待生成")
-    expect(activeHtml.match(/class="progress-segment"/g)?.length).toBe(2)
+    expect(activeHtml).toContain("已完成 0 / 2")
+    expect(activeHtml.includes("评测进行中，问题清单持续更新")).toBe(true)
+    expect(activeHtml).toContain("已评分 0/2")
     expect(activeHtml).not.toContain("<progress")
     const unknownHtml = buildReportDocument({ ...run, status: "completed", results: run.results.map(r => ({ ...r, status: "blocked", verdict: "unknown", judging: false })) })
-    expect(unknownHtml).toContain('通过率 0% <span class="muted">· 共 2 条用例</span>')
-    expect(unknownHtml).toContain('class="metric-unknown"><strong>2</strong>无法判定')
-    expect(unknownHtml).toContain('class="metric-zero"><strong>0</strong>不通过')
-    expect(activeHtml).toContain('class="round single-round"')
-    expect(activeHtml).toContain('id="case-1-round-0" class="round"><summary>')
+    expect(unknownHtml).toContain("已评分 0/2")
+    expect(unknownHtml).toContain("评分未完成")
+    expect(buildReportData({...run,results:run.results.map(r=>({...r,status:"blocked",judging:false}))}).cases.every(c=>c.quality?.status!=="complete")).toBe(true)
+    expect(activeHtml).toContain("第 1 轮")
+    expect(activeHtml).toContain("第 2 轮")
     expect(activeHtml).not.toContain('class="round" open')
     cancelRun(key, run.id)
     const stoppedHtml = buildReportDocument(useEvaluation.getState().runs[key][0])
     expect(stoppedHtml).not.toContain('aria-label="评测进度"')
-    expect(stoppedHtml).toContain("报告不完整")
+    expect(stoppedHtml).not.toContain('评分失败')
+    expect(stoppedHtml).toContain('未评分')
+    expect(buildReportData(useEvaluation.getState().runs[key][0]).cases.every(c=>c.quality?.status!=="complete")).toBe(true)
   }
 })
 
@@ -1216,4 +1221,40 @@ test('评测对话修复保留重点、确认后修改原对象，重复确认�
     expect(chat.repair?.stage).toBe('completed')
     expect(respondToRepair(chat, run, '确认修复', true)).toBe(result)
   } finally { devStore.skills = original }
+})
+
+test("覆盖保存原子持久化旧版本快照，存储失败时保留当前用例", () => {
+  const key = "skill:overwrite-import"
+  expect(saveCases(key, [sample])).toBe(true)
+  const replacement = { ...sample, id: "case-2", name: "Replacement" }
+  expect(saveCases(key, [replacement], true)).toBe(true)
+  const persisted = JSON.parse(localStorage.getItem("lingee.evaluation.v1")!).state
+  expect(persisted.cases[key].map((item: EvalCase) => item.id)).toEqual(["case-2"])
+  expect(persisted.importSnapshots[key][0].cases[0].id).toBe(sample.id)
+  const write = localStorage.setItem
+  localStorage.setItem = () => { throw new Error("QuotaExceededError") }
+  try {
+    expect(saveCases(key, [sample], true)).toBe(false)
+    expect(useEvaluation.getState().cases[key].map(item => item.id)).toEqual(["case-2"])
+    expect(useEvaluation.getState().importSnapshots?.[key]).toHaveLength(1)
+  } finally {
+    localStorage.setItem = write
+  }
+})
+
+test("默认模拟 Foundation 澄清降级并继续后续轮次", () => {
+  for (const [reason, label] of [["no_match", "没有匹配的澄清规则"], ["timeout", "澄清匹配超时"], ["model_error", "澄清匹配调用异常"]] as const) {
+    const key = "skill:foundation-" + reason
+    const item = { ...demoSample("passed"), outcome: "blocked" as const, demoFailure: "clarification_unmatched" as const,
+      turns: [0, 1].map(i => ({ id: String(i), input: "查询", expected: "有结果", attachments: [], rules: [] })),
+      demoEvidence: stateEvidence("passed")! }
+    item.demoEvidence.turns[0].clarificationFailure = reason
+    const id = startRun(key, "测试", [item])
+    expect(id).toBeDefined()
+    now += 6000
+    advanceRuns()
+    const result = useEvaluation.getState().runs[key][0].results[0]
+    expect(result.roundResults?.[0].clarification).toContain(label)
+    expect(result.roundResults?.[1].responseRecorded).toBe(true)
+  }
 })

@@ -1,3 +1,6 @@
+import { Link } from "react-router"
+import { Icon } from "@/ui"
+import { reviewPrompt } from '@/mock/evaluation/review'
 import { Button } from "@/ui"
 import { resolveReportContext, compareReportText, reportEvidence } from "./report-context"
 import { evaluationRepairObject, repairDisabledReason } from "@/services/evaluation-repair"
@@ -159,11 +162,15 @@ export function EvaluationChat({ onNewConversation, objectId, name, sessionId, o
   }
   return <section aria-hidden={hidden} inert={hidden} data-collapsed={hidden || undefined} className="eval-native-session @container" aria-label="开发会话">
     <div className="flex-1 min-h-0 overflow-hidden">
-      <MessageTimeline session={session} messages={messages} titleActions={<Button variant="ghost" className="eval-session-action" icon="play-circle" disabled={session.status === "running"} onClick={onNewConversation} aria-label="新建评测会话">新建会话</Button>} />
+      <MessageTimeline session={session} messages={messages} titleDescription={conversation?.testSources?.length ? <div className="mt-2 flex flex-wrap items-center gap-2 text-12-regular text-text-weak" data-testid="evaluation-test-sources">
+        {conversation.testSources.map(source => <Link key={source.sessionId} className="inline-flex items-center gap-2 rounded border border-border-weak-base px-2 py-1 hover:bg-surface-base-hover" title={source.title}
+          to={`/p/${encodeURIComponent(source.projectId)}/session/${encodeURIComponent(source.sessionId)}?message=${encodeURIComponent(source.anchorMessageId)}`}><Icon name="arrow-left" size="xs" />本地测试会话</Link>)}
+      </div> : undefined} titleActions={<Button variant="ghost" className="eval-session-action" icon="play-circle" disabled={session.status === "running"} onClick={onNewConversation} aria-label="新建评测会话">新建会话</Button>} />
     </div>
     <SessionPromptDock>
       {error && <p role="alert" className="eval-field-error">{error}</p>}
       {(readOnly || disabled) && <p role="status" className="eval-muted">{disabled ? "请先完成右侧编辑或导入。" : "当前为历史用例快照，可继续分析报告；修改用例请返回当前用例页。"}</p>}
+      {!hasCases && !disabled && !readOnly && operation === "cases" && reviewPrompt(objectId) && <div className="eval-review-starter"><span>试试这个场景</span><Button variant="secondary" disabled={session.status === "running"} onClick={()=>{void submit(reviewPrompt(objectId)).catch(()=>{})}}>{reviewPrompt(objectId)}</Button></div>}
       <Composer viewDraft={viewDraft} key={objectId} defaultSkill="evaluation-builder" placeholder={operation === "cases"
         ? hasCases ? "描述你想修改或补充的评测用例…" : "描述业务场景，生成评测用例…"
         : currentRun ? "针对当前报告提问，例如：哪些用例未通过？" : "描述你想了解的评测结果，例如：对比最近两次报告"} projectId={projectId} sessionId={session.id} working={session.status === "running"} onSubmit={submit} onAbort={() => { if (sessionId) sessionService.abort(sessionId) }} onCreateProject={() => void actions.createProject()} />

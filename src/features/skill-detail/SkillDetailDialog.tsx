@@ -1,4 +1,5 @@
 import { useNavigate } from "react-router"
+import { EvaluationTabLabel } from "@/features/evaluation/EvaluationTabLabel"
 import { ObjectEvaluationReport } from "@/features/evaluation/ObjectEvaluationReport"
 import { useMemo, useState, type CSSProperties } from "react"
 import { BrandButton, CapsuleTag, Dialog, Icon, Markdown, SegmentedControl, Tag, Tooltip, useDialog } from "@/ui"
@@ -151,7 +152,7 @@ export function SkillDetailDialog(props: { skill: Skill; initialTab?: DetailTab;
             <SegmentedControl
               value={tab}
               onChange={value => setTab(value as DetailTab)}
-              items={[...(["overview", "preview", "check"] as const).map((value) => ({ value, label: t(`kcode.skillPreview.tab.${value}`) })), {value:"evaluation", label:"评测报告"}]}
+              items={[...(["overview", "preview", "check"] as const).map((value) => ({ value, label: t(`kcode.skillPreview.tab.${value}`) })), {value:"evaluation", label: <EvaluationTabLabel />}]}
             />
           </div>
 

@@ -11,7 +11,7 @@ const timeOf = (ms: number) => {
 }
 
 /** 用户消息气泡：前导的 "/技能名" 渲染成技能标签，下方是时间与复制按钮 */
-export function UserMessage(props: { message: Message; assistant?: Message }) {
+export function UserMessage(props: { message: Message; assistant?: Message; localTest?: boolean }) {
   const t = useT()
   const models = useSync((s) => s.models)
   const model = models.find((m) => m.id === props.assistant?.model || m.modelLevel === props.assistant?.model)
@@ -47,7 +47,8 @@ export function UserMessage(props: { message: Message; assistant?: Message }) {
             {skill ? (
               <div data-slot="user-message-inline">
                 <span data-slot="user-message-skill" className="text-[var(--primary-600)] font-[500] mr-2">
-                  {getSkillDisplayName(skill)}
+                  {props.localTest && <Icon name="skill-bolt" size="xs" />}
+                  <span data-slot="user-message-skill-label">{getSkillDisplayName(skill)}</span>
                 </span>
                 {body}
               </div>

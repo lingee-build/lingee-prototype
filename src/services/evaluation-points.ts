@@ -22,6 +22,9 @@ export function runPoints(run: EvalRun): Usage {
   const value = run.pointsQuery?.amount ?? liveRunPoints(run)
   return run.pointsQuery ? { ...value, status: run.pointsQuery.status, valueComplete: run.pointsQuery.valueComplete } : value
 }
+export function pointsComplete(value: Usage) {
+  return value.recorded && !value.missing && (value.valueComplete ?? !value.status)
+}
 export function pointsText(value: Usage): string {
   const status = value.status ?? (value.missing || !value.recorded ? "missing" : "complete")
   const waiting = status === "loading" || status === "pending"
@@ -35,7 +38,18 @@ export function turnPointsText(turn: EvalTurnResult) {
 }
 
 /** 本地原型仅演示查询状态；真实接入复用 statements2，不用模型成本换算点数。 */
-export async function refreshRunPoints(key: string, id: string, demo: "normal" | "pending" | "unavailable" | "exhausted" = "normal") {
+type PointsQueryMode = "normal" | "pending" | "unavailable" | "exhausted"
+const inFlightPoints = new Map<string, Promise<void>>()
+
+export function refreshRunPoints(key: string, id: string, demo: PointsQueryMode = "normal") {
+  const pending = inFlightPoints.get(id)
+  if (pending) return pending
+  const query = queryRunPoints(key, id, demo).finally(() => inFlightPoints.delete(id))
+  inFlightPoints.set(id, query)
+  return query
+}
+
+async function queryRunPoints(key: string, id: string, demo: PointsQueryMode) {
   const current = () => useEvaluation.getState().runs[key]?.find(r => r.id === id)
   const run = current()
   if (!run || run.pointsQuery?.status === "loading") return

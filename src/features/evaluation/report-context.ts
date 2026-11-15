@@ -1,3 +1,4 @@
+import {qualityOf,qualitySummary} from "@/services/evaluation-quality"
 import { verdictLabel, type EvalRun } from '@/services/evaluation'
 
 export interface ReportContextSelection { runs: EvalRun[]; source: string; error?: string }
@@ -35,16 +36,16 @@ export function resolveReportContext(text: string, runs: EvalRun[], currentId?: 
 
 export function reportEvidence(run: EvalRun) {
   return { id: run.id, code: run.code || run.id, started: run.started, status: run.status,
-    results: run.results.map(result => ({ id: result.id, code: result.code, name: result.name, verdict: verdictLabel(result), evidence: result.evidence || '' })) }
+    results: run.results.map(result => ({ id: result.id, code: result.code, name: result.name, verdict: verdictLabel(result), quality:qualityOf(result), evidence: result.evidence || '' })) }
 }
 
 /** 本地原型只比较已记录结果，不推测模型或对象变化的因果关系。 */
 export function compareReportText(runs: EvalRun[]) {
   const ordered = [...runs].sort((a, b) => a.started - b.started)
   const lines = ordered.map(run => {
-    const counts = ['通过', '不通过', '无法判定'].map(label => `${label} ${run.results.filter(result => verdictLabel(result) === label).length}`)
-    const rate = run.results.length ? `${Math.round(run.results.filter(result => verdictLabel(result) === '通过').length / run.results.length * 100)}%` : '无用例'
-    return `${run.code || run.id}：${counts.join('，')}；通过率 ${rate}（分母为本次全部 ${run.results.length} 条用例）。`
+    const q=qualitySummary(run.results)
+    const rate=q.count ? `${Math.round(q.passed/q.count*100)}%` : '—'
+    return `${run.code || run.id}：质量均分 ${q.mean ?? "—"}（已评分 ${q.count}/${run.results.length}）；质量通过 ${q.passed}，未通过 ${q.count-q.passed}，未评分 ${run.results.length-q.count}；通过率 ${rate}（分母为已评分 ${q.count} 条；未评分不代表通过）。`
   })
   if (ordered.length > 1) {
     const first = ordered[0], last = ordered[ordered.length - 1]
@@ -52,8 +53,8 @@ export function compareReportText(runs: EvalRun[]) {
       const old = first.results.find(item => item.id === result.id)
       return old ? [{ old, result }] : []
     })
-    const improved = common.filter(({ old, result }) => verdictLabel(old) === '不通过' && verdictLabel(result) === '通过')
-    const regressed = common.filter(({ old, result }) => verdictLabel(old) === '通过' && verdictLabel(result) === '不通过')
+    const improved = common.filter(({ old, result }) => qualityOf(old).total != null && qualityOf(old).state !== '质量通过' && qualityOf(result).state === '质量通过')
+    const regressed = common.filter(({ old, result }) => qualityOf(old).state === '质量通过' && qualityOf(result).total != null && qualityOf(result).state !== '质量通过')
     lines.push(`从 ${first.code || first.id} 到 ${last.code || last.id}，按稳定用例 ID 匹配 ${common.length} 条：`,
       `不通过转通过：${improved.map(({ result }) => `${result.code || ''} ${result.name}`).join('、') || '无'}。`,
       `通过转不通过：${regressed.map(({ result }) => `${result.code || ''} ${result.name}`).join('、') || '无'}。`,

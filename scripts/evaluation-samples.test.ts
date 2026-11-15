@@ -94,7 +94,7 @@ test("文件存在性由对应时点产物清单决定，否定检查也不能�
   expect(result.checkResults!.map(c => c.verdict)).toEqual(["skipped"])
 })
 
-test("语义依据只匹配原标准，未知标准、编辑后及旧版示例均不假通过", () => {
+test("语义依据只匹配原标准，未知标准、编辑后及无证据示例均不假通过", () => {
   const modified = completeEvaluationSample("未知语义")
   modified.turns![0].checks![0].text = "还必须审批通过"
   expect(finishSample(modified).results[0].roundResults![0].checkResults![0].verdict).toBe("unknown")
@@ -107,7 +107,7 @@ test("语义依据只匹配原标准，未知标准、编辑后及旧版示例�
   delete legacy.demoEvidence
   const oldResult = finishSample(legacy).results[0]
   expect(oldResult.verdict).toBe("unknown")
-  expect(resultIssueSummary(oldResult)).toContain("添加新版示例")
+  expect(resultIssueSummary(oldResult)).toContain("未记录执行材料")
 })
 
 test("摘要区分业务失败、工具异常和判定超时；明确失败优先且活动状态不显示问题摘要", () => {
@@ -156,7 +156,7 @@ test("已有单轮整体标准继续参与判定，不能因只有一轮而忽�
   const run = finishSample(sample)
   expect(run.results[0].verdict).toBe("failed")
   expect(run.results[0].checkResults![0].verdict).toBe("failed")
-  expect(buildReportDocument(run)).toContain("整体验收标准")
+  expect(buildReportDocument(run)).not.toContain("整体验收标准")
 })
 
 test("多轮整体失败影响最终结论", () => {

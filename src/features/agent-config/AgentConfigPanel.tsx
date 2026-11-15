@@ -4,6 +4,7 @@ import { useParams } from "react-router"
 import { evaluationRepairTarget } from "@/services/evaluation-repair"
 import { ControlledConfirmDialog } from "@/ui/dialog/ConfirmDialog"
 import { useNavigate } from "react-router"
+import { EvaluationTabLabel } from "@/features/evaluation/EvaluationTabLabel"
 import { ObjectEvaluationReport } from "@/features/evaluation/ObjectEvaluationReport"
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState, type CSSProperties, type ReactNode } from "react"
 import { IconButton, SegmentedControl, showToast, useDialog } from "@/ui"
@@ -124,7 +125,7 @@ export const AgentConfigPanel = forwardRef<AgentConfigHandle, Props>(function Ag
         className="light-segmented shrink-0 flex items-center justify-between"
       >
         <div className="agent-config-tab-scroll flex-1">
-          <SegmentedControl value={tab} onChange={value => setTab(value as ConfigTab)} items={[...TABS.map(value => ({ value, label: t(`kcode.agentConfig.tab.${value}`) })), { value: "evaluation", label: "评测报告" }]} />
+          <SegmentedControl value={tab} onChange={value => setTab(value as ConfigTab)} items={[...TABS.map(value => ({ value, label: t(`kcode.agentConfig.tab.${value}`) })), { value: "evaluation", label: <EvaluationTabLabel /> }]} />
         </div>
         <div className="ml-3 flex shrink-0 items-center gap-2">
           {props.onRefresh && <IconButton icon="refresh" variant="ghost" iconSize="small" className="h-7 w-7" title={t("session.files.refresh")} onClick={props.onRefresh} />}
