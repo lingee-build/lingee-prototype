@@ -1,6 +1,7 @@
 import { reviewCases, diceKey, agentKey } from '@/mock/evaluation/review'
 import type { EvaluationConversation } from '@/services/evaluation-conversations'
 import { turnsOf } from '@/services/evaluation'
+import { salesGeneration } from './sales-generation'
 import { makeDraft } from './generation-drafts'
 
 const scenarios = (text: string) => ['正常查询', '信息缺失', '记录不存在', '多轮追问'].filter((_, i) => [/正常|完整|成功/, /缺少|缺失|不足|澄清/, /不存在|异常|无效/, /多轮|追问/][i].test(text))
@@ -48,6 +49,8 @@ export function respondToEvaluation(next: EvaluationConversation, raw: string): 
     next.drafts.push(...cases)
     return {text:'已按场景生成 '+cases.length+' 条用例并保存到当前对象。请核对逐轮输入、澄清条件和预期，再运行评测。',changed:true}
   }
+  const sales = salesGeneration(next, text)
+  if (sales) return sales
   const source = next.testSources?.at(-1)
   if (source && /生成|整理|提取/.test(text) && /用例/.test(text)) {
     const inputs = source.messages?.filter(message => message.role === "user").flatMap(message =>

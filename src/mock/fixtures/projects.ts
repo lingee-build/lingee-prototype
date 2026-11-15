@@ -1,4 +1,4 @@
-import type { Project, Session, Message, Model, User } from "../types"
+import type { Project, Session, Message, Model, User, ToolPart } from "../types"
 import { conversations } from "./conversations"
 
 const MIN = 60_000
@@ -23,7 +23,16 @@ const session = (id: string, projectId: string, title: string, ago: number, extr
   ...extra,
 })
 
+const salesTests = [
+  { id: "ses_sales_eval_complete", title: "绿茶订单测试 · 回执齐全", complete: true },
+  { id: "ses_sales_eval_incomplete", title: "绿茶订单测试 · 缺少商品行金额", complete: false },
+]
+const salesTestObject = "skill:sale-order-management-eval-demo"
+
 export const sessions: Session[] = [
+  ...salesTests.map((test, index) =>
+    session(test.id, "workspace", test.title, (index + 2) * MIN, { localTest: { objectId: salesTestObject } }),
+  ),
   session("ses_delivery", "scm-skills", "创建发货通知单查询技能", 12 * MIN),
   session("ses_stock", "scm-skills", "即时库存查询技能增加仓位维度", 3 * HOUR, { unread: true }),
   session("ses_purchase", "scm-skills", "采购订单下推入库单校验", DAY + 2 * HOUR),
@@ -69,6 +78,42 @@ delivery-notice-query/
 接下来可以点击右上角的 **本地测试** 验证效果，确认无误后再提交发布。`
 
 export const messages: Message[] = [
+  ...salesTests.flatMap(({ id, complete }): Message[] => {
+    const orderNo = "XSDD-240817-000013"
+    return [{
+      id: id + "_user",
+      sessionId: id,
+      role: "user",
+      time: { created: now - 5 * MIN },
+      parts: [{ id: id + "_input", type: "text", text: complete
+        ? "查一下这张订单，只用三行回答绿茶数量、绿茶含税金额和整单含税金额。"
+        : `查询订单 ${orderNo} 的绿茶数量、绿茶含税金额和整单含税金额。`,
+      }],
+    }, {
+      id: id + "_assistant",
+      sessionId: id,
+      role: "assistant",
+      time: { created: now - 4 * MIN, completed: now - 4 * MIN },
+      parts: [
+        ...(complete ? [{
+          id: id + "_question", type: "tool", tool: "question", title: "确认订单号", state: "completed",
+          questionAnswers: [{ question: "请提供要查询的销售订单号。", answers: [orderNo] }],
+        } satisfies ToolPart] : []),
+        {
+          id: id + "_receipt", type: "tool", tool: "mcp", title: "查询销售订单", state: "completed",
+          output: JSON.stringify({
+            order: { no: orderNo, totalallamount: "5.00" },
+            item: { name: "绿茶", qty: "2", ...(complete ? { amountandtax: "4.00" } : {}) },
+          }, null, 2),
+        },
+        {
+          id: id + "_reply", type: "text", text: complete
+            ? "绿茶数量：2 件\n绿茶含税金额：5.00 元\n整单含税金额：5.00 元"
+            : "绿茶数量：2 件\n绿茶含税金额：待核对\n整单含税金额：5.00 元",
+        },
+      ],
+    }]
+  }),
   {
     id: "msg_delivery_1",
     sessionId: "ses_delivery",

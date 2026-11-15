@@ -5,6 +5,7 @@ import { caseValidation, evaluationObjectUnavailable, saveCases, useEvaluation, 
 
 export interface EvaluationConversation {
   testSources?: { sessionId: string; projectId: string; title: string; anchorMessageId: string; session?: Session; messages?: Message[] }[]
+  pendingSalesSource?: string
   lastView?: string
   lastVisited?: number
   repair?: { runId: string; focus: string; stage: "planned" | "completed"; summary: string }

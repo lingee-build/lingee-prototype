@@ -77,6 +77,10 @@ export function CaseDetail({ value, history, embedded = false, edit, editLabel =
       <Attachments files={turn.attachments} label="本轮附件" />
       {!!rules.length && <section className="eval-clarification-section"><h3 className="eval-section-title">澄清规则 <span className="eval-section-count">（{rules.length}）</span></h3><ClarificationReplies rules={rules} readOnlyField /></section>}
       <Standards checks={checks} />
+      {!history && turn.sourceFields?.["diyJson 示例"] && <details className="eval-input-group">
+        <summary className="eval-section-title">diyJson 示例</summary>
+        <pre className="eval-readonly-field">{turn.sourceFields["diyJson 示例"]}</pre>
+      </details>}
     </TurnCard>
     })}
   </div>

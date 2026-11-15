@@ -109,7 +109,7 @@ export function Component() {
       const evaluation = existing?.session ?? await sessionService.create(projectId, `评测 ${object}`)
       if (!existing) createdId = evaluation.id
       const messages = loaded?.map(message => ({
-        ...message, parts: message.parts.filter(part => part.type === "text"),
+        ...message, parts: message.parts.filter(part => part.type === "text" || part.type === "tool" && (part.tool === "mcp" || part.tool === "question")),
       }))
       const source = { sessionId: session.id, projectId, title: session.title, anchorMessageId, session, messages }
       const sources = [...(existing?.testSources ?? []).filter(item => item.sessionId !== session.id), source]
