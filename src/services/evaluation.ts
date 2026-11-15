@@ -266,12 +266,15 @@ export const useEvaluation = create<State>()(
 const salesDemoKey = "skill:sale-order-management-eval-demo"
 let salesDemoLoad: Promise<void> | undefined
 
-export function loadLocalSalesEvaluation(objectId: string) {
-  if (!import.meta.env.DEV || !isLocalPrototype() || objectId !== salesDemoKey || useEvaluation.getState().salesDemoLoaded) return
+export function loadSalesEvaluationDemo(objectId: string) {
+  if (objectId !== salesDemoKey || useEvaluation.getState().salesDemoLoaded) return
   salesDemoLoad ??= (async () => {
-    const response = await fetch("/src/mock/evaluation/sales-evaluation.local.json")
-    if (!response.ok || !response.headers.get("content-type")?.includes("application/json")) return
-    const demo: { cases: EvalCase[]; runs: EvalRun[] } = await response.json()
+    const local = import.meta.env.DEV && isLocalPrototype()
+      ? await fetch("/src/mock/evaluation/sales-evaluation.local.json").then(response =>
+          response.ok && response.headers.get("content-type")?.includes("application/json") ? response.json() : undefined,
+        ).catch(() => undefined)
+      : undefined
+    const demo: { cases: EvalCase[]; runs: EvalRun[] } = local ?? (await import("../mock/evaluation/sales-demo.json")).default
     const state = useEvaluation.getState()
     if (state.salesDemoLoaded || evaluationObjectUnavailable(objectId)) return
     const cases = state.cases[objectId] ?? []
@@ -280,7 +283,7 @@ export function loadLocalSalesEvaluation(objectId: string) {
     for (const item of demo.cases) if (item.code) caseCodes[item.id] ??= item.code
     useEvaluation.setState({
       salesDemoLoaded: true,
-      cases: { ...state.cases, [objectId]: [...cases, ...demo.cases.filter(item => !cases.some(saved => saved.id === item.id))] },
+      cases: { ...state.cases, [objectId]: [...cases, ...demo.cases.filter(item => !cases.some(saved => saved.id === item.id || !!item.code && saved.code === item.code))] },
       runs: { ...state.runs, [objectId]: [...runs, ...demo.runs.filter(item => !runs.some(saved => saved.id === item.id || saved.code === item.code))].sort((a, b) => b.started - a.started) },
       caseCodes: { ...state.caseCodes, [objectId]: caseCodes },
     })

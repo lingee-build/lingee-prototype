@@ -3,7 +3,7 @@ import { useNavigate, useParams, useSearchParams } from "react-router"
 import { buildReportData } from "@/features/evaluation/report-document"
 import type { Message, Session } from "@/mock/types"
 import { MessageTimeline } from "@/pages/session/timeline/MessageTimeline"
-import { loadLocalSalesEvaluation, useEvaluation } from "@/services/evaluation"
+import { loadSalesEvaluationDemo, useEvaluation } from "@/services/evaluation"
 import { evidenceFields } from "@/vendor/build-evaluation/evidence-fields"
 import { Button } from "@/ui"
 
@@ -13,7 +13,7 @@ export function Component() {
   const navigate = useNavigate()
   const key = `${mode}:${objectId}`
   const run = useEvaluation(state => state.runs[key]?.find(item => item.id === runId))
-  useEffect(() => { void loadLocalSalesEvaluation(key) }, [key])
+  useEffect(() => { void loadSalesEvaluationDemo(key) }, [key])
   const entry = run && buildReportData(run).cases.find(item => item.sessionId === sessionId)
   const returnTo = `/dev/${mode}/${encodeURIComponent(objectId ?? "")}/evaluation?${query}`
   const back = <Button onClick={() => navigate(returnTo)} variant="ghost" icon="arrow-left">返回评测报告</Button>

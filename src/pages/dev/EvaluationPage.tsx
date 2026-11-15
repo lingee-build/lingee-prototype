@@ -1,6 +1,6 @@
 import { EvaluationGuide } from "@/features/evaluation/EvaluationGuide"
 import { useEffect, useState } from "react"
-import { currentEvaluationEnvironment, environmentLabel, loadLocalSalesEvaluation, useEvaluation, type EvalEnvironment } from "@/services/evaluation"
+import { currentEvaluationEnvironment, environmentLabel, loadSalesEvaluationDemo, useEvaluation, type EvalEnvironment } from "@/services/evaluation"
 import { useQuery } from "@tanstack/react-query"
 import { useParams } from "react-router"
 import { EvaluationPanel } from "@/features/evaluation/EvaluationPanel"
@@ -11,7 +11,7 @@ import { useLayout } from "@/stores/layout"
 /** 对象评测工作区：独立路由，沿用对象的用例、草稿和运行记录。 */
 export function Component() {
   const { mode, objectId } = useParams()
-  useEffect(() => { void loadLocalSalesEvaluation(`${mode}:${objectId}`) }, [mode, objectId])
+  useEffect(() => { void loadSalesEvaluationDemo(`${mode}:${objectId}`) }, [mode, objectId])
   const deleted = useEvaluation(s => !!s.deletedObjects?.[`${mode}:${objectId}`])
   const t = useT()
   const sidebarOpened = useLayout(s => s.sidebarOpened)

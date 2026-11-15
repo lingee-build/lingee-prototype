@@ -1,0 +1,940 @@
+{
+  "cases": [
+    {
+      "id": "sales-demo-case-0006",
+      "code": "EC-20261114-0006",
+      "name": "查询订单指定商品的数量与含税金额并按三行输出",
+      "input": "查询订单 {{diyJson.order.no}}，只用三行回答 {{diyJson.product.name}}数量、{{diyJson.product.name}}含税金额、整单含税金额。金额保留两位小数。",
+      "expected": "",
+      "source": "none",
+      "outcome": "passed",
+      "turns": [
+        {
+          "id": "sales-demo-case-0006-turn-1",
+          "input": "查询订单 {{diyJson.order.no}}，只用三行回答 {{diyJson.product.name}}数量、{{diyJson.product.name}}含税金额、整单含税金额。金额保留两位小数。",
+          "expected": "最终回复恰好三行纯文本，依次为「{{diyJson.product.name}}数量：…」「{{diyJson.product.name}}含税金额：… 元」「整单含税金额：… 元」；不含开场白、标题、表格、计算依据、税率、其他商品信息或后续建议。\n{{diyJson.product.name}}数量为 {{diyJson.product.qty}}，与订单行 qty 一致，且不显示无意义的小数尾零（不得写成 2.0000000000 之类）。\n{{diyJson.product.name}}含税金额为 {{diyJson.product.amount}} 元，取该商品行行级 amountandtax；不得替换为订单头 totalallamount（{{diyJson.order.amount}} 元）或按单价乘数量重算的值；金额保留两位小数并带「元」。\n整单含税金额为 {{diyJson.order.amount}} 元，取订单头 totalallamount；金额保留两位小数并带「元」。",
+          "checks": [
+            {
+              "id": "criterion-1",
+              "kind": "natural",
+              "text": "最终回复恰好三行纯文本，依次为「{{diyJson.product.name}}数量：…」「{{diyJson.product.name}}含税金额：… 元」「整单含税金额：… 元」；不含开场白、标题、表格、计算依据、税率、其他商品信息或后续建议。",
+              "required": true,
+              "files": []
+            },
+            {
+              "id": "criterion-2",
+              "kind": "natural",
+              "text": "{{diyJson.product.name}}数量为 {{diyJson.product.qty}}，与订单行 qty 一致，且不显示无意义的小数尾零（不得写成 2.0000000000 之类）。",
+              "required": true,
+              "files": []
+            },
+            {
+              "id": "criterion-3",
+              "kind": "natural",
+              "text": "{{diyJson.product.name}}含税金额为 {{diyJson.product.amount}} 元，取该商品行行级 amountandtax；不得替换为订单头 totalallamount（{{diyJson.order.amount}} 元）或按单价乘数量重算的值；金额保留两位小数并带「元」。",
+              "required": true,
+              "files": []
+            },
+            {
+              "id": "criterion-4",
+              "kind": "natural",
+              "text": "整单含税金额为 {{diyJson.order.amount}} 元，取订单头 totalallamount；金额保留两位小数并带「元」。",
+              "required": true,
+              "files": []
+            }
+          ],
+          "attachments": [],
+          "rules": []
+        }
+      ],
+      "checks": [],
+      "attachments": []
+    }
+  ],
+  "runs": [
+    {
+      "id": "sales-demo-er-20261114-203710",
+      "code": "ER-20261114-203710",
+      "name": "销售订单管理（评测演示）",
+      "objectType": "skill",
+      "environment": "sandbox",
+      "started": 1794659830631,
+      "ended": 1794659845002,
+      "status": "completed",
+      "sourceRunId": "sales-demo-er-20261114-203105",
+      "models": {
+        "execution": {
+          "id": "lg:production/build/fast/default/default",
+          "name": "deepseek-v4.1-flash-build",
+          "provider": "kingdee-maas"
+        },
+        "judging": {
+          "id": "lg:production/build/fast/default/default",
+          "name": "deepseek-v4.1-flash-build",
+          "provider": "kingdee-maas"
+        }
+      },
+      "concurrency": 5,
+      "placeholderData": {
+        "order": {
+          "no": "XSDD-240817-000013",
+          "amount": "5.00"
+        },
+        "product": {
+          "name": "绿茶",
+          "qty": "2",
+          "amount": "4.00"
+        }
+      },
+      "objectContentSummary": "演示修复版",
+      "mcpSource": "sit_test",
+      "caseSnapshot": {
+        "version": "V1",
+        "capturedAt": 1794659830631,
+        "cases": [
+          {
+            "id": "sales-demo-case-0006",
+            "code": "EC-20261114-0006",
+            "name": "查询订单指定商品的数量与含税金额并按三行输出",
+            "input": "查询订单 {{diyJson.order.no}}，只用三行回答 {{diyJson.product.name}}数量、{{diyJson.product.name}}含税金额、整单含税金额。金额保留两位小数。",
+            "expected": "",
+            "source": "none",
+            "outcome": "passed",
+            "turns": [
+              {
+                "id": "sales-demo-case-0006-turn-1",
+                "input": "查询订单 {{diyJson.order.no}}，只用三行回答 {{diyJson.product.name}}数量、{{diyJson.product.name}}含税金额、整单含税金额。金额保留两位小数。",
+                "expected": "最终回复恰好三行纯文本，依次为「{{diyJson.product.name}}数量：…」「{{diyJson.product.name}}含税金额：… 元」「整单含税金额：… 元」；不含开场白、标题、表格、计算依据、税率、其他商品信息或后续建议。\n{{diyJson.product.name}}数量为 {{diyJson.product.qty}}，与订单行 qty 一致，且不显示无意义的小数尾零（不得写成 2.0000000000 之类）。\n{{diyJson.product.name}}含税金额为 {{diyJson.product.amount}} 元，取该商品行行级 amountandtax；不得替换为订单头 totalallamount（{{diyJson.order.amount}} 元）或按单价乘数量重算的值；金额保留两位小数并带「元」。\n整单含税金额为 {{diyJson.order.amount}} 元，取订单头 totalallamount；金额保留两位小数并带「元」。",
+                "checks": [
+                  {
+                    "id": "criterion-1",
+                    "kind": "natural",
+                    "text": "最终回复恰好三行纯文本，依次为「{{diyJson.product.name}}数量：…」「{{diyJson.product.name}}含税金额：… 元」「整单含税金额：… 元」；不含开场白、标题、表格、计算依据、税率、其他商品信息或后续建议。",
+                    "required": true,
+                    "files": []
+                  },
+                  {
+                    "id": "criterion-2",
+                    "kind": "natural",
+                    "text": "{{diyJson.product.name}}数量为 {{diyJson.product.qty}}，与订单行 qty 一致，且不显示无意义的小数尾零（不得写成 2.0000000000 之类）。",
+                    "required": true,
+                    "files": []
+                  },
+                  {
+                    "id": "criterion-3",
+                    "kind": "natural",
+                    "text": "{{diyJson.product.name}}含税金额为 {{diyJson.product.amount}} 元，取该商品行行级 amountandtax；不得替换为订单头 totalallamount（{{diyJson.order.amount}} 元）或按单价乘数量重算的值；金额保留两位小数并带「元」。",
+                    "required": true,
+                    "files": []
+                  },
+                  {
+                    "id": "criterion-4",
+                    "kind": "natural",
+                    "text": "整单含税金额为 {{diyJson.order.amount}} 元，取订单头 totalallamount；金额保留两位小数并带「元」。",
+                    "required": true,
+                    "files": []
+                  }
+                ],
+                "attachments": [],
+                "rules": []
+              }
+            ],
+            "checks": [],
+            "attachments": []
+          }
+        ]
+      },
+      "results": [
+        {
+          "id": "sales-demo-case-0006",
+          "code": "EC-20261114-0006",
+          "name": "查询订单指定商品的数量与含税金额并按三行输出",
+          "input": "查询订单 {{diyJson.order.no}}，只用三行回答 {{diyJson.product.name}}数量、{{diyJson.product.name}}含税金额、整单含税金额。金额保留两位小数。",
+          "expected": "",
+          "source": "none",
+          "outcome": "passed",
+          "turns": [
+            {
+              "id": "sales-demo-case-0006-turn-1",
+              "input": "查询订单 {{diyJson.order.no}}，只用三行回答 {{diyJson.product.name}}数量、{{diyJson.product.name}}含税金额、整单含税金额。金额保留两位小数。",
+              "expected": "最终回复恰好三行纯文本，依次为「{{diyJson.product.name}}数量：…」「{{diyJson.product.name}}含税金额：… 元」「整单含税金额：… 元」；不含开场白、标题、表格、计算依据、税率、其他商品信息或后续建议。\n{{diyJson.product.name}}数量为 {{diyJson.product.qty}}，与订单行 qty 一致，且不显示无意义的小数尾零（不得写成 2.0000000000 之类）。\n{{diyJson.product.name}}含税金额为 {{diyJson.product.amount}} 元，取该商品行行级 amountandtax；不得替换为订单头 totalallamount（{{diyJson.order.amount}} 元）或按单价乘数量重算的值；金额保留两位小数并带「元」。\n整单含税金额为 {{diyJson.order.amount}} 元，取订单头 totalallamount；金额保留两位小数并带「元」。",
+              "checks": [
+                {
+                  "id": "criterion-1",
+                  "kind": "natural",
+                  "text": "最终回复恰好三行纯文本，依次为「{{diyJson.product.name}}数量：…」「{{diyJson.product.name}}含税金额：… 元」「整单含税金额：… 元」；不含开场白、标题、表格、计算依据、税率、其他商品信息或后续建议。",
+                  "required": true,
+                  "files": []
+                },
+                {
+                  "id": "criterion-2",
+                  "kind": "natural",
+                  "text": "{{diyJson.product.name}}数量为 {{diyJson.product.qty}}，与订单行 qty 一致，且不显示无意义的小数尾零（不得写成 2.0000000000 之类）。",
+                  "required": true,
+                  "files": []
+                },
+                {
+                  "id": "criterion-3",
+                  "kind": "natural",
+                  "text": "{{diyJson.product.name}}含税金额为 {{diyJson.product.amount}} 元，取该商品行行级 amountandtax；不得替换为订单头 totalallamount（{{diyJson.order.amount}} 元）或按单价乘数量重算的值；金额保留两位小数并带「元」。",
+                  "required": true,
+                  "files": []
+                },
+                {
+                  "id": "criterion-4",
+                  "kind": "natural",
+                  "text": "整单含税金额为 {{diyJson.order.amount}} 元，取订单头 totalallamount；金额保留两位小数并带「元」。",
+                  "required": true,
+                  "files": []
+                }
+              ],
+              "attachments": [],
+              "rules": []
+            }
+          ],
+          "checks": [],
+          "attachments": [],
+          "status": "passed",
+          "tool": "",
+          "response": "",
+          "evidence": "",
+          "timing": {
+            "started": 1794659830634,
+            "ended": 1794659844997
+          },
+          "quality": {
+            "state": "质量通过",
+            "total": 100,
+            "grade": "S",
+            "scores": [
+              16,
+              14,
+              16,
+              16,
+              14,
+              10,
+              8,
+              6
+            ],
+            "evidence": ""
+          }
+        }
+      ],
+      "buildReport": {
+        "code": "ER-20261114-203710",
+        "state": "ended",
+        "revision": 14,
+        "concurrency": 5,
+        "sourceAppVersion": "0.0.342",
+        "mode": "execution",
+        "sourceRunId": "sales-demo-er-20261114-203105",
+        "targetKind": "skill",
+        "datasetName": "销售订单管理（评测演示）",
+        "scoringPolicy": {
+          "version": "Lingee-eval v1.0"
+        },
+        "executionModel": {
+          "name": "deepseek-v4.1-flash-build"
+        },
+        "judgeModel": {
+          "name": "deepseek-v4.1-flash-build"
+        },
+        "startedAt": 1794659830631,
+        "endedAt": 1794659845002,
+        "generatedAt": 1794659845002,
+        "lastActivityAt": 1794659845003,
+        "intervals": [],
+        "billing": {
+          "knownTotal": 7.1891,
+          "complete": true,
+          "breakdown": {
+            "execution": 4.9256,
+            "judgment": 2.2635
+          }
+        },
+        "attachmentNames": {},
+        "cases": [
+          {
+            "code": "EC-20261114-0006",
+            "sessionId": "sales-demo-er-20261114-203710-execution",
+            "state": "ended",
+            "content": {
+              "name": "查询订单指定商品的数量与含税金额并按三行输出",
+              "attachments": [],
+              "criteria": [],
+              "turns": [
+                {
+                  "input": "查询订单 {{diyJson.order.no}}，只用三行回答 {{diyJson.product.name}}数量、{{diyJson.product.name}}含税金额、整单含税金额。金额保留两位小数。",
+                  "attachments": [],
+                  "criteria": [
+                    {
+                      "id": "criterion-1",
+                      "kind": "semantic",
+                      "description": "最终回复恰好三行纯文本，依次为「绿茶数量：…」「绿茶含税金额：… 元」「整单含税金额：… 元」；不含开场白、标题、表格、计算依据、税率、其他商品信息或后续建议。"
+                    },
+                    {
+                      "id": "criterion-2",
+                      "kind": "semantic",
+                      "description": "绿茶数量为 2，与订单行 qty 一致，且不显示无意义的小数尾零（不得写成 2.0000000000 之类）。"
+                    },
+                    {
+                      "id": "criterion-3",
+                      "kind": "semantic",
+                      "description": "绿茶含税金额为 4.00 元，取该商品行行级 amountandtax；不得替换为订单头 totalallamount（5.00 元）或按单价乘数量重算的值；金额保留两位小数并带「元」。"
+                    },
+                    {
+                      "id": "criterion-4",
+                      "kind": "semantic",
+                      "description": "整单含税金额为 5.00 元，取订单头 totalallamount；金额保留两位小数并带「元」。"
+                    }
+                  ],
+                  "clarifications": []
+                }
+              ]
+            },
+            "templateContent": {
+              "name": "查询订单指定商品的数量与含税金额并按三行输出",
+              "attachments": [],
+              "criteria": [],
+              "turns": [
+                {
+                  "input": "查询订单 {{diyJson.order.no}}，只用三行回答 {{diyJson.product.name}}数量、{{diyJson.product.name}}含税金额、整单含税金额。金额保留两位小数。",
+                  "attachments": [],
+                  "criteria": [
+                    {
+                      "id": "criterion-1",
+                      "kind": "semantic",
+                      "description": "最终回复恰好三行纯文本，依次为「{{diyJson.product.name}}数量：…」「{{diyJson.product.name}}含税金额：… 元」「整单含税金额：… 元」；不含开场白、标题、表格、计算依据、税率、其他商品信息或后续建议。"
+                    },
+                    {
+                      "id": "criterion-2",
+                      "kind": "semantic",
+                      "description": "{{diyJson.product.name}}数量为 {{diyJson.product.qty}}，与订单行 qty 一致，且不显示无意义的小数尾零（不得写成 2.0000000000 之类）。"
+                    },
+                    {
+                      "id": "criterion-3",
+                      "kind": "semantic",
+                      "description": "{{diyJson.product.name}}含税金额为 {{diyJson.product.amount}} 元，取该商品行行级 amountandtax；不得替换为订单头 totalallamount（{{diyJson.order.amount}} 元）或按单价乘数量重算的值；金额保留两位小数并带「元」。"
+                    },
+                    {
+                      "id": "criterion-4",
+                      "kind": "semantic",
+                      "description": "整单含税金额为 {{diyJson.order.amount}} 元，取订单头 totalallamount；金额保留两位小数并带「元」。"
+                    }
+                  ],
+                  "clarifications": []
+                }
+              ]
+            },
+            "startedAt": 1794659830634,
+            "endedAt": 1794659844997,
+            "qualityElapsedMs": 7257,
+            "executionCredits": 4.9256,
+            "quality": {
+              "status": "complete",
+              "version": "Lingee-eval v1.0",
+              "score": 100,
+              "grade": "S",
+              "dimensions": [
+                {
+                  "id": "Q1",
+                  "reason": "技能加载与执行均符合 SKILL 约定：通过 scmc_sm_get_kmeta_sm_sm_salorder 按 billnos 查询订单，随后按「商品查询结果转换」取绿茶行 qty/amountandtax 与订单头 totalallamount，最终仅渲染固定三行模板，未添加开场白、表格或计算依据，数量已去除小数尾零，金额保留两位小数。未发现扣分点。",
+                  "deductions": [],
+                  "score": 16
+                },
+                {
+                  "id": "Q2",
+                  "reason": "意图识别为「查询指定商品数量与含税金额」，正确路由至销售订单查询技能，并将订单编号 XSDD-240817-000013 解析为 billnos 参数，首轮即正确执行，无多余澄清或错误路由。未发现扣分点。",
+                  "deductions": [],
+                  "score": 14
+                },
+                {
+                  "id": "Q3",
+                  "reason": "完整走通标准流程：调用查询工具获取订单及明细，定位绿茶行，再按标准答案要求输出三行。关键验证点（三行格式、数量 2、行级含税 4.00、整单含税 5.00）全部命中。未发现扣分点。",
+                  "deductions": [],
+                  "score": 16
+                },
+                {
+                  "id": "Q4",
+                  "reason": "要求产物文件：否；已核验产物：无（artifacts 为空），标准答案未要求文件产物。对话内交付内容为恰好三行纯文本，结构、字段名称、单位与两位小数格式均符合 SKILL 固定模板与标准答案，内容完整。未发现扣分点。",
+                  "deductions": [],
+                  "score": 16
+                },
+                {
+                  "id": "Q5",
+                  "reason": "数值与工具回执逐项一致：绿茶 qty=2.0000000000 输出为 2，绿茶行 amountandtax=4.0000000000 输出为 4.00，订单头 totalallamount=5.0000000000 输出为 5.00；未混用行级与整单金额，也未按单价乘数量重算。计算与口径正确。未发现扣分点。",
+                  "deductions": [],
+                  "score": 14
+                },
+                {
+                  "id": "Q6",
+                  "reason": "回复恰为三行纯文本，语言与评测集一致，无冗余说明、无内部调试信息、无额外建议，结构清晰且完全符合模板要求。未发现扣分点。",
+                  "deductions": [],
+                  "score": 10
+                },
+                {
+                  "id": "Q7",
+                  "reason": "全部事实陈述（绿茶数量 2 pcs、绿茶含税金额 4.00 元、整单含税金额 5.00 元）均可溯源至工具回执中的 qty、amountandtax、totalallamount，无编造数据或虚构调用结果。未发现扣分点。",
+                  "deductions": [],
+                  "score": 8
+                },
+                {
+                  "id": "Q8",
+                  "reason": "全程无异常触发：技能加载与查询工具均执行成功，无错误、无超时，任务一次完成并按模板回报。按标尺记满分。",
+                  "deductions": [],
+                  "score": 6
+                }
+              ],
+              "blocked": false,
+              "analysis": {
+                "conclusion": "本轮正确加载销售订单技能，按订单编号查询并准确转换绿茶行数量与行级含税金额、订单头整单含税金额，最终严格输出三行模板，所有关键验证点全部命中，无扣分项。",
+                "evidenceRefs": [
+                  "turn-1-record-1",
+                  "turn-1-record-2",
+                  "turn-1-record-3",
+                  "turn-1-record-4"
+                ]
+              }
+            },
+            "evidence": [
+              {
+                "id": "turn-1",
+                "turn": 0,
+                "input": "查询订单 XSDD-240817-000013，只用三行回答 绿茶数量、绿茶含税金额、整单含税金额。金额保留两位小数。",
+                "reply": "绿茶数量：2 pcs\n绿茶含税金额：4.00 元\n整单含税金额：5.00 元",
+                "complete": true,
+                "observation": {
+                  "start": 1794659830645,
+                  "end": 1794659837727,
+                  "errors": 0,
+                  "recovered": 0,
+                  "rounds": 3,
+                  "calls": 3,
+                  "tools": 2,
+                  "toolSuccess": 2,
+                  "toolMs": 1547,
+                  "firstTokenMs": 970,
+                  "llmMs": 5215,
+                  "networkMs": 5215,
+                  "input": 77461,
+                  "output": 159,
+                  "cacheRead": 31744
+                },
+                "records": [
+                  {
+                    "id": "turn-1-record-1",
+                    "kind": "input",
+                    "value": "查询订单 XSDD-240817-000013，只用三行回答 绿茶数量、绿茶含税金额、整单含税金额。金额保留两位小数。"
+                  },
+                  {
+                    "id": "turn-1-record-2",
+                    "kind": "reply",
+                    "value": "绿茶数量：2 pcs\n绿茶含税金额：4.00 元\n整单含税金额：5.00 元"
+                  },
+                  {
+                    "id": "turn-1-record-3",
+                    "kind": "tool",
+                    "value": {
+                      "tool": "加载销售订单管理技能",
+                      "state": {
+                        "input": {
+                          "skill": "sale-order-management-eval-demo"
+                        },
+                        "output": "已加载演示技能。"
+                      }
+                    }
+                  },
+                  {
+                    "id": "turn-1-record-4",
+                    "kind": "tool",
+                    "value": {
+                      "tool": "查询销售订单",
+                      "state": {
+                        "input": {
+                          "billnos": [
+                            "XSDD-240817-000013"
+                          ]
+                        },
+                        "output": {
+                          "order": {
+                            "no": "XSDD-240817-000013",
+                            "totalallamount": "5.00"
+                          },
+                          "item": {
+                            "name": "绿茶",
+                            "qty": "2",
+                            "unit": "pcs",
+                            "amountandtax": "4.00"
+                          }
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "sales-demo-er-20261114-203105",
+      "code": "ER-20261114-203105",
+      "name": "销售订单管理（评测演示）",
+      "objectType": "skill",
+      "environment": "sandbox",
+      "started": 1794659465971,
+      "ended": 1794659509249,
+      "status": "completed",
+      "models": {
+        "execution": {
+          "id": "lg:production/build/fast/default/default",
+          "name": "deepseek-v4.1-flash-build",
+          "provider": "kingdee-maas"
+        },
+        "judging": {
+          "id": "lg:production/build/fast/default/default",
+          "name": "deepseek-v4.1-flash-build",
+          "provider": "kingdee-maas"
+        }
+      },
+      "concurrency": 5,
+      "placeholderData": {
+        "order": {
+          "no": "XSDD-240817-000013",
+          "amount": "5.00"
+        },
+        "product": {
+          "name": "绿茶",
+          "qty": "2",
+          "amount": "4.00"
+        }
+      },
+      "objectContentSummary": "演示初始版",
+      "mcpSource": "sit_test",
+      "caseSnapshot": {
+        "version": "V1",
+        "capturedAt": 1794659465971,
+        "cases": [
+          {
+            "id": "sales-demo-case-0006",
+            "code": "EC-20261114-0006",
+            "name": "查询订单指定商品的数量与含税金额并按三行输出",
+            "input": "查询订单 {{diyJson.order.no}}，只用三行回答 {{diyJson.product.name}}数量、{{diyJson.product.name}}含税金额、整单含税金额。金额保留两位小数。",
+            "expected": "",
+            "source": "none",
+            "outcome": "passed",
+            "turns": [
+              {
+                "id": "sales-demo-case-0006-turn-1",
+                "input": "查询订单 {{diyJson.order.no}}，只用三行回答 {{diyJson.product.name}}数量、{{diyJson.product.name}}含税金额、整单含税金额。金额保留两位小数。",
+                "expected": "最终回复恰好三行纯文本，依次为「{{diyJson.product.name}}数量：…」「{{diyJson.product.name}}含税金额：… 元」「整单含税金额：… 元」；不含开场白、标题、表格、计算依据、税率、其他商品信息或后续建议。\n{{diyJson.product.name}}数量为 {{diyJson.product.qty}}，与订单行 qty 一致，且不显示无意义的小数尾零（不得写成 2.0000000000 之类）。\n{{diyJson.product.name}}含税金额为 {{diyJson.product.amount}} 元，取该商品行行级 amountandtax；不得替换为订单头 totalallamount（{{diyJson.order.amount}} 元）或按单价乘数量重算的值；金额保留两位小数并带「元」。\n整单含税金额为 {{diyJson.order.amount}} 元，取订单头 totalallamount；金额保留两位小数并带「元」。",
+                "checks": [
+                  {
+                    "id": "criterion-1",
+                    "kind": "natural",
+                    "text": "最终回复恰好三行纯文本，依次为「{{diyJson.product.name}}数量：…」「{{diyJson.product.name}}含税金额：… 元」「整单含税金额：… 元」；不含开场白、标题、表格、计算依据、税率、其他商品信息或后续建议。",
+                    "required": true,
+                    "files": []
+                  },
+                  {
+                    "id": "criterion-2",
+                    "kind": "natural",
+                    "text": "{{diyJson.product.name}}数量为 {{diyJson.product.qty}}，与订单行 qty 一致，且不显示无意义的小数尾零（不得写成 2.0000000000 之类）。",
+                    "required": true,
+                    "files": []
+                  },
+                  {
+                    "id": "criterion-3",
+                    "kind": "natural",
+                    "text": "{{diyJson.product.name}}含税金额为 {{diyJson.product.amount}} 元，取该商品行行级 amountandtax；不得替换为订单头 totalallamount（{{diyJson.order.amount}} 元）或按单价乘数量重算的值；金额保留两位小数并带「元」。",
+                    "required": true,
+                    "files": []
+                  },
+                  {
+                    "id": "criterion-4",
+                    "kind": "natural",
+                    "text": "整单含税金额为 {{diyJson.order.amount}} 元，取订单头 totalallamount；金额保留两位小数并带「元」。",
+                    "required": true,
+                    "files": []
+                  }
+                ],
+                "attachments": [],
+                "rules": []
+              }
+            ],
+            "checks": [],
+            "attachments": []
+          }
+        ]
+      },
+      "results": [
+        {
+          "id": "sales-demo-case-0006",
+          "code": "EC-20261114-0006",
+          "name": "查询订单指定商品的数量与含税金额并按三行输出",
+          "input": "查询订单 {{diyJson.order.no}}，只用三行回答 {{diyJson.product.name}}数量、{{diyJson.product.name}}含税金额、整单含税金额。金额保留两位小数。",
+          "expected": "",
+          "source": "none",
+          "outcome": "passed",
+          "turns": [
+            {
+              "id": "sales-demo-case-0006-turn-1",
+              "input": "查询订单 {{diyJson.order.no}}，只用三行回答 {{diyJson.product.name}}数量、{{diyJson.product.name}}含税金额、整单含税金额。金额保留两位小数。",
+              "expected": "最终回复恰好三行纯文本，依次为「{{diyJson.product.name}}数量：…」「{{diyJson.product.name}}含税金额：… 元」「整单含税金额：… 元」；不含开场白、标题、表格、计算依据、税率、其他商品信息或后续建议。\n{{diyJson.product.name}}数量为 {{diyJson.product.qty}}，与订单行 qty 一致，且不显示无意义的小数尾零（不得写成 2.0000000000 之类）。\n{{diyJson.product.name}}含税金额为 {{diyJson.product.amount}} 元，取该商品行行级 amountandtax；不得替换为订单头 totalallamount（{{diyJson.order.amount}} 元）或按单价乘数量重算的值；金额保留两位小数并带「元」。\n整单含税金额为 {{diyJson.order.amount}} 元，取订单头 totalallamount；金额保留两位小数并带「元」。",
+              "checks": [
+                {
+                  "id": "criterion-1",
+                  "kind": "natural",
+                  "text": "最终回复恰好三行纯文本，依次为「{{diyJson.product.name}}数量：…」「{{diyJson.product.name}}含税金额：… 元」「整单含税金额：… 元」；不含开场白、标题、表格、计算依据、税率、其他商品信息或后续建议。",
+                  "required": true,
+                  "files": []
+                },
+                {
+                  "id": "criterion-2",
+                  "kind": "natural",
+                  "text": "{{diyJson.product.name}}数量为 {{diyJson.product.qty}}，与订单行 qty 一致，且不显示无意义的小数尾零（不得写成 2.0000000000 之类）。",
+                  "required": true,
+                  "files": []
+                },
+                {
+                  "id": "criterion-3",
+                  "kind": "natural",
+                  "text": "{{diyJson.product.name}}含税金额为 {{diyJson.product.amount}} 元，取该商品行行级 amountandtax；不得替换为订单头 totalallamount（{{diyJson.order.amount}} 元）或按单价乘数量重算的值；金额保留两位小数并带「元」。",
+                  "required": true,
+                  "files": []
+                },
+                {
+                  "id": "criterion-4",
+                  "kind": "natural",
+                  "text": "整单含税金额为 {{diyJson.order.amount}} 元，取订单头 totalallamount；金额保留两位小数并带「元」。",
+                  "required": true,
+                  "files": []
+                }
+              ],
+              "attachments": [],
+              "rules": []
+            }
+          ],
+          "checks": [],
+          "attachments": [],
+          "status": "passed",
+          "tool": "",
+          "response": "",
+          "evidence": "",
+          "timing": {
+            "started": 1794659465976,
+            "ended": 1794659509224
+          },
+          "quality": {
+            "state": "质量通过",
+            "total": 91,
+            "grade": "S",
+            "scores": [
+              16,
+              14,
+              13,
+              14,
+              10,
+              10,
+              8,
+              6
+            ],
+            "evidence": "",
+            "issue": "关键验证点「绿茶含税金额为 4.00 元（取商品行 amountandtax）」未命中，实际输出 5.00 元。"
+          }
+        }
+      ],
+      "buildReport": {
+        "code": "ER-20261114-203105",
+        "state": "ended",
+        "revision": 14,
+        "concurrency": 5,
+        "sourceAppVersion": "0.0.342",
+        "mode": "execution",
+        "targetKind": "skill",
+        "datasetName": "销售订单管理（评测演示）",
+        "scoringPolicy": {
+          "version": "Lingee-eval v1.0"
+        },
+        "executionModel": {
+          "name": "deepseek-v4.1-flash-build"
+        },
+        "judgeModel": {
+          "name": "deepseek-v4.1-flash-build"
+        },
+        "startedAt": 1794659465971,
+        "endedAt": 1794659509249,
+        "generatedAt": 1794659509249,
+        "lastActivityAt": 1794659509250,
+        "intervals": [],
+        "billing": {
+          "knownTotal": 7.5905,
+          "complete": true,
+          "breakdown": {
+            "execution": 4.8925,
+            "judgment": 2.698
+          }
+        },
+        "attachmentNames": {},
+        "cases": [
+          {
+            "code": "EC-20261114-0006",
+            "sessionId": "sales-demo-er-20261114-203105-execution",
+            "state": "ended",
+            "content": {
+              "name": "查询订单指定商品的数量与含税金额并按三行输出",
+              "attachments": [],
+              "criteria": [],
+              "turns": [
+                {
+                  "input": "查询订单 {{diyJson.order.no}}，只用三行回答 {{diyJson.product.name}}数量、{{diyJson.product.name}}含税金额、整单含税金额。金额保留两位小数。",
+                  "attachments": [],
+                  "criteria": [
+                    {
+                      "id": "criterion-1",
+                      "kind": "semantic",
+                      "description": "最终回复恰好三行纯文本，依次为「绿茶数量：…」「绿茶含税金额：… 元」「整单含税金额：… 元」；不含开场白、标题、表格、计算依据、税率、其他商品信息或后续建议。"
+                    },
+                    {
+                      "id": "criterion-2",
+                      "kind": "semantic",
+                      "description": "绿茶数量为 2，与订单行 qty 一致，且不显示无意义的小数尾零（不得写成 2.0000000000 之类）。"
+                    },
+                    {
+                      "id": "criterion-3",
+                      "kind": "semantic",
+                      "description": "绿茶含税金额为 4.00 元，取该商品行行级 amountandtax；不得替换为订单头 totalallamount（5.00 元）或按单价乘数量重算的值；金额保留两位小数并带「元」。"
+                    },
+                    {
+                      "id": "criterion-4",
+                      "kind": "semantic",
+                      "description": "整单含税金额为 5.00 元，取订单头 totalallamount；金额保留两位小数并带「元」。"
+                    }
+                  ],
+                  "clarifications": []
+                }
+              ]
+            },
+            "templateContent": {
+              "name": "查询订单指定商品的数量与含税金额并按三行输出",
+              "attachments": [],
+              "criteria": [],
+              "turns": [
+                {
+                  "input": "查询订单 {{diyJson.order.no}}，只用三行回答 {{diyJson.product.name}}数量、{{diyJson.product.name}}含税金额、整单含税金额。金额保留两位小数。",
+                  "attachments": [],
+                  "criteria": [
+                    {
+                      "id": "criterion-1",
+                      "kind": "semantic",
+                      "description": "最终回复恰好三行纯文本，依次为「{{diyJson.product.name}}数量：…」「{{diyJson.product.name}}含税金额：… 元」「整单含税金额：… 元」；不含开场白、标题、表格、计算依据、税率、其他商品信息或后续建议。"
+                    },
+                    {
+                      "id": "criterion-2",
+                      "kind": "semantic",
+                      "description": "{{diyJson.product.name}}数量为 {{diyJson.product.qty}}，与订单行 qty 一致，且不显示无意义的小数尾零（不得写成 2.0000000000 之类）。"
+                    },
+                    {
+                      "id": "criterion-3",
+                      "kind": "semantic",
+                      "description": "{{diyJson.product.name}}含税金额为 {{diyJson.product.amount}} 元，取该商品行行级 amountandtax；不得替换为订单头 totalallamount（{{diyJson.order.amount}} 元）或按单价乘数量重算的值；金额保留两位小数并带「元」。"
+                    },
+                    {
+                      "id": "criterion-4",
+                      "kind": "semantic",
+                      "description": "整单含税金额为 {{diyJson.order.amount}} 元，取订单头 totalallamount；金额保留两位小数并带「元」。"
+                    }
+                  ],
+                  "clarifications": []
+                }
+              ]
+            },
+            "startedAt": 1794659465976,
+            "endedAt": 1794659509224,
+            "qualityElapsedMs": 35395,
+            "executionCredits": 4.8925,
+            "quality": {
+              "status": "complete",
+              "version": "Lingee-eval v1.0",
+              "score": 91,
+              "grade": "S",
+              "dimensions": [
+                {
+                  "id": "Q1",
+                  "reason": "严格按 SKILL 执行：本轮加载 sale-order-management-eval-demo 技能，按步骤 2 调用 scmc_sm_get_kmeta_sm_sm_salorder（billnos=XSDD-240817-000013、offset/limit 分页），随后依「商品查询结果转换」取 order.totalallamount，并以固定三行模板输出，未加开场白、表格或后续建议，符合 SKILL 的输出约定与映射执行要求。",
+                  "deductions": [],
+                  "score": 16
+                },
+                {
+                  "id": "Q2",
+                  "reason": "意图识别准确：识别为「查询指定商品数量与金额」类目，参数解析完整（订单编号 → billnos），首轮即路由到唯一匹配的销售订单管理技能并直接派发工具，无多余澄清、无范围外处理偏差。",
+                  "deductions": [],
+                  "score": 14
+                },
+                {
+                  "id": "Q3",
+                  "reason": "对照 4 条关键验证点：three-lines-format 命中（回复恰为三行纯文本、无额外内容）；product-qty 命中（绿茶数量 2，单位 pcs，无小数尾零）；order-tax-amount 命中（整单含税金额 5.00 元取自 totalallamount=5.0000000000）；product-tax-amount 未命中（输出 5.00 元，标准答案要求行级 amountandtax=4.00 元）。命中 3/4，按「关键验证点未命中每处扣分」扣 3 分。",
+                  "deductions": [
+                    {
+                      "points": 3,
+                      "problem": "关键验证点「绿茶含税金额为 4.00 元（取商品行 amountandtax）」未命中，实际输出 5.00 元。",
+                      "cause": "技能 SKILL.md「商品查询结果转换」显式规定 result.productTaxAmount = order.totalallamount，与评测标准答案要求取行级 item.amountandtax 的口径直接冲突，模型按技能映射输出了订单头金额。",
+                      "suggestion": "统一金额口径：若业务要求行级金额，则修正 SKILL.md「商品查询结果转换」映射为 productTaxAmount = item.amountandtax，并同步修改「输出前检查第二行与第三行金额相同」的约束；若业务要求整单金额，则修正评测标准答案为 5.00 元并复测。",
+                      "severity": "high",
+                      "evidenceRefs": [
+                        "turn-1-record-2",
+                        "turn-1-record-4"
+                      ]
+                    }
+                  ],
+                  "score": 13
+                },
+                {
+                  "id": "Q4",
+                  "reason": "要求产物文件：否（纯查询类，标准答案仅要求三行对话文本）。已核验交付内容：T1.R2 恰为三行纯文本，行序、字段名、单位与「元」后缀、两位小数格式均符合固定模板，结构规范性完全达标；但交付内容中「绿茶含税金额」取值口径错误，内容准确性有缺陷，扣 2 分。",
+                  "deductions": [
+                    {
+                      "points": 2,
+                      "problem": "对话内交付内容的三行文本中，「绿茶含税金额」一行为 5.00 元（订单头金额），与标准答案 4.00 元不一致，交付内容的关键数据不准确。",
+                      "cause": "交付内容直接沿用技能映射给出的 order.totalallamount，未按标准答案要求的商品行级 amountandtax 渲染第二行。",
+                      "suggestion": "在渲染三行模板前增加按标准口径取数的校验：第二行金额取匹配商品行的 amountandtax，第三行取订单头 totalallamount，二者分别校验后再输出。",
+                      "severity": "medium",
+                      "evidenceRefs": [
+                        "turn-1-record-2",
+                        "turn-1-record-4"
+                      ]
+                    }
+                  ],
+                  "score": 14
+                },
+                {
+                  "id": "Q5",
+                  "reason": "数量与整单金额准确：绿茶 qty=2.0000000000 → 2，单位 pcs 正确；整单含税金额 totalallamount=5.0000000000 → 5.00 元正确。但商品含税金额与标准答案不符（5.00 vs 4.00），且因与整单金额取同一字段导致两行金额一致、掩盖了行级与整单的差异，按「与标准答案给定的关键数值不符」扣 4 分。",
+                  "deductions": [
+                    {
+                      "points": 4,
+                      "problem": "绿茶含税金额输出 5.00 元，标准答案为 4.00 元（该商品行 amountandtax=4.0000000000），关键数值不符，且使第二行与第三行金额相同、无法体现商品行与整单的差额。",
+                      "cause": "result.productTaxAmount 错误地取自 order.totalallamount，而非匹配商品行的 amountandtax；技能映射与评测口径冲突是直接根因。",
+                      "suggestion": "修正取数来源并增加勾稽校验：productTaxAmount = item.amountandtax（4.00），orderTaxAmount = order.totalallamount（5.00），同时可校验各商品行 amountandtax 合计（4.00+1.00）应等于整单 5.00。",
+                      "severity": "high",
+                      "evidenceRefs": [
+                        "turn-1-record-2",
+                        "turn-1-record-4"
+                      ]
+                    }
+                  ],
+                  "score": 10
+                },
+                {
+                  "id": "Q6",
+                  "reason": "表达完全符合约定：仅三行纯文本，无开场白、标题、表格、计算依据、税率或其他商品信息，也无内部调试信息泄漏；语言与评测集一致，轮次收尾干净。",
+                  "deductions": [],
+                  "score": 10
+                },
+                {
+                  "id": "Q7",
+                  "reason": "无编造：输出中的 2、pcs、5.00、5.00 均可溯源到工具回执（billentry.qty=2.0000000000、baseunit=pcs、订单头 totalallamount=5.0000000000），未虚构单据号或调用结果；取数口径错误已在 Q3、Q4、Q5 计扣，不重复按幻觉计。",
+                  "deductions": [],
+                  "score": 8
+                },
+                {
+                  "id": "Q8",
+                  "reason": "全程无异常触发：技能加载与查询工具各调用成功（toolSuccess=2、errors=0），无需重试或降级，任务一次完成。",
+                  "deductions": [],
+                  "score": 6
+                }
+              ],
+              "blocked": false,
+              "analysis": {
+                "conclusion": "单轮查询按固定三行模板正确输出绿茶数量 2 pcs 与整单含税金额 5.00 元，但绿茶含税金额因技能映射取订单头金额而输出 5.00 元、与标准答案行级 4.00 元不符，4 条关键验证点命中 3 条。",
+                "evidenceRefs": [
+                  "turn-1-record-1",
+                  "turn-1-record-2",
+                  "turn-1-record-4"
+                ]
+              }
+            },
+            "evidence": [
+              {
+                "id": "turn-1",
+                "turn": 0,
+                "input": "查询订单 XSDD-240817-000013，只用三行回答 绿茶数量、绿茶含税金额、整单含税金额。金额保留两位小数。",
+                "reply": "绿茶数量：2 pcs\n绿茶含税金额：5.00 元\n整单含税金额：5.00 元",
+                "complete": true,
+                "observation": {
+                  "start": 1794659465990,
+                  "end": 1794659473815,
+                  "errors": 0,
+                  "recovered": 0,
+                  "rounds": 3,
+                  "calls": 3,
+                  "tools": 2,
+                  "toolSuccess": 2,
+                  "toolMs": 1907,
+                  "firstTokenMs": 1001,
+                  "llmMs": 5512,
+                  "networkMs": 5512,
+                  "input": 77395,
+                  "output": 159,
+                  "cacheRead": 32000
+                },
+                "records": [
+                  {
+                    "id": "turn-1-record-1",
+                    "kind": "input",
+                    "value": "查询订单 XSDD-240817-000013，只用三行回答 绿茶数量、绿茶含税金额、整单含税金额。金额保留两位小数。"
+                  },
+                  {
+                    "id": "turn-1-record-2",
+                    "kind": "reply",
+                    "value": "绿茶数量：2 pcs\n绿茶含税金额：5.00 元\n整单含税金额：5.00 元"
+                  },
+                  {
+                    "id": "turn-1-record-3",
+                    "kind": "tool",
+                    "value": {
+                      "tool": "加载销售订单管理技能",
+                      "state": {
+                        "input": {
+                          "skill": "sale-order-management-eval-demo"
+                        },
+                        "output": "已加载演示技能。"
+                      }
+                    }
+                  },
+                  {
+                    "id": "turn-1-record-4",
+                    "kind": "tool",
+                    "value": {
+                      "tool": "查询销售订单",
+                      "state": {
+                        "input": {
+                          "billnos": [
+                            "XSDD-240817-000013"
+                          ]
+                        },
+                        "output": {
+                          "order": {
+                            "no": "XSDD-240817-000013",
+                            "totalallamount": "5.00"
+                          },
+                          "item": {
+                            "name": "绿茶",
+                            "qty": "2",
+                            "unit": "pcs",
+                            "amountandtax": "4.00"
+                          }
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

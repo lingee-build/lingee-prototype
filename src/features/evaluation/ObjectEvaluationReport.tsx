@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react"
 import { useNavigate } from "react-router"
-import { loadLocalSalesEvaluation, useEvaluation, isActiveRun } from "@/services/evaluation"
+import { loadSalesEvaluationDemo, useEvaluation, isActiveRun } from "@/services/evaluation"
 import { averageQuality, passRate } from "@/vendor/build-evaluation/outcome"
 import { Button } from "@/ui"
 import { buildReportData } from "./report-document"
@@ -11,7 +11,7 @@ export function ObjectEvaluationReport({ objectId, open }: { objectId: string; o
   const navigate = useNavigate()
   const [loading, setLoading] = useState(false)
   useEffect(() => {
-    const request = loadLocalSalesEvaluation(objectId)
+    const request = loadSalesEvaluationDemo(objectId)
     if (!request) { setLoading(false); return }
     let active = true
     setLoading(true)
