@@ -11,6 +11,7 @@ export interface Project {
 export type SessionStatus = "idle" | "running" | "clarification" | "error"
 
 export interface Session {
+  localTest?: { objectId: string }
   id: string
   projectId: string
   title: string

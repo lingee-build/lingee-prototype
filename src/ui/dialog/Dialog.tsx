@@ -21,6 +21,7 @@ export interface DialogProps {
   verticalAlign?: "center" | "top"
   width?: string
   onClose?: () => void
+  onEscapeKeyDown?: (event: KeyboardEvent) => void
   children?: ReactNode
 }
 
@@ -45,6 +46,7 @@ export function Dialog(props: DialogProps) {
           data-no-header={hasHeader ? undefined : ""}
           className={cx("relative", props.className)}
           style={props.style}
+          onEscapeKeyDown={props.onEscapeKeyDown}
           onOpenAutoFocus={(e) => {
             const target = e.currentTarget as HTMLElement
             const autofocus = target.querySelector<HTMLElement>("[autofocus], [data-autofocus]")

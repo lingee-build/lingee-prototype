@@ -1,24 +1,47 @@
-import { usePanel } from "@/stores/panel"
-import { useParams } from "react-router"
-import { useEvaluation, isActiveRun } from "@/services/evaluation"
-import { evaluationRepairTarget, useEvaluationRepairs } from "@/services/evaluation-repair"
-import { EvaluationPanel } from "./EvaluationPanel"
-import { Button } from "@/ui"
+import { useEffect, useState } from "react"
 import { useNavigate } from "react-router"
+import { loadSalesEvaluationDemo, useEvaluation, isActiveRun } from "@/services/evaluation"
+import { averageQuality, passRate } from "@/vendor/build-evaluation/outcome"
+import { Button } from "@/ui"
+import { buildReportData } from "./report-document"
 import "./evaluation.css"
+import "@/vendor/build-evaluation/evaluation.css"
 
-/** 对象页签与工作区共用报告详情；页签内导航不改变左侧会话。 */
 export function ObjectEvaluationReport({ objectId, open }: { objectId: string; open?: (url: string) => void }) {
-  const { sessionId } = useParams()
   const navigate = useNavigate()
-  const runs = useEvaluation(s => s.runs[objectId]) || []
-  const repairItems = useEvaluationRepairs(s => s.items)
-  const target = sessionId && repairItems[sessionId] ? evaluationRepairTarget(sessionId) : undefined
-  const matching = target && `${target.objectType}:${target.objectId}` === objectId
-  const reportRequest = usePanel(s => s.evaluationReport)
-  const requested = reportRequest?.objectId === objectId ? reportRequest : undefined
-  const initialRunId = requested ? requested.runId : matching ? target.runId : runs.find(r => !isActiveRun(r))?.id || runs[0]?.id
+  const [loading, setLoading] = useState(false)
+  useEffect(() => {
+    const request = loadSalesEvaluationDemo(objectId)
+    if (!request) { setLoading(false); return }
+    let active = true
+    setLoading(true)
+    void request.finally(() => { if (active) setLoading(false) })
+    return () => { active = false }
+  }, [objectId])
+  const run = useEvaluation(state => state.runs[objectId]?.[0])
+  const count = useEvaluation(state => state.cases[objectId]?.length ?? 0)
   const [kind, id] = objectId.split(":")
-  if (!runs.length) return <div className="eval-empty"><p>暂无评测报告，准备好用例后即可运行评测。</p><Button variant="secondary" onClick={() => (open || navigate)(`/dev/${kind}/${encodeURIComponent(id)}/evaluation`)}>进入评测</Button></div>
-  return <EvaluationPanel key={`${objectId}:${sessionId || "object"}:${requested?.requestId || "default"}`} objectId={objectId} name={runs[0]?.name || ""} embedded={{ initialRunId, repairSessionId: matching ? sessionId : undefined }} />
+  const base = `/dev/${kind}/${encodeURIComponent(id)}/evaluation`
+  const report = run && buildReportData(run)
+  const rate = report ? passRate(report.cases) : null
+  const status = run?.awaitingContinueAt ? "待继续" : run?.status === "stop_unconfirmed" ? "运行状态待确认" :
+    run?.status === "judging" ? "评分中" : run?.status === "stopping" ? "停止处理中" : run && isActiveRun(run) ? "运行中" : "已结束"
+  return <section className="eval-overview bg-surface-skill-info" aria-label="评测" aria-busy={loading}>
+    <div className="eval-overview-summary">
+      <div className="eval-overview-heading">
+        <h3>最近一次评测</h3>
+        {run && <span className="eval-status" data-status={report?.state}>{status}</span>}
+        <span className="eval-overview-case-count">用例数 <strong>{loading ? "—" : count}</strong></span>
+      </div>
+      <div className="eval-overview-meta">{run ? run.code : loading ? "—" : "暂无评测报告"}</div>
+      {report && <dl className="eval-overview-metrics">
+        <div><dt>平均分</dt><dd>{averageQuality(report.cases).score ?? "—"}</dd></div>
+        <div><dt>通过率</dt><dd>{rate === null ? "—" : `${(rate * 100).toFixed(0)}%`}</dd></div>
+      </dl>}
+    </div>
+    <div className="eval-overview-actions">
+      {run && <Button variant="text" size="large" onClick={() => (open || navigate)(`${base}?tab=reports&run=${encodeURIComponent(run.id)}&view=report`)}>查看报告</Button>}
+      <Button variant="primary" size="large" onClick={() => (open || navigate)(base)}>进入评测</Button>
+    </div>
+  </section>
 }

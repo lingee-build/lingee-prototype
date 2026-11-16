@@ -1,5 +1,5 @@
 import { useRef, useState } from "react"
-import { useQuery } from "@tanstack/react-query"
+import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { BrandButton, ConfirmDialog, DropdownMenu, Icon, showToast, useDialog } from "@/ui"
 import { useT } from "@/i18n"
 import type { Agent } from "@/mock/fixtures/dev"
@@ -21,6 +21,7 @@ const Spinner = () => (
 export function AgentDrawer(props: { id: string; working: boolean }) {
   const t = useT()
   const dialog = useDialog()
+  const client = useQueryClient()
   const panel = useRef<AgentConfigHandle>(null)
   const [name, setName] = useState("")
   const [saving, setSaving] = useState(false)
@@ -36,6 +37,7 @@ export function AgentDrawer(props: { id: string; working: boolean }) {
     const next = await panel.current?.save()
     setSaving(false)
     if (!next) return undefined
+    client.setQueryData<Agent[]>(["agents"], agents => agents?.map(item => item.id === next.id ? next : item))
     showToast({ variant: "success", title: t("kcode.agentConfig.saveSuccess") })
     await query.refetch()
     return next

@@ -1,3 +1,12 @@
 node_modules
 .DS_Store
 .claude/
+*.local
+
+# 本地评测交付文档
+/deliverables/
+/docs/03-灵基Build评测MVP-原型说明-v1.0.0.md
+
+# Local Lingee runtime state
+/.lingeebuild/
+/src/mock/evaluation/sales-evaluation.local.json

@@ -1,0 +1,22 @@
+{
+  "name": "customer-followup",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "客户跟进管理：客户列表、销售阶段看板与客户详情",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc"
+  },
+  "dependencies": {
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^5",
+    "typescript": "^7.0.2",
+    "vite": "^7"
+  }
+}

@@ -46,7 +46,7 @@ export function SkillCardActions(props: { skill: Skill; handlers: SkillActionHan
                 <Icon name="cloud-test" size="small" />
                 <span>{t("kcode.skillPreview.action.test")}</span>
               </DropdownMenu.Item>
-              <DropdownMenu.Item onSelect={() => navigate(`/dev/skill/${encodeURIComponent(skill.id)}/evaluation`)} className={ITEM}>
+              <DropdownMenu.Item onSelect={() => navigate(`/dev/skill/${encodeURIComponent(skill.id)}/evaluation`, { state: { evaluationOnboarding: true } })} className={ITEM}>
                 <Icon name="checklist" size="small" />
                 <EvaluationLabel />
               </DropdownMenu.Item>

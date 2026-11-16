@@ -1,0 +1,82 @@
+[
+  {
+    "source": "packages/core/src/evaluation/foundation-chart-library.json",
+    "file": "foundation-chart-library.json",
+    "sha256": "d3e30f048aff6d9b183de4183e754716ed1d42bf2a907d8d4e740b791f32ac9b"
+  },
+  {
+    "source": "packages/core/src/evaluation/report-grade-style.ts",
+    "file": "report-grade-style.ts",
+    "sha256": "7d937789ea81f08a681e375c079c7cbe02430ed09a35c68befd2d653b10f9cfa"
+  },
+  {
+    "source": "packages/core/src/evaluation/report-html.ts",
+    "file": "report-html.ts",
+    "sha256": "f0c945889c7509427f7f7425d7bca836a17633c3fe1f454e5399ccad5e570dc0"
+  },
+  {
+    "source": "packages/core/src/evaluation/presentation.ts",
+    "file": "presentation.ts",
+    "sha256": "df6c63ddfdb35554cf432abcaaf7545c02f83e5b6bb9763837639cf40644c116"
+  },
+  {
+    "source": "packages/core/src/evaluation/foundation-quality-scale.ts",
+    "file": "foundation-quality-scale.ts",
+    "sha256": "7a603c174b618500c9c7f6c3ec20f0d48000f8f0a8c5fe4db59e33803b542fa0"
+  },
+  {
+    "source": "packages/core/src/evaluation/foundation-chart-LICENSE.md",
+    "file": "foundation-chart-LICENSE.md",
+    "sha256": "5a0877ad6d818529be4f33009d0942cdf7e2ed7656156f4aba7308459a546030"
+  },
+  {
+    "source": "packages/core/src/evaluation/report-batch.ts",
+    "file": "report-batch.ts",
+    "sha256": "ddbe6ea91b553f9b0ad9cb930c92e83c8833487158cee87586bcc88459c0d706"
+  },
+  {
+    "source": "packages/core/src/evaluation/outcome.ts",
+    "file": "outcome.ts",
+    "sha256": "82b604e63ecb41b5a22af307f19f2cb8589fa74de5d216f2caf74bb511ded208"
+  },
+  {
+    "source": "packages/core/src/evaluation/foundation-report-style.ts",
+    "file": "foundation-report-style.ts",
+    "sha256": "881addc249e84dbc57645b345ca5899d627f9d0af6550d63dcfc00f84d5850d0"
+  },
+  {
+    "source": "packages/core/src/evaluation/export-text.ts",
+    "file": "export-text.ts",
+    "sha256": "dc8b4351b4316b6a2e3c838d8dabb313201097599f75147b68402b59daf0d45d"
+  },
+  {
+    "source": "packages/core/src/evaluation/quality-report.ts",
+    "file": "quality-report.ts",
+    "sha256": "dec5797f53d3412e6688b4050fe72e687b9f86ffb59c61c5b308ea76a759a7c6"
+  },
+  {
+    "source": "packages/core/src/evaluation/foundation-report-runtime.ts",
+    "file": "foundation-report-runtime.ts",
+    "sha256": "eb58525e7eabffeb14431db037bb733688f7ecd7dfaa5cae9489c86172185f70"
+  },
+  {
+    "source": "packages/core/src/evaluation/evidence-fields.ts",
+    "file": "evidence-fields.ts",
+    "sha256": "6b180d570b0b60f212ceb39c533e7e561018a1f9742bd19ac726ae90258e5bd4"
+  },
+  {
+    "source": "packages/kcode-web/src/pages/evaluation.css",
+    "file": "evaluation.css",
+    "sha256": "8da0609dacdea1810650ab47e4dd473bf1fdeb49535922be4e85d7613d46db7d"
+  },
+  {
+    "source": "packages/core/src/evaluation/placeholders.ts",
+    "file": "placeholders.ts",
+    "sha256": "a5b3866a535b4051431514cd46586d768665c3c5f3f7da2cca8fec5465f90c37"
+  },
+  {
+    "source": "packages/core/src/evaluation/placeholder-preview.ts",
+    "file": "placeholder-preview.ts",
+    "sha256": "65526134537d8b2317541b28669d6db9df158faf1b1e70e9b70c447e6c354c8f"
+  }
+]

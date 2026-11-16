@@ -1,11 +1,11 @@
 import { guardUpgrade, UpgradeCard } from "@/features/artifact-upgrade/UpgradeGate"
-import { CapsuleTag, Empty, Tile, useDialog } from "@/ui"
+import { Empty, Tile, useDialog } from "@/ui"
 import { publicUrl } from "@/lib/public-url"
 import { useT } from "@/i18n"
 import type { Agent } from "@/mock/fixtures/dev"
 import { agentService } from "@/services"
 import { AgentDetailDialog } from "@/features/agent-config/AgentDetailDialog"
-import { domainI18nKeys, pickAvatar } from "@/features/agent-config/form"
+import { pickAvatar } from "@/features/agent-config/form"
 import { DEV_GRID, DevPageLayout } from "@/features/dev-page/DevPageLayout"
 import { useDevList } from "@/features/dev-page/use-dev-list"
 import { useStartSession } from "@/features/dev-page/use-start-session"
@@ -71,11 +71,6 @@ export function AgentDevPage() {
               backendStatus={agent.backendStatus}
               changedTipText={(status) => t(`kcode.agentDev.changedTip.${status}`)}
               reason={agent.rejectionRemark}
-              footer={
-                <>
-                  {domainI18nKeys[agent.domain] && <CapsuleTag>{t(domainI18nKeys[agent.domain])}</CapsuleTag>}
-                </>
-              }
               action={<AgentCardActions agent={agent} onChanged={() => void data.refresh()} />}
             />
             </UpgradeCard>

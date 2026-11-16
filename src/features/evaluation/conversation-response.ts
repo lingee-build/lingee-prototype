@@ -1,5 +1,7 @@
+import { reviewCases, diceKey, agentKey } from '@/mock/evaluation/review'
 import type { EvaluationConversation } from '@/services/evaluation-conversations'
 import { turnsOf } from '@/services/evaluation'
+import { salesGeneration } from './sales-generation'
 import { makeDraft } from './generation-drafts'
 
 const scenarios = (text: string) => ['正常查询', '信息缺失', '记录不存在', '多轮追问'].filter((_, i) => [/正常|完整|成功/, /缺少|缺失|不足|澄清/, /不存在|异常|无效/, /多轮|追问/][i].test(text))
@@ -38,6 +40,31 @@ export function respondToEvaluation(next: EvaluationConversation, raw: string): 
     else if (criterion) next.drafts[index] = { ...item, checks: [{ id: crypto.randomUUID(), kind: 'natural', text: criterion[1].trim(), required: true, files: [] }] }
     else return { text: '请明确修改内容，例如“第 1 条名称改为按单号查询”“第 1 条用户输入改为查询单据 A001”，或“第 1 条补充评测标准：返回客户名称”', changed: false }
     return { text: `已调整 ${item.code || `第 ${index + 1} 条`} 用例，已保存到当前用例列表`, changed: true }
+  }
+  if ((next.objectId === diceKey && /骰|掷大/.test(text) || next.objectId === agentKey && /库存.*(?:导出|明细)|导出.*库存/.test(text)) && /生成|设计|覆盖|测试|验证|用例/.test(text)) {
+    const cases = reviewCases(next.objectId).filter(c=>!next.drafts.some(d=>d.businessId===c.businessId))
+    if (!cases.length) return {text:'这些用例已在当前列表中，可以展开核对后运行。',changed:false}
+    if (next.files.length) for (const item of cases) item.attachments=structuredClone(next.files)
+    next.request=text
+    next.drafts.push(...cases)
+    return {text:'已按场景生成 '+cases.length+' 条用例并保存到当前对象。请核对逐轮输入、澄清条件和预期，再运行评测。',changed:true}
+  }
+  const sales = salesGeneration(next, text)
+  if (sales) return sales
+  const source = next.testSources?.at(-1)
+  if (source && /生成|整理|提取/.test(text) && /用例/.test(text)) {
+    const inputs = source.messages?.filter(message => message.role === "user").flatMap(message =>
+      message.parts.flatMap(part => part.type === "text" && part.text.trim() ? [part.text.trim()] : [])) ?? []
+    if (!inputs.length) return { text: "本地测试会话没有可用的用户输入，请返回来源会话核对。", changed: false }
+    if (next.drafts.some(item => JSON.stringify(turnsOf(item).map(turn => turn.input)) === JSON.stringify(inputs))) {
+      return { text: "当前用例列表已经包含这组测试输入，可以展开核对。", changed: false }
+    }
+    const expected = "核对回答与可信工具回执一致，具体业务字段和预期值由开发者核实。"
+    next.drafts.push({
+      id: crypto.randomUUID(), name: inputs[0].slice(0, 48), input: inputs[0], expected, source: "none", outcome: "passed",
+      turns: inputs.map(input => ({id:crypto.randomUUID(),input,expected,attachments:[],rules:[]}))
+    })
+    return { text: "已用关联测试会话的用户输入生成用例。请核对工具回执并补充可验证的标准答案后再运行。", changed: true }
   }
   const confirmation = /^(好的?|可以|确认|开始|生成|按建议|按这个|就这样|继续)/.test(text)
   const requested = scenarios(text)

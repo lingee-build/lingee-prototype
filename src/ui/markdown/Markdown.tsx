@@ -14,9 +14,10 @@ const COPY_BUTTON = `<button type="button" data-component="icon-button" data-var
  * 和线上一样用 marked 产出 HTML，结构也对齐：代码块包一层 markdown-code 并带复制按钮，
  * 表格包一层可横向滚动的容器。代码高亮是异步的：先出纯文本，高亮完成后重渲染一次。
  */
-function createParser(onPending: (code: string, lang: string) => void) {
+function createParser(onPending: (code: string, lang: string) => void, breaks = false) {
   return new Marked({
     gfm: true,
+    breaks,
     renderer: {
       code({ text, lang }) {
         const language = (lang ?? "").trim().split(/\s+/)[0] || "text"
@@ -40,12 +41,12 @@ function createParser(onPending: (code: string, lang: string) => void) {
   })
 }
 
-export function Markdown(props: { text: string; className?: string }) {
+export function Markdown(props: { text: string; className?: string; breaks?: boolean }) {
   const root = useRef<HTMLDivElement>(null)
   const [version, rerender] = useReducer((x: number) => x + 1, 0)
   const html = useMemo(
-    () => createParser((code, lang) => highlight(code, lang, rerender)).parse(props.text, { async: false }),
-    [props.text, version],
+    () => createParser((code, lang) => highlight(code, lang, rerender), props.breaks).parse(props.text, { async: false }),
+    [props.text, props.breaks, version],
   )
 
   // 复制按钮用事件委托：HTML 是整段替换的，逐个绑定会丢

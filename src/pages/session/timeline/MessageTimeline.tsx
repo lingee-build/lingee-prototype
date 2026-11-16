@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, type ReactNode } from "react"
-import type { CardClick } from "@/ui"
+import { Icon, type CardClick } from "@/ui"
 import type { Message, Session } from "@/mock/types"
 import { SessionTurn } from "./SessionTurn"
 import { useCardActions } from "./use-card-actions"
@@ -16,7 +16,7 @@ function toTurns(messages: Message[]) {
 }
 
 /** 会话时间线：固定标题 + 可滚动的消息区；流式输出时若用户停在底部则自动跟随 */
-export function MessageTimeline(props: { session: Session; messages: Message[]; footer?: ReactNode; titleActions?: ReactNode; titleDescription?: ReactNode; onCardClick?: CardClick }) {
+export function MessageTimeline(props: { session: Session; messages: Message[]; footer?: ReactNode; titleActions?: ReactNode; titleDescription?: ReactNode; onCardClick?: CardClick; onEvaluate?: (messageId: string) => void }) {
   const scroller = useRef<HTMLDivElement>(null)
   const stick = useRef(true)
   const turns = useMemo(() => toTurns(props.messages), [props.messages])
@@ -95,6 +95,9 @@ export function MessageTimeline(props: { session: Session; messages: Message[]; 
                     {props.session.title}
                   </h1>
                 </div>
+                {props.session.localTest && <span className="session-title-local-test-badge ml-2 inline-flex h-[18px] shrink-0 items-center gap-1 rounded px-1 text-[12px] leading-[18px]">
+                  <Icon name="link" size="xs" />Console沙箱
+                </span>}
               </div>
             </div>
             {props.titleActions && <div className="shrink-0 flex items-center gap-2">{props.titleActions}</div>}
@@ -123,6 +126,9 @@ export function MessageTimeline(props: { session: Session; messages: Message[]; 
               key={turn.user.id}
               user={turn.user}
               assistants={turn.assistants}
+              onEvaluate={props.onEvaluate}
+              last={index === turns.length - 1}
+              preserveLineBreaks={!!props.session.localTest}
               working={working && index === turns.length - 1}
               onCardClick={props.onCardClick ?? onCardClick}
             />

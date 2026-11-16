@@ -1,0 +1,55 @@
+/* React 组件外壳适配；视觉主体来自 vendor/build-evaluation/evaluation.css。 */
+.eval-panel { --eval-gutter:24px; background:var(--background-page); }
+.eval-report-unified .eval-report-cover { margin:0; border:0; background:transparent; }
+.eval-report-frame { min-height:400px; }
+.eval-report-progress progress { display:block; width:100%; height:5px; accent-color:var(--button-primary-bg); margin-top:8px; }
+.eval-report-progress ul { max-height:260px; overflow:auto; padding:8px; }
+.eval-report-progress li button { text-align:left; padding:8px; width:100%; }
+.eval-run-dialog .eval-model-trigger { justify-content:space-between; }
+.eval-run-dialog-actions { display:flex; gap:8px; justify-content:flex-end; }
+.eval-report-refresh { margin-left:auto; }
+@media(prefers-reduced-motion:reduce) { .eval-panel * { scroll-behavior:auto; } }
+
+.eval-run-dialog .eval-model-trigger { max-width:none; height:auto; justify-self:stretch; }
+.eval-run-dialog .eval-model-label { text-align:left; }
+/* Kobalte → Radix 的定位变量桥接，浮层保持在应用内容之上。 */
+.eval-report-progress-tooltip { z-index:250; width:min(calc(var(--radix-popover-trigger-width) * .75),calc(100vw - 32px)); max-height:var(--radix-popover-content-available-height); overflow:auto; }
+
+.eval-current-meta .eval-case-code { margin-right: 0; }
+
+.eval-run-dialog .eval-run-settings > .eval-model-field { grid-template-columns: minmax(0, 1fr); margin: 0; }
+.eval-run-dialog .eval-mcp-source-field { grid-template-columns: minmax(0, 1fr); }
+.eval-run-dialog .eval-model-trigger { width: 100%; min-height: 44px; }
+.eval-run-dialog form.eval-run-setup { padding: 0; line-height: 1.5; }
+.eval-run-dialog .eval-run-dialog-actions { margin-top: 0; }
+[data-component="dialog"] [data-slot="dialog-content"].eval-run-dialog [data-slot="dialog-body"] {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 0;
+}
+
+.eval-import-drop { justify-content: normal; }
+.eval-import-file-heading > .eval-add-action { display: inline-flex; align-items: center; gap: 6px; }
+.eval-panel .eval-report-toolbar { margin-block: 0 12px; }
+.eval-panel .eval-report-toolbar button { min-height: 0; }
+
+.eval-panel[data-view="runs"] .eval-report-card .eval-report-metadata { margin: 0; }
+
+.eval-panel .eval-case-list .eval-case-toggle:hover { color: var(--text-strong); text-decoration: none; }
+.eval-run-dialog:has(.eval-run-setup[data-editor-fullscreen]) [data-slot="dialog-header"],
+.eval-run-dialog:has(.eval-run-setup[data-editor-fullscreen]) .eval-run-dialog-actions { display: none; }
+
+.eval-tabs .dev-page-tabs[data-component="segmented-control"] [data-slot="segmented-control-list"] {
+  background-color: var(--neutral-100);
+}
+.eval-tabs .dev-page-tabs[data-component="segmented-control"] [data-slot="segmented-control-indicator"] {
+  background-color: var(--button-secondary-bg);
+  box-shadow: inset 1px 1px 1px var(--neutral-65), inset -1px -1px 1px 1px var(--neutral-65);
+}
+.eval-tabs .dev-page-tabs[data-component="segmented-control"] [data-slot="segmented-control-item"]:hover:not(:disabled):not([data-selected]) {
+  background-color: var(--neutral-50);
+}
+.eval-json-editor .cm-editor:not(.cm-focused):not(:has(.cm-placeholder)) :is(.cm-activeLine, .cm-activeLineGutter) {
+  background-color: transparent;
+}

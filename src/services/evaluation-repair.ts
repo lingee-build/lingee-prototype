@@ -1,8 +1,9 @@
+import { qualityOf } from "./evaluation-quality"
 import type { Session, Message } from "@/mock/types"
 import { create } from "zustand"
 import { createJSONStorage, persist } from "zustand/middleware"
 import { devStore } from "@/mock/dev-store"
-import { useEvaluation, failedRunResults, evaluationObjectUnavailable, verdictLabel, type EvalRun } from "./evaluation"
+import { useEvaluation, evaluationObjectUnavailable, verdictLabel, type EvalRun } from "./evaluation"
 
 export type EvaluationRepairTarget = { objectType: "skill" | "agent"; objectId: string; runId: string; resultId?: string }
 type StoredRepairTarget = EvaluationRepairTarget | { skillId: string; runId: string }
@@ -44,15 +45,25 @@ export function evaluationRepairTarget(sessionId: string): EvaluationRepairTarge
   return { objectType: "skill", objectId: "", runId: "" }
 }
 
+export function repairableResults(run: EvalRun) {
+  return run.results.filter(r => verdictLabel(r)==="不通过" || qualityOf(r).issue)
+}
+export function confirmReviewFix(target: EvaluationRepairTarget, projectId: string) {
+  const context = evaluationRepairEvidence(target,projectId)
+  if (!context) return
+  const key = target.objectType+":"+target.objectId
+  const fixes = context.failures.flatMap(r=>qualityOf(r).issue && r.reviewTrace ? [r.reviewTrace.scenario] : [])
+  if (fixes.length) useEvaluation.setState(s=>({reviewFixes:{...s.reviewFixes,[key]:[...new Set([...(s.reviewFixes?.[key] || []),...fixes])]}}))
+}
 export function repairPrompt(objectId: string, run: EvalRun, resultId?: string) {
   const kind = objectId.split(":")[0]
   if (kind !== "skill" && kind !== "agent") return ""
   const label = kind === "agent" ? "智能体" : "技能"
   const creator = kind === "agent" ? "ai-partner-creator" : "kingdee-skill-creator"
   const scope = kind === "agent" ? "不默认改写所挂载技能或知识源；涉及这些对象的问题应在分析中说明。" : ""
-  const results = failedRunResults(run).filter(r => !resultId || r.id === resultId)
+  const results = repairableResults(run).filter(r => !resultId || r.id === resultId)
   if (!results.length) return ""
-  return `/${creator} 请根据评测报告 ${run.code || run.id}，分析${label}「${run.name}」的 ${results.length} 条不通过用例，先说明原因与修复方案，等我确认后再修改文件。先核对目标对象及当前内容与评测时的差异，只修改确认属于当前对象的问题，不放宽用例标准。${scope}修改后说明变更，由我检查后手动复测。`
+  return `/${creator} 请根据评测报告 ${run.code || run.id}，分析${label}「${run.name}」的 ${results.length} 条${results.some(r=>qualityOf(r).issue) ? "有质量扣分的用例" : results.every(r=>verdictLabel(r)==="不通过") ? "不通过用例" : "有执行问题的用例"}，先说明原因与修复方案，等我确认后再修改文件。先核对目标对象及当前内容与评测时的差异，只修改确认属于当前对象的问题，不放宽用例标准。${scope}修改后说明变更，由我检查后手动复测。`
 
 }
 
@@ -62,15 +73,15 @@ export function repairDisabledReason(objectId: string, run: EvalRun, editable: b
   if (["running", "judging", "stopping", "stop_unconfirmed"].includes(run.status)) return "评测结束后可修复"
   if (useEvaluation.getState().runs[objectId]?.some(r => ["running", "judging", "stopping", "stop_unconfirmed"].includes(r.status))) return "当前有活动评测，请等待结束后修复"
   const latest = useEvaluation.getState().runs[objectId]?.find(r => !["running", "judging", "stopping", "stop_unconfirmed"].includes(r.status))
-  if (latest && latest.id !== run.id) return "仅最新报告支持修复，请查看最新报告"
+  if (latest && latest.id !== run.id && (!run.batchId || latest.batchId !== run.batchId)) return "仅最新报告支持修复，请查看最新报告"
   const result = resultId ? run.results.find(r => r.id === resultId) : undefined
   if (resultId && !result) return "未找到此用例的评测结果"
   if (result) {
-    if (verdictLabel(result) === "不通过") return ""
+    if (verdictLabel(result) === "不通过" || qualityOf(result).issue) return ""
     if (verdictLabel(result) === "通过") return "此用例已通过，无需修复"
     return "暂无明确的不通过依据，请先检查执行结果"
   }
-  return failedRunResults(run).length > 0 ? "" : "本次运行没有可修复的不通过用例"
+  return repairableResults(run).length > 0 ? "" : "本次运行没有可修复的不通过用例"
 }
 
 /** 从来源报告读取快照，不从提示文本推断或改用最新运行。 */
@@ -78,8 +89,8 @@ export function evaluationRepairEvidence(target: EvaluationRepairTarget, project
   const key = `${target.objectType}:${target.objectId}`
   const object = evaluationRepairObject(key)
   const run = useEvaluation.getState().runs[key]?.find(r => r.id === target.runId)
-  if (!object || object.projectId !== projectId || !run || repairDisabledReason(key, run, true)) return undefined
-  return { object, run, failures: failedRunResults(run) }
+  if (!object || object.projectId !== projectId || !run || repairDisabledReason(key, run, true, target.resultId)) return undefined
+  return { object, run, failures: repairableResults(run).filter(r=>!target.resultId || r.id===target.resultId) }
 }
 
 /** Only an explicit rerun chain continues a repair; an independent run starts separately. */

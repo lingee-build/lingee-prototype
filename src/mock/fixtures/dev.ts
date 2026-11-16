@@ -77,6 +77,13 @@ export interface AgentVersion {
   lines: string[]
 }
 
+export interface AgentDisplayInfo {
+  targetAudience: string[]
+  detailedIntroduction: { coreValue: string; coreAdvantage: string }
+  businessScenarios: Array<{ title: string; problem: string; solution: string; question?: string }>
+  exampleQuestion: string
+}
+
 export interface Agent {
   /** 智能体编码，同时是目录名 */
   id: string
@@ -91,6 +98,7 @@ export interface Agent {
   rejectionRemark?: string
   domain: string
   createdAt: string
+  displayInfo?: AgentDisplayInfo
   allowModelSwitch?: boolean
   defaultModelLevel?: ModelLevel
   role: string
@@ -132,6 +140,8 @@ export interface McpApp {
  * - 客户信用评估：已发布、本地有修改 → 需先提交
  */
 const rawSkills: Skill[] = [
+  { id: "sale-order-management-eval-demo", name: "sale-order-management-eval-demo", displayName: "销售订单管理（评测演示）", desc: "查询销售订单及其商品明细。", category: "供应链", projectId: "workspace", personalInstalled: false, enterpriseStatus: "saved" },
+  { id: "sk_roll_dice", name: "roll-dice", displayName: "掷骰子", desc: "掷一颗六面骰；遇到含糊要求时先询问，确认后再掷。", category: "通用", projectId: "workspace", personalInstalled: false, enterpriseStatus: "saved" },
   { id: "sk_delivery", name: "delivery-notice-query", displayName: "发货通知单查询", desc: "按单据编号、状态和通知日期组合筛选发货通知单，返回分页列表或物料行明细，查询为空时提示调整条件。", category: "供应链", projectId: "scm-skills", personalInstalled: true, enterpriseStatus: "published", inspect: "pass", entChanged: true, perChanged: false },
   { id: "sk_stock", name: "realtime-stock-query", displayName: "即时库存查询", desc: "按物料、仓库、仓位查询即时库存与可用量，支持批号与辅助属性维度展开。", category: "供应链", projectId: "scm-skills", personalInstalled: true, enterpriseStatus: "submitted", everPublished: true },
   { id: "sk_purchase", name: "purchase-order-push", displayName: "采购订单下推入库", desc: "校验采购订单可入库数量后下推生成采购入库单，超收时给出明确提示并阻止提交。", category: "供应链", projectId: "scm-skills", personalInstalled: false, enterpriseStatus: "rejected", reason: "缺少超收场景的处理说明，请补充后重新提交。", inspect: "fail" },
@@ -178,6 +188,7 @@ const role = (name: string, duty: string, rules: string[]) =>
   `# 角色\n你是「${name}」，${duty}\n\n# 工作方式\n${rules.map((rule, i) => `${i + 1}. ${rule}`).join("\n")}\n\n# 边界\n- 不确定的制度条款先检索知识库，查不到就明确告知并建议联系对应负责人\n- 涉及提交、审批等写操作前，必须向用户复述关键信息并得到确认`
 
 export const agents: Agent[] = [
+  { id: "inventory-review", projectId: "scm-skills", name: "库存核对助手", desc: "查询可用库存并导出明细，供仓库人员逐项核对。", avatar: "/avatar-agent-1.png", status: "saved", domain: "supply-chain", createdAt: "2026-11-11T02:00:00Z", role: "按物料和仓库查询库存，并生成可核对的明细。", skills: [skillRef("sk_stock")], knowledge: [], changelog: { pending: [], versions: [] } },
   {
     id: "scm-collab-assistant", projectId: "scm-skills", name: "供应链协同助手", desc: "覆盖采购、库存、发货全链路的问答与单据处理，能够跨单据追溯上下游关系。", avatar: "/preset-agent-avatar-1.png",
     status: "published", backendStatus: "published", domain: "supply-chain", createdAt: "2026-03-02T02:00:00Z", defaultModelLevel: "expert",
@@ -214,6 +225,18 @@ export const agents: Agent[] = [
   {
     id: "expense-advisor", projectId: "workspace", name: "财务报销顾问", desc: "指导员工按制度填写报销单，自动识别票据并校验费用标准。", avatar: "/preset-agent-avatar-3.png",
     status: "saved", domain: "finance", createdAt: "2026-09-30T08:00:00Z",
+    displayInfo: {
+      targetAudience: ["报销申请人", "财务审核员"],
+      detailedIntroduction: {
+        coreValue: "把费用制度转成可操作的报销步骤，帮助员工在提交前补齐材料。",
+        coreAdvantage: "结合票据信息和费用标准检查填报内容，并说明超标费用的审批要求。",
+      },
+      businessScenarios: [
+        { title: "差旅报销", problem: "出差回来后，不清楚交通和住宿需要哪些票据。", solution: "根据差旅日期和费用类型列出所需材料，并提示需要补充的信息。", question: "去北京出差三天，报销要准备哪些票据？" },
+        { title: "超标费用处理", problem: "实际住宿金额超出标准，不知道是否可以报销。", solution: "说明超标金额与对应制度，提示额外审批流程。", question: "住宿超标 200 元还能报销吗？" },
+      ],
+      exampleQuestion: "上周出差的住宿费超标了，怎么报销？",
+    },
     role: role("财务报销顾问", "帮助员工按公司费用制度完成报销。", ["先问清费用类型与发生日期", "超过标准的费用提示需要额外审批", "票据不清晰时请用户重新上传"]),
     skills: [skillRef("sk_expense"), skillRef("sk_delivery", "marketplace"), skillRef("sk_price", "marketplace")], knowledge: [catalog("kc_fin_expense", "费用报销制度", "财务制度/费用报销制度")],
     changelog: { pending: [{ createdAt: "2026-09-30T08:00:00Z", operator: "梁平先", summary: "创建智能体" }], versions: [] },

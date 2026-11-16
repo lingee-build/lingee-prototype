@@ -2,6 +2,7 @@ import { guardArtifactConfig } from "@/features/artifact-config/config-state"
 import { usePanel } from "@/stores/panel"
 import { useParams } from "react-router"
 import { evaluationRepairTarget } from "@/services/evaluation-repair"
+import { EvaluationTabLabel } from "@/features/evaluation/EvaluationTabLabel"
 import { ObjectEvaluationReport } from "@/features/evaluation/ObjectEvaluationReport"
 import { useEffect, useMemo, useState, type CSSProperties } from "react"
 import { useQuery } from "@tanstack/react-query"
@@ -165,7 +166,7 @@ export function SkillDrawer(props: { id: string; working: boolean }) {
             </DropdownMenu.Trigger>
             <DropdownMenu.Portal>
               <DropdownMenu.Content className="test-dropdown-menu">
-                <DropdownMenu.Item className="flex items-center gap-2 cursor-pointer" onSelect={() => { if (guardArtifactConfig("skill", skill.id)) return; if (guardTestEnv()) return; startSession(`/${skill.name} `, skill.projectId) }}>
+                <DropdownMenu.Item className="flex items-center gap-2 cursor-pointer" onSelect={() => { if (guardArtifactConfig("skill", skill.id)) return; if (guardTestEnv()) return; startSession(`/${skill.name} `, skill.projectId, { objectId: `skill:${skill.id}`, name: skill.displayName }) }}>
                   <Icon name="monitor" size="small" />
                   <DropdownMenu.ItemLabel>{t("kcode.skillPreview.action.localTest")}</DropdownMenu.ItemLabel>
                 </DropdownMenu.Item>
@@ -188,7 +189,7 @@ export function SkillDrawer(props: { id: string; working: boolean }) {
         <SegmentedControl
           value={tab}
           onChange={(value) => setTab(value as Tab)}
-          items={[...(["overview", "preview", "check"] as const).map((value) => ({ value, label: t(`kcode.skillPreview.tab.${value}`) })), { value: "evaluation", label: "评测报告" }]}
+          items={[...(["overview", "preview", "check"] as const).map((value) => ({ value, label: t(`kcode.skillPreview.tab.${value}`) })), { value: "evaluation", label: <EvaluationTabLabel /> }]}
         />
         <IconButton icon="refresh" variant="ghost" iconSize="small" className="ml-auto h-7 w-7" title={t("session.files.refresh")} onClick={() => void query.refetch()} />
       </div>

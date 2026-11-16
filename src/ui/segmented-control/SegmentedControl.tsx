@@ -4,9 +4,10 @@ import { cx } from "@/lib/cx"
 export interface SegmentedControlProps {
   value: string
   onChange: (value: string) => void
-  items: Array<{ value: string; label: ReactNode }>
+  items: Array<{ value: string; label: ReactNode; disabled?: boolean }>
   size?: "normal" | "small"
   className?: string
+  "aria-label"?: string
 }
 
 /** 分段选择器：滑块跟随选中项平移并变宽（位置由实测得出，过渡动效在同步来的 CSS 里） */
@@ -29,13 +30,14 @@ export function SegmentedControl(props: SegmentedControlProps) {
 
   return (
     <div data-component="segmented-control" data-size={props.size || "normal"} data-orientation="horizontal" className={props.className}>
-      <div data-slot="segmented-control-list" role="tablist" ref={list}>
+      <div data-slot="segmented-control-list" role="tablist" aria-label={props["aria-label"]} ref={list}>
         <div data-slot="segmented-control-indicator" style={indicator} />
         {props.items.map((item) => (
           <button
             key={item.value}
             type="button"
             role="tab"
+            disabled={item.disabled}
             aria-selected={props.value === item.value}
             tabIndex={props.value === item.value ? 0 : -1}
             onKeyDown={(event) => {
@@ -47,6 +49,7 @@ export function SegmentedControl(props: SegmentedControlProps) {
               else if (event.key === "End") next = props.items.length - 1
               else return
               event.preventDefault()
+              if (props.items[next].disabled) return
               props.onChange(props.items[next].value)
               list.current?.querySelectorAll<HTMLButtonElement>('[role="tab"]')[next]?.focus()
             }}

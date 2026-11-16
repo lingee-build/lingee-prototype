@@ -10,9 +10,9 @@ export const sessionService = {
   list: () => latency(db.sessions.filter((x) => !x.time.archived)),
   messages: (sessionId: string) => latency(db.messages.filter((x) => x.sessionId === sessionId), 250),
 
-  create(projectId: string, title: string) {
+  create(projectId: string, title: string, localTest?: Session["localTest"]) {
     const now = Date.now()
-    const session: Session = { id: uid("ses"), projectId, title, time: { created: now, updated: now }, status: "idle" }
+    const session: Session = { id: uid("ses"), projectId, title, localTest, time: { created: now, updated: now }, status: "idle" }
     db.sessions.push(session)
     return latency(session, 80)
   },
@@ -40,6 +40,11 @@ export const sessionService = {
   remove(id: string) {
     useEvaluationRepairs.setState(s => ({ items: Object.fromEntries(Object.entries(s.items).filter(([key]) => key !== id)), links: Object.fromEntries(Object.entries(s.links).filter(([key]) => key !== id)) }))
     useEvaluationConversations.getState().remove(id)
+    for (const item of Object.values(useEvaluationConversations.getState().items)) {
+      if (item.testSources?.some(source => source.sessionId === id)) {
+        useEvaluationConversations.getState().put({ ...item, testSources: item.testSources.filter(source => source.sessionId !== id) })
+      }
+    }
     db.sessions = db.sessions.filter((x) => x.id !== id)
     db.messages = db.messages.filter((x) => x.sessionId !== id)
     return latency(true, 60)
