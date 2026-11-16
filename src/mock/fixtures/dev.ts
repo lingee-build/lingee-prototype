@@ -78,7 +78,7 @@ export interface AgentVersion {
 export interface AgentDisplayInfo {
   targetAudience: string[]
   detailedIntroduction: { coreValue: string; coreAdvantage: string }
-  businessScenarios: Array<{ title: string; problem: string; solution: string }>
+  businessScenarios: Array<{ title: string; problem: string; solution: string; question?: string }>
   exampleQuestion: string
 }
 
@@ -228,8 +228,8 @@ export const agents: Agent[] = [
         coreAdvantage: "结合票据信息和费用标准检查填报内容，并说明超标费用的审批要求。",
       },
       businessScenarios: [
-        { title: "差旅报销", problem: "出差回来后，不清楚交通和住宿需要哪些票据。", solution: "根据差旅日期和费用类型列出所需材料，并提示需要补充的信息。" },
-        { title: "超标费用处理", problem: "实际住宿金额超出标准，不知道是否可以报销。", solution: "说明超标金额与对应制度，提示额外审批流程。" },
+        { title: "差旅报销", problem: "出差回来后，不清楚交通和住宿需要哪些票据。", solution: "根据差旅日期和费用类型列出所需材料，并提示需要补充的信息。", question: "去北京出差三天，报销要准备哪些票据？" },
+        { title: "超标费用处理", problem: "实际住宿金额超出标准，不知道是否可以报销。", solution: "说明超标金额与对应制度，提示额外审批流程。", question: "住宿超标 200 元还能报销吗？" },
       ],
       exampleQuestion: "上周出差的住宿费超标了，怎么报销？",
     },

@@ -6,9 +6,9 @@ import { AUDIENCE_LIMIT, displayInfoErrors, QUESTION_LIMIT, questionLength } fro
 
 const key = (name: string) => `proto.agentDisplay.${name}`
 const introFields = ["coreValue", "coreAdvantage"] as const
-const scenarioFields = ["title", "problem", "solution"] as const
+const scenarioFields = ["title", "problem", "solution", "question"] as const
 type ScenarioField = (typeof scenarioFields)[number]
-const emptyScenario = { title: "", problem: "", solution: "" }
+const emptyScenario = { title: "", problem: "", solution: "", question: "" }
 
 /** 只读的「标签 + 内容」行，标签列定宽让各卡片内容起点对齐 */
 function InfoRow({ label, children }: { label: string; children: ReactNode }) {
@@ -139,6 +139,7 @@ export function AgentDisplayOverview({ info, description }: { info: AgentDisplay
                 <div className="agent-scenario-body">
                   <div><div className="agent-scenario-label">{t(key("problem"))}</div><Clamp text={scenario.problem} empty={empty} /></div>
                   <div><div className="agent-scenario-label">{t(key("solution"))}</div><Clamp text={scenario.solution} empty={empty} /></div>
+                  <div><div className="agent-scenario-label">{t(key("scenarioQuestion"))}</div>{scenario.question ? <ExampleQuestion text={scenario.question} /> : empty}</div>
                 </div>
               </div>
             ) : empty}
@@ -256,6 +257,8 @@ export function AgentDisplayEditor({ info, onChange, attempt }: {
   const current = Math.min(active, scenarios.length - 1)
   const scenario = scenarios[current]
   const fieldError = (index: number, field: ScenarioField) => errors[`scenario-${index}-${field}`]
+  const fieldLabel = (field: ScenarioField) => t(key(field === "question" ? "scenarioQuestion" : field))
+  const fieldHint = (field: ScenarioField) => t(key(field === "question" ? "scenarioQuestionPlaceholder" : `${field}Placeholder`))
   const scenarioInvalid = (index: number) => attempt > 0 && scenarioFields.some(field => fieldError(index, field))
   const scenariosError = error("scenarios")
 
@@ -296,9 +299,9 @@ export function AgentDisplayEditor({ info, onChange, attempt }: {
             {scenario ? (
               <div id={`${id}-scenario`} className="agent-config-fields agent-scenario-form" role="tabpanel" aria-label={t(key("scenarioItem"), { index: current + 1 })}>
                 {scenarioFields.map(field => (
-                  <Input key={`${current}-${field}`} label={t(key(field))} multiline={field !== "title"} value={scenario[field]}
-                    className={field === "title" ? undefined : "min-h-[56px] max-h-[160px] overflow-y-auto"}
-                    placeholder={t(key(`${field}Placeholder`))} error={attempt > 0 && fieldError(current, field) ? t(key(fieldError(current, field)!)) : undefined}
+                  <Input key={`${current}-${field}`} label={fieldLabel(field)} required={field === "title"} multiline={field === "problem" || field === "solution"} value={scenario[field] ?? ""}
+                    className={field === "problem" || field === "solution" ? "min-h-[56px] max-h-[160px] overflow-y-auto" : undefined}
+                    placeholder={fieldHint(field)} error={attempt > 0 && fieldError(current, field) ? t(key(fieldError(current, field)!)) : undefined}
                     onChange={value => updateScenario(field, value)} />
                 ))}
               </div>
