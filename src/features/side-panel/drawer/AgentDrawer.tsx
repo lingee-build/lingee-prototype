@@ -5,6 +5,7 @@ import { useT } from "@/i18n"
 import type { Agent } from "@/mock/fixtures/dev"
 import { agentService } from "@/services"
 import { canWithdraw, useAgentActions } from "@/features/agent-actions/use-agent-actions"
+import { testBlockOf, useEnvScenario } from "@/features/env-source/env-scenario"
 import { AgentConfigPanel, type AgentConfigHandle } from "@/features/agent-config/AgentConfigPanel"
 import { AgentStatusTag } from "@/features/agent-config/AgentStatusTag"
 
@@ -39,8 +40,15 @@ export function AgentDrawer(props: { id: string; working: boolean }) {
     await query.refetch()
     return next
   }
+  /** 测试环境门禁（US-2026-043955 功能点 4）：无测试环境 / 无身份 / 凭据过期时本地与云端测试统一拦截 */
+  const guardTestEnv = (): boolean => {
+    const block = testBlockOf(useEnvScenario.getState())
+    if (block) showToast({ variant: "error", title: block })
+    return !!block
+  }
   /** 测试 / 提交前先把没保存的改动落盘，保证推上去的是界面上看到的内容 */
   const withSaved = async (run: (agent: Agent) => void) => {
+    if (guardTestEnv()) return
     const latest = panel.current?.dirty() ? await save() : agent
     if (latest) run(latest)
   }

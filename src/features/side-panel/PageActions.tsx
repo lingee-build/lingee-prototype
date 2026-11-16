@@ -1,4 +1,4 @@
-import { Icon, Tooltip, type IconName } from "@/ui"
+import { Tooltip, Icon, type IconName } from "@/ui"
 import { useT } from "@/i18n"
 import { usePanel, type PreviewView } from "@/stores/panel"
 
@@ -25,7 +25,7 @@ function ActionButton(props: { icon: IconName; label: string; view: Exclude<Prev
   )
 }
 
-/** 会话页右上角的图标栏：切换右侧预览面板显示「审查」还是「文件树」（两者互斥，再点一次收起） */
+/** 会话页右上角的图标栏：切换右侧预览面板显示「审查」还是「文件树」（两者互斥，再点一次收起）；会话操作菜单在标题右侧「⋯」（见 SessionPage） */
 export function PageActions(props: { inSession: boolean }) {
   const t = useT()
   // 工作流画布打开时不显示：画布头部已有自己的操作，这几个入口和工作流无关

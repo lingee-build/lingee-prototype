@@ -4,9 +4,9 @@ import { defaultScopeOf, isFirstSubmission } from "@/features/skill-publish-scop
 import { cx } from "@/lib/cx"
 import { useT } from "@/i18n"
 import type { Skill, SkillScope } from "@/mock/fixtures/dev"
-import { CHECK_ORDER } from "@/mock/fixtures/skill-check"
+import { SUBMIT_ORDER } from "@/mock/fixtures/skill-check"
 import { type SkillFixEntry } from "./fix-prompt"
-import { CheckingStep, DecisionStep, DeleteConfirmStep, ResourceStep, SelectStep, SummaryStep, UploadingStep } from "./steps"
+import { CheckingStep, DecisionStep, DeleteConfirmStep, SelectStep, SummaryStep, UploadingStep } from "./steps"
 import { BATCH_MAX, useBatchRun, type BatchMode, type BatchRoute, type Phase } from "./use-batch-run"
 
 export interface BatchDialogProps {
@@ -23,7 +23,7 @@ export interface BatchDialogProps {
   onGoFix?: (entries: SkillFixEntry[]) => void
 }
 
-const PHASE_STEP: Record<Phase, number> = { select: 1, deleteConfirm: 1, checking: 2, resource: 3, decision: 4, uploading: 4, summary: 4 }
+const PHASE_STEP: Record<Phase, number> = { select: 1, deleteConfirm: 1, checking: 2, decision: 3, uploading: 3, summary: 3 }
 
 /**
  * 技能批量操作向导：检查 / 企业分发 / 个人安装 / 删除共用一个弹窗。
@@ -44,7 +44,7 @@ export function BatchDialog(props: BatchDialogProps) {
   const firstScopes = () => Object.fromEntries(props.skills.filter(isFirstSubmission).map((skill) => [skill.name, scopeOf(skill)]))
   // 范围选择并入第 1 步列表行内：单技能与批量同一形态（需求项 3；首提技能显示范围，已发布的只读展示 Console 当前值）
   const scopePicker = enterprise ? { scopeOf, onChange: setScopeOf } : undefined
-  const busy = run.phase === "checking" || run.phase === "resource" || run.phase === "uploading"
+  const busy = run.phase === "checking" || run.phase === "uploading"
 
   const title =
     props.mode === "submit"
@@ -56,7 +56,6 @@ export function BatchDialog(props: BatchDialogProps) {
   const allSteps = [
     t("kcode.skillDev.batch.step.select"),
     t("kcode.skillDev.batch.step.check"),
-    t("kcode.skillDev.batch.step.resource"),
     t(props.mode === "submit" ? "kcode.skillDev.batch.step.submit" : "kcode.skillDev.batch.step.result"),
   ]
   const steps = props.mode === "delete" ? [] : single ? allSteps.slice(1) : allSteps
@@ -73,7 +72,7 @@ export function BatchDialog(props: BatchDialogProps) {
     // 带上失败明细（含修复指引）供修复会话拼分层指令；资源缺失（N3）由会话里的澄清卡处理
     const entries: SkillFixEntry[] = run.failItems.map((item) => ({
       skill: item.skill,
-      items: CHECK_ORDER.filter((key) => item.checkItems[key].status === "fail").map((key) => ({ checkId: key, ...item.checkItems[key] })),
+      items: SUBMIT_ORDER.filter((key) => item.checkItems[key].status === "fail").map((key) => ({ checkId: key, ...item.checkItems[key] })),
     }))
     props.onGoFix?.(entries)
     dialog.close()
@@ -120,7 +119,6 @@ export function BatchDialog(props: BatchDialogProps) {
           {run.phase === "select" && <SelectStep {...stepProps} scopePicker={scopePicker} />}
           {run.phase === "deleteConfirm" && <DeleteConfirmStep {...stepProps} />}
           {run.phase === "checking" && <CheckingStep {...stepProps} />}
-          {run.phase === "resource" && <ResourceStep {...stepProps} />}
           {run.phase === "decision" && <DecisionStep {...stepProps} />}
           {run.phase === "uploading" && <UploadingStep {...stepProps} />}
           {run.phase === "summary" && <SummaryStep {...stepProps} />}
@@ -156,13 +154,7 @@ export function BatchDialog(props: BatchDialogProps) {
               </BrandButton>
               {props.mode !== "delete" && (
                 <BrandButton variant="primary" size="normal" disabled>
-                  {t(
-                    run.phase === "uploading"
-                      ? "kcode.skillDev.batch.dialog.uploading"
-                      : run.phase === "resource"
-                        ? "kcode.skillDev.batch.dialog.resourceUpdating"
-                        : "kcode.skillDev.batch.dialog.checking",
-                  )}
+                  {t(run.phase === "uploading" ? "kcode.skillDev.batch.dialog.uploading" : "kcode.skillDev.batch.dialog.checking")}
                 </BrandButton>
               )}
             </>
@@ -172,7 +164,7 @@ export function BatchDialog(props: BatchDialogProps) {
               {run.failItems.length > 0 ? (
                 <>
                   {cancelButton}
-                  <BrandButton variant="primary" size="normal" onClick={goFix}>
+                  <BrandButton variant="auxiliary" size="normal" onClick={goFix} className="!border-[#fca5a5] !text-[#dc2626]">
                     {t("kcode.skillDev.batch.dialog.goFix")}
                   </BrandButton>
                 </>

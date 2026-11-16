@@ -115,6 +115,7 @@ export function Component() {
 
 
   const evaluationObject = (sessionId && evaluationSessions[sessionId]?.objectId) || search.get("evaluation")
+
   if (evaluationObject && deletedObjects?.[evaluationObject]) return <p role="status" className="p-8">被测对象及其评测数据已删除。</p>
   if (evaluationObject) return <EvaluationSession key={sessionId || evaluationObject} projectId={projectId} sessionId={sessionId} objectId={evaluationObject} />
 
@@ -138,7 +139,11 @@ export function Component() {
             {session ? (
               loaded ? (
                 <MessageTimeline session={session} messages={loaded}
-                  titleActions={repairTarget ? <div className={previewOpen ? "" : "pr-28"}><Button variant="ghost" className="eval-session-action" icon="arrow-left" onClick={() => returnUrl && navigate(returnUrl)}>返回评测</Button></div> : undefined}
+                  titleActions={
+                    <div className={cx("shrink-0 flex items-center gap-2", previewOpen ? "" : "pr-28")}>
+                      {repairTarget && <Button variant="ghost" className="eval-session-action" icon="arrow-left" onClick={() => returnUrl && navigate(returnUrl)}>返回评测</Button>}
+                    </div>
+                  }
                   titleDescription={repairTarget ? <div className="eval-repair-reference">
                     <span>本次修复依据：{repairRun ? <button type="button" className="text-text-brand hover:underline cursor-pointer" onClick={openRepairReport} aria-label={`查看报告 ${repairRun.code}`}>{repairRun.code}</button> : "报告不可用"}</span>
                     {(repairItems[sessionId!]?.runIds || []).filter(id => id !== repairTarget.runId).length > 0 && <span>此前依据：{(repairItems[sessionId!]?.runIds || []).filter(id => id !== repairTarget.runId).map(id => useEvaluation.getState().runs[`${repairTarget.objectType}:${repairTarget.objectId}`]?.find(r => r.id === id)?.code || "报告不可用").join("、")}</span>}

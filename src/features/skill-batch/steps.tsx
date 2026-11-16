@@ -6,7 +6,7 @@ import { CurrentScope, SCOPE_HINT_FIRST, ScopeChecks, isFirstSubmission } from "
 import { channelStatusOf, submitKindOf, type SubmitKind } from "@/features/skill-publish-scope/channel-status"
 import { cx } from "@/lib/cx"
 import { useT } from "@/i18n"
-import { CHECK_CATEGORIES } from "@/mock/fixtures/skill-check"
+import { CHECK_CATEGORIES, SUBMIT_CATEGORIES } from "@/mock/fixtures/skill-check"
 import { DynamicSkillIcon } from "@/features/dev-page/DynamicSkillIcon"
 import { BATCH_MAX, type BatchItem, type BatchMode, type BatchRoute, type BatchRun } from "./use-batch-run"
 
@@ -101,10 +101,10 @@ export function SelectStep({ run, mode, route, scopePicker }: StepProps & { scop
           onChange={(e) => run.toggleSelect(item.skill.id, e.currentTarget.checked)}
         />
         <DynamicSkillIcon name={item.skill.displayName} size={30} />
-        <div className="flex min-w-0 flex-col gap-px">
-          <span className="text-[13px] font-medium text-text-strong truncate" title={item.skill.displayName}>
-            {item.skill.displayName}
-          </span>
+          <div className="flex min-w-0 flex-col gap-px">
+            <span className="text-[13px] font-medium text-text-strong truncate" title={item.skill.displayName}>
+              {item.skill.displayName}
+            </span>
           {mode === "submit" && submitKindOf(item.skill, route) !== "first" && (
             <span className="text-[11px] leading-[16px] truncate text-text-base" title={status.text}>
               {status.text}
@@ -165,11 +165,15 @@ export function SelectStep({ run, mode, route, scopePicker }: StepProps & { scop
               )
             })
         ) : (
-          run.items.map((item) => (
-            <div key={item.skill.id} className="border-b border-[var(--border-weak-base)] last:border-b-0">
-              {rowOf(item)}
-            </div>
-          ))
+          // 检模式不分组：按上次检查状态排序（不通过 → 未检查 → 通过），状态由行内副标题着色说明——组头对检查场景没有提交组头那样的去向信息，纯排序更紧凑
+          run.items
+            .map((item) => ({ item, rank: item.skill.inspect === "fail" ? 0 : item.skill.inspect === "pass" ? 2 : 1 }))
+            .sort((a, b) => a.rank - b.rank)
+            .map(({ item }) => (
+              <div key={item.skill.id} className="border-b border-[var(--border-weak-base)] last:border-b-0">
+                {rowOf(item)}
+              </div>
+            ))
         )}
       </div>
       {run.selectedCount > BATCH_MAX && (
@@ -256,15 +260,14 @@ export function CheckingStep({ run }: StepProps) {
                       <div className="text-[11px] font-semibold text-[#6366f1] tracking-wide py-0.5">{t(`kcode.skillDev.batch.dialog.cat.${category.key}`)}</div>
                       {category.items.map((key) => {
                         const result = item.checkItems[key]
-                        // 资源缺失（N3）可以在下一步自动补齐，所以按警告色而不是错误色显示
-                        const soft = key === "N3" || result.status === "warn"
+                        const soft = result.status === "warn"
                         return (
                           <div className="flex items-start gap-2 pl-3 py-[3px]" key={key}>
                             <span className="size-[18px] flex items-center justify-center shrink-0 mt-[1px]">
                               {result.status === "pending" && <span className="text-[11px] text-text-weak">○</span>}
                               {result.status === "running" && <Icon name="loading" size="small" className="size-3 animate-spin text-[#495DFF]" />}
                               {result.status === "pass" && <span className="text-[11px] text-[#16a34a]">✓</span>}
-                              {result.status === "fail" && <span className={cx("text-[11px]", soft ? "text-[#a16207]" : "text-[#dc2626]")}>{key === "N3" ? "!" : "✕"}</span>}
+                              {result.status === "fail" && <span className={cx("text-[11px]", soft ? "text-[#a16207]" : "text-[#dc2626]")}>✕</span>}
                               {result.status === "warn" && <span className="text-[11px] text-[#a16207]">!</span>}
                             </span>
                             <div className="min-w-0 flex-1">
@@ -290,104 +293,19 @@ export function CheckingStep({ run }: StepProps) {
   )
 }
 
-/** 第 3 步：资源更新。只有检查出缺少依赖的工具时才会停在这一步 */
-export function ResourceStep({ run }: StepProps) {
-  const t = useT()
-  return (
-    <>
-      <ProgressHeader label={t("kcode.skillDev.batch.dialog.resourceRunning")} value={run.progress} />
-      <div className={LIST_BOX}>
-        {run.scoped
-          .filter((item) => item.checkItems.N3.status === "fail")
-          .map((item) => (
-            <div key={item.skill.id} className="flex items-start gap-2.5 px-3.5 py-2.5 border-b border-[var(--border-weak-base)] last:border-b-0">
-              <DynamicSkillIcon name={item.skill.displayName} size={30} />
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-[13px] font-medium text-text-strong truncate">{item.skill.displayName}</span>
-                  <span className={cx("text-[12px] shrink-0", run.progress < 100 ? "text-[#495DFF]" : "text-[#dc2626]")}>
-                    {t(run.progress < 100 ? "kcode.skillDev.batch.dialog.resourceUpdating" : "kcode.skillDev.batch.dialog.resUnresolved")}
-                  </span>
-                </div>
-                <div className="mt-1 text-[11px] text-text-base break-all">{item.checkItems.N3.reason}</div>
-              </div>
-            </div>
-          ))}
-      </div>
-    </>
-  )
-}
-
 /** 第 4 步（决策点 / 确认页）：检查模式展示结果；提交模式按提交成分四组分组 + 逐技能勾选，不通过组不可勾 */
 export function DecisionStep({ run, mode, route }: StepProps) {
   const t = useT()
   const [closed, setClosed] = useState<Record<string, boolean>>({})
   const toggleClosed = (key: string) => setClosed((cur) => ({ ...cur, [key]: !cur[key] }))
 
-  if (mode === "check")
-    return (
-      <div className="flex flex-col gap-2 flex-1 min-h-0">
-        <span className="text-[13px] text-text-base">
-          {run.failItems.length === 0
-            ? t("kcode.skillDev.batch.dialog.checkResultAllPass", { count: run.passItems.length })
-            : t("kcode.skillDev.batch.dialog.checkResultSummary", { total: run.scoped.length, pass: run.passItems.length, fail: run.failItems.length })}
-        </span>
-        <div className={LIST_BOX}>
-          {run.scoped.map((item) => {
-            const pass = item.reasons.length === 0
-            return (
-              <div key={item.skill.id} className="border-b border-[var(--border-weak-base)] last:border-b-0">
-                <div className="flex items-center gap-2.5 px-3.5 py-2.5">
-                  <div className="shrink-0" style={pass ? undefined : { filter: "grayscale(.6)" }}>
-                    <DynamicSkillIcon name={item.skill.displayName} size={30} />
-                  </div>
-                  <span className="text-[13px] text-text-strong truncate flex-1">{item.skill.displayName}</span>
-                  <span className={cx("text-[11px] font-medium shrink-0", pass ? (hasWarn(item) ? "text-[#a16207]" : "text-[#16a34a]") : "text-[#dc2626]")}>
-                    {t(
-                      pass
-                        ? hasWarn(item)
-                          ? "kcode.skillDev.batch.dialog.checkPassedWithWarn"
-                          : "kcode.skillDev.batch.dialog.checkPassed"
-                        : "kcode.skillDev.batch.dialog.checkFailed",
-                    )}
-                  </span>
-                </div>
-                {!pass && (
-                  <div className="px-3.5 pb-2.5 pl-[52px] flex flex-col gap-0.5">
-                    {item.reasons.map((reason) => (
-                      <span key={reason} className="text-[11px] text-[#dc2626] leading-snug">
-                        {reason}
-                      </span>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )
-          })}
-        </div>
-      </div>
-    )
+  /** 检查结果页的三态成分：有警告（通过但存在 warn 项）与纯通过（不通过＝run.failItems） */
+  const warnItems = () => run.scoped.filter((x) => x.reasons.length === 0 && hasWarn(x))
+  const passItems = () => run.scoped.filter((x) => x.reasons.length === 0 && !hasWarn(x))
 
-  const isPer = route === "personal"
-  const titles = GROUP_TITLES(route)
-  /** 通过项：勾选框 + 图标 + 名称（勾选联动底部按钮数量）；不通过项：不可勾 + 失败原因按类别分行 + 修复指引 */
-  const passRow = (item: BatchItem) => (
-    <label className="flex items-center gap-2.5 px-3.5 py-2 cursor-pointer select-none hover:bg-[color-mix(in_srgb,var(--primary-600)_10%,transparent)]">
-      <input
-        type="checkbox"
-        className="size-4 accent-[#495DFF] shrink-0"
-        checked={run.confirmSet.has(item.skill.id)}
-        onChange={() => run.toggleConfirm(item.skill.id)}
-      />
-      <DynamicSkillIcon name={item.skill.displayName} size={30} />
-      <span className="text-[13px] font-medium text-text-strong truncate flex-1" title={item.skill.displayName}>
-        {item.skill.displayName}
-      </span>
-    </label>
-  )
+  /** 不通过行（检查结果页与提交确认页共用）：置灰图标 + 名称，行下失败原因按类别分行 + 修复指引——检查模式只出规范/安全类（N3 恒 pending） */
   const failRow = (item: BatchItem) => {
-    // 失败原因按检查类别分行（无失败的类别不显示，类别顺序同检查步）；detail 聚合为一条修复指引
-    const failed = CHECK_CATEGORIES.map((category) => ({
+    const failed = SUBMIT_CATEGORIES.map((category) => ({
       label: t(`kcode.skillDev.batch.dialog.cat.${category.key}`),
       reasons: category.items.filter((key) => item.checkItems[key].status === "fail").map((key) => item.checkItems[key].reason ?? key),
       details: category.items.filter((key) => item.checkItems[key].detail).map((key) => item.checkItems[key].detail ?? ""),
@@ -401,7 +319,7 @@ export function DecisionStep({ run, mode, route }: StepProps) {
           </div>
           <span className="text-[13px] font-medium text-text-strong truncate">{item.skill.displayName}</span>
         </div>
-        <div className="pl-[42px] flex flex-col gap-0.5">
+        <div className="pl-[54px] flex flex-col gap-0.5">
           {failed.map((x) => (
             <span key={x.label} className="text-[11px] text-[#dc2626] leading-snug" title={`${x.label}：${x.reasons.join("；")}`}>
               {x.label}：{x.reasons.join("；")}
@@ -416,6 +334,98 @@ export function DecisionStep({ run, mode, route }: StepProps) {
       </div>
     )
   }
+
+  if (mode === "check")
+    return (
+      <div className="flex flex-col gap-2 flex-1 min-h-0">
+        <span className="text-[13px] text-text-base">
+          {run.failItems.length === 0
+            ? t("kcode.skillDev.batch.dialog.checkResultAllPass", { count: run.passItems.length })
+            : t("kcode.skillDev.batch.dialog.checkResultSummary", { total: run.scoped.length, pass: run.passItems.length, fail: run.failItems.length })}
+        </span>
+        <div className={LIST_BOX}>
+          {/* 与提交确认页共用分组形态（GroupBlock 折叠 + failRow 类别行/修复指引）；组顺序＝需处理程度降序：不通过 → 有警告 → 通过 */}
+          {run.failItems.length > 0 && (
+            <GroupBlock
+              title={t("kcode.skillDev.batch.dialog.resultGroupFail")}
+              tone="fail"
+              count={`${run.failItems.length} 个`}
+              closed={!!closed.fail}
+              onToggle={() => toggleClosed("fail")}
+            >
+              {run.failItems.map((item) => (
+                <div key={item.skill.id}>{failRow(item)}</div>
+              ))}
+            </GroupBlock>
+          )}
+          {warnItems().length > 0 && (
+            <GroupBlock
+              title={t("kcode.skillDev.batch.dialog.resultGroupWarn")}
+              tone="warn"
+              count={`${warnItems().length} 个`}
+              closed={!!closed.warn}
+              onToggle={() => toggleClosed("warn")}
+            >
+              {warnItems().map((item) => (
+                <div key={item.skill.id} className="px-3.5 pb-2.5">
+                  <div className="flex items-center gap-2.5">
+                    <DynamicSkillIcon name={item.skill.displayName} size={30} />
+                    <span className="text-[13px] font-medium text-text-strong truncate" title={item.skill.displayName}>
+                      {item.skill.displayName}
+                    </span>
+                  </div>
+                  <div className="pl-[54px] flex flex-col gap-0.5">
+                    {Object.values(item.checkItems)
+                      .filter((x) => x.status === "warn" && x.reason)
+                      .map((x, i) => (
+                        <span key={`${i}-${x.reason}`} className="text-[11px] text-[#a16207] leading-snug">
+                          {x.reason}
+                        </span>
+                      ))}
+                  </div>
+                </div>
+              ))}
+            </GroupBlock>
+          )}
+          {passItems().length > 0 && (
+            <GroupBlock
+              title={t("kcode.skillDev.batch.dialog.resultGroupPass")}
+              tone="neutral"
+              count={`${passItems().length} 个`}
+              closed={!!closed.pass}
+              onToggle={() => toggleClosed("pass")}
+            >
+              {passItems().map((item) => (
+                <div key={item.skill.id} className="flex items-center gap-2.5 px-3.5 py-2.5">
+                  <DynamicSkillIcon name={item.skill.displayName} size={30} />
+                  <span className="text-[13px] font-medium text-text-strong truncate flex-1" title={item.skill.displayName}>
+                    {item.skill.displayName}
+                  </span>
+                </div>
+              ))}
+            </GroupBlock>
+          )}
+        </div>
+      </div>
+    )
+
+  const isPer = route === "personal"
+  const titles = GROUP_TITLES(route)
+  /** 通过项：勾选框 + 图标 + 名称（勾选联动底部按钮数量）；不通过项：不可勾 + 失败原因按类别分行 + 修复指引 */
+  const passRow = (item: BatchItem) => (
+    <label className="flex items-center gap-2.5 px-3.5 py-2.5 cursor-pointer select-none hover:bg-[color-mix(in_srgb,var(--primary-600)_10%,transparent)]">
+      <input
+        type="checkbox"
+        className="size-4 accent-[#495DFF] shrink-0"
+        checked={run.confirmSet.has(item.skill.id)}
+        onChange={() => run.toggleConfirm(item.skill.id)}
+      />
+      <DynamicSkillIcon name={item.skill.displayName} size={30} />
+      <span className="text-[13px] font-medium text-text-strong truncate flex-1" title={item.skill.displayName}>
+        {item.skill.displayName}
+      </span>
+    </label>
+  )
 
   const groups = (["same", "cover", "first"] as const)
     .map((kind) => ({ kind, list: run.passItems.filter((x) => submitKindOf(x.skill, route) === kind).sort(byChannelStatus(route)) }))

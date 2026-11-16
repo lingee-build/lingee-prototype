@@ -12,6 +12,7 @@ import { skillDetailOf } from "@/mock/fixtures/skill-detail"
 import { sleep } from "@/mock/latency"
 import { consoleScopeService, skillService } from "@/services"
 import { isFirstSubmission } from "@/features/skill-publish-scope/SkillPublishScopeDialog"
+import { testBlockOf, useEnvScenario } from "@/features/env-source/env-scenario"
 import { DynamicSkillIcon } from "@/features/dev-page/DynamicSkillIcon"
 import { useStartSession } from "@/features/dev-page/use-start-session"
 import { BatchDialog } from "@/features/skill-batch/BatchDialog"
@@ -85,16 +86,23 @@ export function SkillDrawer(props: { id: string; working: boolean }) {
 
   const patch = (change: Partial<Skill>) => skillService.patch(skill.id, change).then(() => query.refetch())
 
+  /** 测试环境门禁（US-2026-043955 功能点 4）：无测试环境 / 无身份 / 凭据过期时本地与云端测试统一拦截 */
+  const guardTestEnv = (): boolean => {
+    const block = testBlockOf(useEnvScenario.getState())
+    if (block) showToast({ variant: "error", title: block })
+    return !!block
+  }
   /** 云端测试：先切到检查页签（线上测试前会重跑一遍校验），再推到沙箱 */
   const cloudTest = async () => {
     if (guardArtifactConfig("skill", skill.id)) return
+    if (guardTestEnv()) return
     setTab("check")
     setBusy("test")
     await sleep(1500)
     setBusy(undefined)
     showToast({ variant: "success", title: `${skill.displayName}：${t("kcode.skillPreview.action.test")}` })
   }
-  /** 提交：走和技能开发页同一个向导（发布范围 → 检查 → 资源更新 → 提交），跳过选择技能那一步 */
+  /** 提交：走和技能开发页同一个向导（发布范围 → 检查 → 提交，资源存在性在提交时以 Console 实时结果检查），跳过选择技能那一步 */
   const submit = () => {
     if (guardArtifactConfig("skill", skill.id)) return
     setTab("check")
@@ -157,7 +165,7 @@ export function SkillDrawer(props: { id: string; working: boolean }) {
             </DropdownMenu.Trigger>
             <DropdownMenu.Portal>
               <DropdownMenu.Content className="test-dropdown-menu">
-                <DropdownMenu.Item className="flex items-center gap-2 cursor-pointer" onSelect={() => { if (!guardArtifactConfig("skill", skill.id)) startSession(`/${skill.name} `, skill.projectId) }}>
+                <DropdownMenu.Item className="flex items-center gap-2 cursor-pointer" onSelect={() => { if (guardArtifactConfig("skill", skill.id)) return; if (guardTestEnv()) return; startSession(`/${skill.name} `, skill.projectId) }}>
                   <Icon name="monitor" size="small" />
                   <DropdownMenu.ItemLabel>{t("kcode.skillPreview.action.localTest")}</DropdownMenu.ItemLabel>
                 </DropdownMenu.Item>

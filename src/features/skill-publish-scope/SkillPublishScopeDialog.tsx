@@ -27,7 +27,7 @@ export const isFirstSubmission = (skill: Pick<Skill, "everPublished">) => !skill
 /** 首次发布的默认值：智能体可见 + 市场可见 */
 export const defaultScopeOf = (): SkillScope => ({ mall: true, build: false })
 
-/** 技能的本地状态：已保存（发布后本地有修改未提交）/ 审核中 / 正常 */
+/** 技能的本地状态：已保存（发布后有修改未提交）/ 审核中 / 正常 */
 export type MarketLocalState = "changed" | "reviewing" | undefined
 export const marketLocalState = (skill?: Pick<Skill, "entChanged" | "enterpriseStatus">): MarketLocalState => !skill ? undefined : skill.entChanged ? "changed" : skill.enterpriseStatus === "submitted" ? "reviewing" : undefined
 
