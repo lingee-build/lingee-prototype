@@ -8,6 +8,7 @@ import { DOT_BUTTON } from "@/features/dev-page/DevPageLayout"
 
 export interface SkillActionHandlers {
   onExport: (skill: Skill) => void
+  onInstallPersonal: (skill: Skill) => void
   onEdit: (skill: Skill) => void
   onLocalTest: (skill: Skill) => void
   onCloudTest: (skill: Skill) => void
@@ -19,7 +20,7 @@ export interface SkillActionHandlers {
 
 const ITEM = "flex items-center cursor-pointer gap-1"
 
-/** 技能卡片右上角的「…」菜单：编辑 / 本地测试 / 云端测试 / 评测 / 检查 / 提交 /（审核中才有）撤回 / 删除 */
+/** 技能卡片右上角的「…」菜单：编辑 / 本地测试 / 云端测试 / 评测 / 导出 / 安装为个人技能 / 检查 / 提交 /（审核中才有）撤回 / 删除 */
 export function SkillCardActions(props: { skill: Skill; handlers: SkillActionHandlers }) {
   const t = useT()
   const navigate = useNavigate()
@@ -53,6 +54,10 @@ export function SkillCardActions(props: { skill: Skill; handlers: SkillActionHan
               <DropdownMenu.Item onSelect={() => handlers.onExport(skill)} className={ITEM}>
                 <Icon name="export" size="small" />
                 <span>导出</span>
+              </DropdownMenu.Item>
+              <DropdownMenu.Item onSelect={() => handlers.onInstallPersonal(skill)} className={ITEM}>
+                <Icon name="download" size="small" />
+                <span>{t("proto.personalInstall.menu")}</span>
               </DropdownMenu.Item>
               <DropdownMenu.Item onSelect={() => handlers.onCheck(skill)} className={ITEM}>
                 <Icon name="shield-check" size="small" />

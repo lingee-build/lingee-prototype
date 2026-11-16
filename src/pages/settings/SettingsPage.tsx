@@ -4,6 +4,7 @@ import { Button, Dialog, DropdownMenu, Icon, useDialog, showToast } from "@/ui"
 import { cx } from "@/lib/cx"
 import { LINGEE_ENVS, LEGACY_COSMIC, TENANT, type LingeeEnv } from "@/mock/fixtures/env"
 import { envNoticeOf, loginEnvOf, sourceEnvOf, useEnvScenario } from "@/features/env-source/env-scenario"
+import { PersonalSkillsSection } from "./PersonalSkillsSection"
 
 /**
  * 全屏设置页（US-2026-043955 环境相关界面）。
@@ -279,6 +280,8 @@ function SettingsPage() {
           <div className="min-h-0 flex-1 overflow-y-auto">
             {tab === "environments" ? (
               <EnvSection />
+            ) : tab === "skills" ? (
+              <PersonalSkillsSection />
             ) : (
               <div className="flex h-full items-center justify-center text-[13px] text-text-weak">{INERT}</div>
             )}

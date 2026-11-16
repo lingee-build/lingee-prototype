@@ -19,6 +19,7 @@ import { SkillCardActions, type SkillActionHandlers } from "./SkillCardActions"
 import { UploadDialog } from "./UploadDialog"
 import { BatchDialog, type BatchDialogProps } from "@/features/skill-batch/BatchDialog"
 import { SkillDetailDialog } from "@/features/skill-detail/SkillDetailDialog"
+import { InstallPersonalSkillDialog } from "@/features/skill-install/InstallPersonalSkillDialog"
 
 // 页签 → 企业通道状态
 const TAB_STATUS: Record<string, Skill["enterpriseStatus"]> = {
@@ -93,6 +94,9 @@ export function SkillDevPage() {
 
   const rawHandlers: SkillActionHandlers = {
     onExport: (skill) => void exportArtifactPackage("skill", skill.id),
+    // 安装为个人技能：弹确认窗；安装中弹窗不可关、不可重复点
+    onInstallPersonal: (skill) =>
+      dialog.show(() => <InstallPersonalSkillDialog skill={skill} />, undefined, { closeOnOverlayClick: false }),
     onEdit: (skill) => {
       // 已提交 / 已发布的技能，编辑前需要二次确认
       if (skill.enterpriseStatus === "saved" || skill.enterpriseStatus === "rejected") return edit(skill)
