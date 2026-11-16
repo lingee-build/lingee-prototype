@@ -1,0 +1,125 @@
+/* ── Mermaid diagram wrapper ─────────────────────────────────────────── */
+
+.wiki-mermaid-wrapper {
+  position: relative;
+  border-radius: 8px;
+  margin: 16px 0;
+  border: 1px solid var(--color-border-base, #30363d);
+  background: var(--color-background-base, #0d1117);
+  overflow: hidden;
+}
+
+.wiki-mermaid-wrapper .mermaid {
+  padding: 48px 16px 16px;
+  overflow: hidden;
+  cursor: pointer;
+  display: flex;
+  justify-content: center;
+}
+
+.wiki-mermaid-wrapper .mermaid svg {
+  max-width: 100%;
+  height: auto;
+  transition: transform 0.1s ease-out;
+}
+
+/* toolbar — shown on hover */
+.wiki-mermaid-toolbar {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: flex;
+  gap: 4px;
+  z-index: 10;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.wiki-mermaid-wrapper:hover .wiki-mermaid-toolbar,
+.wiki-mermaid-wrapper.fullscreen .wiki-mermaid-toolbar {
+  opacity: 1;
+}
+
+.wiki-mermaid-toolbar button {
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--color-border-base, #30363d);
+  border-radius: 6px;
+  background: var(--color-surface-raised-base, #161b22);
+  color: var(--color-text-weak, #8b949e);
+  cursor: pointer;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s;
+  line-height: 1;
+}
+
+.wiki-mermaid-toolbar button:hover {
+  background: var(--color-surface-raised-base-hover, #1f2937);
+  border-color: var(--color-accent-base, #58a6ff);
+  color: var(--color-accent-base, #58a6ff);
+}
+
+/* active state: border highlight + drag cursor */
+.wiki-mermaid-wrapper.active {
+  border-color: var(--color-accent-base, #58a6ff);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--color-accent-base, #58a6ff) 20%, transparent);
+}
+
+.wiki-mermaid-wrapper.active .mermaid {
+  cursor: grab;
+}
+
+.wiki-mermaid-wrapper.active .mermaid:active {
+  cursor: grabbing;
+}
+
+/* hint text */
+.wiki-mermaid-hint {
+  position: absolute;
+  bottom: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: color-mix(in srgb, var(--color-surface-raised-base, #161b22) 80%, transparent);
+  color: var(--color-text-weaker, #8b949e);
+  padding: 2px 10px;
+  border-radius: 4px;
+  font-size: 11px;
+  pointer-events: none;
+  opacity: 1;
+  transition: opacity 0.3s;
+  white-space: nowrap;
+}
+
+.wiki-mermaid-wrapper.active .wiki-mermaid-hint {
+  opacity: 0;
+}
+
+/* fullscreen mode */
+.wiki-mermaid-wrapper.fullscreen {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  z-index: 9999;
+  border-radius: 0;
+  margin: 0;
+  overflow: visible;
+}
+
+.wiki-mermaid-wrapper.fullscreen .wiki-mermaid-toolbar {
+  position: fixed;
+  top: 12px;
+  right: 12px;
+  z-index: 10000;
+}
+
+.wiki-mermaid-wrapper.fullscreen .mermaid {
+  height: 100%;
+  align-items: center;
+  cursor: grab;
+  overflow: hidden;
+}

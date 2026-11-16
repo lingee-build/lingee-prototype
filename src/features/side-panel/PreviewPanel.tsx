@@ -1,0 +1,134 @@
+import { SessionToggleButton } from "./SessionToggleButton"
+import { useQuery } from "@tanstack/react-query"
+import { Icon, Tooltip } from "@/ui"
+import { cx } from "@/lib/cx"
+import { useT } from "@/i18n"
+import { fileService } from "@/services"
+import { usePanel } from "@/stores/panel"
+import { DrawerView } from "./drawer/DrawerView"
+import { WorkflowHeader } from "@/features/workflow/WorkflowHeader"
+import { clamp, startResize, useWorkflowLayout } from "@/features/workflow/layout-store"
+import "@/vendor/kcode-ui/components/resize-handle.css"
+import { FileTreePane } from "./FileTreePane"
+import { ReviewView } from "./ReviewView"
+
+/**
+ * 会话右侧的预览面板（对应原工程 session.tsx 里的预览区）。
+ * 顶部一条工具栏（折叠 / 展开会话区），下面按当前视图显示「审查」「文件树」或产物抽屉（技能 / 智能体 / 业务组件）。
+ */
+export function PreviewPanel(props: { projectId: string; sessionId?: string; working?: boolean }) {
+  const t = useT()
+  const panel = usePanel()
+  // 新任务页没有审查视图
+  const view = panel.view === "review" && !props.sessionId ? undefined : panel.view
+  const diffs = useQuery({ queryKey: ["diff", props.sessionId], queryFn: () => fileService.diff(props.sessionId ?? ""), enabled: !!props.sessionId })
+  const workflow = view === "drawer" && panel.drawer?.kind === "workflow"
+
+  return (
+    <>
+      {view && (
+        <div className="relative shrink-0 w-px h-full bg-[var(--neutral-100)]">
+          {/* 工作流：会话与画布之间的分隔线可以左右拖动（会话最窄 320px，画布区最窄 560px），双击恢复 1:1:1 */}
+          {workflow && !panel.sessionCollapsed && (
+            <div
+              data-component="resize-handle"
+              data-direction="horizontal"
+              className="workflow-resize-handle"
+              role="separator"
+              aria-orientation="vertical"
+              aria-label={t("proto.wf.resize")}
+              onDoubleClick={() => useWorkflowLayout.getState().set({ chat: 1 / 3 })}
+              onPointerDown={(e) =>
+                startResize(
+                  e,
+                  e.currentTarget.parentElement?.parentElement,
+                  (x, rect) => clamp((x - rect.left) / rect.width, 320 / rect.width, 1 - 560 / rect.width),
+                  (chat) => useWorkflowLayout.getState().set({ chat }),
+                )
+              }
+            />
+          )}
+        </div>
+      )}
+      <div
+        className={cx(
+          "relative h-full flex flex-col overflow-hidden transition-opacity duration-[240ms] ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none",
+          view ? "flex-1 min-w-0" : "w-0 min-w-0 opacity-0 pointer-events-none",
+        )}
+      >
+        {view && (
+          <>
+            <div className={cx("flex items-center justify-between pl-4.5 py-3 shrink-0 border-l-[0px]", workflow ? "pr-4" : "pr-6", panel.drawer?.kind !== "agentConfig" && "border-b border-[var(--neutral-100)]")}>
+              <div className="flex items-center gap-1">
+                <SessionToggleButton collapsed={panel.sessionCollapsed} onToggle={panel.toggleSessionCollapsed} />
+              </div>
+              {view === "drawer" && panel.drawer ? (
+                <>
+                  {panel.drawer.kind === "workflow" ? (
+                    <WorkflowHeader id={panel.drawer.id} />
+                  ) : panel.drawer.kind !== "agentConfig" && (
+                    <span className="flex-1 min-w-0 px-2 text-[14px] font-medium leading-[22px] text-text-strong truncate" title={panel.drawer.title}>
+                      {panel.drawer.title}
+                    </span>
+                  )}
+                  {/* 右上角叠着页面级的图标栏（审查 / 文件树），关闭按钮往左让开；工作流画布不显示图标栏 */}
+                  {panel.drawer.kind !== "agentConfig" && <Tooltip placement="bottom" value={t("common.close")} openDelay={300} className={panel.drawer.kind === "workflow" ? "ml-1" : "mr-[98px]"}>
+                    <button
+                      type="button"
+                      className="session-preview-header-icon p-0 border-none bg-transparent cursor-pointer inline-flex items-center justify-center outline-none transition-colors"
+                      onClick={panel.closeDrawer}
+                      aria-label={t("common.close")}
+                    >
+                      <Icon size="small" name="close-small" />
+                    </button>
+                  </Tooltip>}
+                </>
+              ) : (
+                <div />
+              )}
+            </div>
+            <div className="flex-1 min-h-0 flex overflow-hidden">
+              {view === "review" && props.sessionId && (
+                <div id="review-panel" className="flex-1 min-w-0 h-full bg-background-page">
+                  <div data-component="tabs" data-variant="normal" data-orientation="horizontal" className="h-full flex flex-col">
+                    <div className="shrink-0 flex">
+                      <div data-slot="tabs-list" role="tablist">
+                        <div data-slot="tabs-trigger-wrapper" data-value="review">
+                          <button type="button" role="tab" aria-selected data-slot="tabs-trigger" data-value="review" data-selected="">
+                            <div className="flex items-center gap-1">
+                              <div>{t("session.tab.review")}</div>
+                              <div>{diffs.data?.length ?? 0}</div>
+                            </div>
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex-1 min-h-0 overflow-hidden">
+                      <ReviewView sessionId={props.sessionId} onOpenFile={panel.openFile} />
+                    </div>
+                  </div>
+                </div>
+              )}
+              {view === "drawer" && panel.drawer && (
+                <div className="flex-1 min-w-0 h-full bg-background-page">
+                  <DrawerView target={panel.drawer} working={!!props.working} />
+                </div>
+              )}
+              {view === "wiki" && (
+                <div className="flex-1 min-w-0 h-full bg-background-page p-5">
+                  <div className="text-[16px] font-medium text-text-strong">{t("wiki.title")}</div>
+                  <div className="mt-3 text-[12px] text-text-weak">{t("wiki.empty")}</div>
+                </div>
+              )}
+              {view === "fileTree" && (
+                <div className="flex-1 min-w-0 h-full">
+                  <FileTreePane projectId={props.projectId} sessionId={props.sessionId} />
+                </div>
+              )}
+            </div>
+          </>
+        )}
+      </div>
+    </>
+  )
+}

@@ -1,0 +1,83 @@
+import { Collapsible as Kobalte, CollapsibleRootProps } from "@kobalte/core/collapsible"
+import { ComponentProps, onCleanup, ParentProps, splitProps } from "solid-js"
+
+export interface CollapsibleProps extends ParentProps<CollapsibleRootProps> {
+  class?: string
+  classList?: ComponentProps<"div">["classList"]
+  variant?: "normal" | "ghost"
+}
+
+function CollapsibleRoot(props: CollapsibleProps) {
+  const [local, others] = splitProps(props, ["class", "classList", "variant"])
+  return (
+    <Kobalte
+      data-component="collapsible"
+      data-variant={local.variant || "normal"}
+      classList={{
+        ...(local.classList ?? {}),
+        [local.class ?? ""]: !!local.class,
+      }}
+      {...others}
+    />
+  )
+}
+
+function CollapsibleTrigger(props: ComponentProps<typeof Kobalte.Trigger> & {
+  suppressClickAfterDrag?: boolean
+}) {
+  const [local, others] = splitProps(props, ["suppressClickAfterDrag", "ref"])
+  let downX = 0
+  let downY = 0
+  return (
+    <Kobalte.Trigger
+      data-slot="collapsible-trigger"
+      {...others}
+      ref={(el: HTMLElement) => {
+        if (local.suppressClickAfterDrag) {
+          const handleMouseDown = (e: MouseEvent) => {
+            downX = e.clientX
+            downY = e.clientY
+          }
+          const handleClick = (e: MouseEvent) => {
+            const dx = Math.abs(e.clientX - downX)
+            const dy = Math.abs(e.clientY - downY)
+            if (dx > 3 || dy > 3) {
+              e.preventDefault()
+              e.stopPropagation()
+            }
+          }
+          el.addEventListener("mousedown", handleMouseDown)
+          el.addEventListener("click", handleClick, true)
+          onCleanup(() => {
+            el.removeEventListener("mousedown", handleMouseDown)
+            el.removeEventListener("click", handleClick, true)
+          })
+        }
+        // 调用外部传入的 ref
+        if (typeof local.ref === "function") local.ref(el)
+      }}
+    />
+  )
+}
+
+function CollapsibleContent(props: ComponentProps<typeof Kobalte.Content>) {
+  return <Kobalte.Content data-slot="collapsible-content" {...props} />
+}
+
+function CollapsibleArrow(props?: ComponentProps<"div">) {
+  return (
+    <div data-slot="collapsible-arrow" {...(props || {})}>
+      <span data-slot="collapsible-arrow-icon">
+        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 14 14" fill="none">
+          <path d="M5.12935 10.9124C5.35716 11.1402 5.7265 11.1402 5.95431 10.9124L9.45431 7.4124C9.68211 7.18459 9.68211 6.81525 9.45431 6.58744L5.95431 3.08744C5.7265 2.85963 5.35716 2.85963 5.12935 3.08744C4.90154 3.31524 4.90154 3.68459 5.12935 3.9124L8.21687 6.99992L5.12935 10.0874C4.90154 10.3152 4.90154 10.6846 5.12935 10.9124Z" fill="currentColor" />
+        </svg>
+      </span>
+    </div>
+  )
+}
+
+export const Collapsible = Object.assign(CollapsibleRoot, {
+  Arrow: CollapsibleArrow,
+  Trigger: CollapsibleTrigger,
+  Content: CollapsibleContent,
+})

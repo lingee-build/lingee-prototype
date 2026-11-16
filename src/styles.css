@@ -1,0 +1,135 @@
+/* 入口样式：全部来自 src/vendor（由 bun run sync 从 lingee-build 同步），这里只负责按原顺序引入 */
+@import "./vendor/kcode-web/src/index.css";
+@import "./vendor/kcode-ui/components/empty.css";
+@import "./vendor/kcode-ui/components/drawer-panel.css";
+@import "./vendor/kcode-ui/components/render-card.css";
+@import "./vendor/kcode-web/src/components/dev-page-layout.css";
+@import "./vendor/kcode-web/src/components/skill-batch/batch-action-bar.css";
+@import "./vendor/kcode-web/src/components/prompt-input/prompt-input-bar.css";
+@import "./vendor/kcode-web/src/components/prompt-input/model-selector.css";
+@import "./vendor/kcode-web/src/components/prompt-input/slash-popover.css";
+@import "./vendor/kcode-web/src/pages/session/message-timeline.css";
+/* Exact runtime CSS snapshots from the current Build source. */
+@import "./source-runtime/runtime.css";
+
+/* Tailwind 默认只扫描 src/，入口 HTML 里的类名需要单独声明 */
+@source "../index.html";
+/* Original Solid snapshots are reference material, not additional application markup. */
+@source not "./source-runtime/reference";
+
+/*
+ * dark: 变体跟着应用自己的主题走（<html data-color-scheme="dark">），而不是跟系统的深浅色偏好。
+ * 否则系统是深色、应用是浅色时，写了 dark: 的地方（如首页推荐卡片）会单独变黑。
+ */
+@custom-variant dark (&:where([data-color-scheme="dark"], [data-color-scheme="dark"] *));
+
+/*
+ * 侧边栏是半透明的，线上由客户端窗口垫在后面。浏览器里没有这层，系统深色时会透出黑色画布，
+ * 所以给页面补一个跟应用主题走的底色。
+ */
+html {
+  background-color: var(--background-page, #fff);
+}
+
+/*
+ * 线上在几处用行内样式把分段页签的轨道色、文字色写死成浅色值，深色主题下会变成一条白带。
+ * 这里改成只在浅色主题下生效，深色主题用主题自己的值。
+ */
+:root:not([data-color-scheme="dark"]) .light-segmented {
+  --surface-segmented-track: rgb(240, 240, 243);
+  --text-base: rgba(0, 0, 0, 0.64);
+  --text-strong: rgba(0, 0, 0, 0.94);
+}
+
+/* 智能体详情弹窗里的卡片底色：浅色主题是很淡的灰，深色主题跟主题走 */
+:root:not([data-color-scheme="dark"]) .agent-detail-cards {
+  --agent-config-card-bg: #fafbfc;
+}
+
+/* 线上技能卡片有两处写死的浅色值（描述文字、悬停底色），深色主题下补上对应的 token */
+:root[data-color-scheme="dark"] .skill-dev-tile[data-component="tile"] [data-slot="tile-desc"] {
+  color: var(--text-weak);
+}
+:root[data-color-scheme="dark"] .skill-dev-tile.tile-filled[data-component="tile"]:hover {
+  background: var(--surface-raised-stronger-non-alpha);
+}
+
+/* 线上深色主题推导出的弹窗蒙层是半透明白色，页面会被罩上一层灰雾；原型里改成压暗 */
+:root[data-color-scheme="dark"] {
+  --dialog-overlay: rgba(0, 0, 0, 0.6);
+}
+
+/* 公共弹窗与升级弹窗统一使用全屏灰色蒙层。显式覆盖主题 token，避免浅色主题透明。 */
+[data-component="dialog-overlay"] {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.32);
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* 配置页与源码一致：窄面板把次要操作收进菜单，标题和操作保持同行。 */
+.agent-config-drawer { container-type: inline-size; container-name: agent-config; }
+.agent-config-overflow-action { display: none; }
+@container agent-config (max-width: 460px) {
+  .agent-config-test-action, .agent-config-submit-action { display: none; }
+  .agent-config-overflow-action { display: inline-flex; }
+}
+
+.agent-changelog .changelog-entry {
+  position: relative;
+  margin-left: 4px;
+  padding: 0 0 20px 20px;
+  border-left: 1px solid var(--border-weak-base);
+}
+.agent-changelog .changelog-entry:last-child { padding-bottom: 0; border-left-color: transparent; }
+.agent-changelog .changelog-entry::before {
+  content: "";
+  position: absolute;
+  left: -4px;
+  top: 7px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--text-weak);
+  box-shadow: 0 0 0 3px var(--agent-config-card-bg, var(--surface-raised-stronger-non-alpha));
+}
+.agent-changelog .changelog-entry-latest::before { background: var(--brand-button-primary-base); }
+.agent-changelog .changelog-entry-pending::before { background: var(--orange-500); }
+.changelog-badge {
+  display: inline-flex;
+  padding: 1px 6px;
+  border-radius: 5px;
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--brand-button-primary-base);
+  background: var(--brand-button-ghost-base);
+}
+.changelog-badge-pending { color: var(--text-base); background: var(--surface-base); }
+
+.changelog-version-heading { list-style: none; }
+.changelog-version-heading::-webkit-details-marker { display: none; }
+.changelog-version-heading::marker { content: ""; }
+.changelog-chevron { transition: transform 150ms ease; }
+details[open] > .changelog-version-heading .changelog-chevron { transform: rotate(90deg); }
+
+/* Fade the list itself so the footer transition preserves the sidebar surface. */
+[data-component="sidebar-session-scroll"] {
+  mask-image: linear-gradient(to bottom, #000 calc(100% - 20px), transparent);
+  -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 20px), transparent);
+}
+
+
+/* 会话时间线的滚动条：平时隐藏，鼠标移入对话区时才显示细条（与 markdown 代码块一致） */
+.session-timeline-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+  transition: scrollbar-color 0.3s ease;
+}
+.session-timeline-scroll:hover {
+  scrollbar-color: var(--neutral-300, rgba(0, 0, 0, 0.25)) transparent;
+}
+.session-timeline-scroll::-webkit-scrollbar { width: 6px; }
+.session-timeline-scroll::-webkit-scrollbar-track { background: transparent; }
+.session-timeline-scroll::-webkit-scrollbar-thumb { background: transparent; border-radius: 3px; }
+.session-timeline-scroll:hover::-webkit-scrollbar-thumb { background: var(--neutral-300, rgba(0, 0, 0, 0.25)); }

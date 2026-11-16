@@ -1,0 +1,207 @@
+import { Component, For, Show, createEffect, createMemo, onCleanup } from "solid-js"
+import { createStore } from "solid-js/store"
+import { Icon } from "@kcode/ui/icon"
+import { FileIcon } from "@kcode/ui/file-icon"
+import { Tooltip } from "@kcode/ui/tooltip"
+import type { ImageAttachmentPart } from "@/context/prompt"
+import { encodeFilePath } from "@/context/file/path"
+import { useLanguage } from "@/context/language"
+
+type PromptImageAttachmentsProps = {
+  attachments: ImageAttachmentPart[]
+  onOpen: (attachment: ImageAttachmentPart) => void
+  onRemove: (id: string) => void
+  removeLabel: string
+}
+
+/** 单行横向滚动：一次推进一张卡片（170px 宽 + 8px gap）。 */
+const SCROLL_STEP = 178
+
+const imageClass =
+  "size-14 shrink-0 rounded-[12px] object-cover transition-colors "
+/** 附件与图片共存时,图片改用附件卡片样式(缩略图 + 标题 + 类型·大小),与 fileCardClass 同高同宽。 */
+const imageFileCardClass =
+  "relative group flex items-center gap-1 shrink-0 h-[48px] w-[170px] rounded-[16px] bg-[var(--neutral-50)] px-1 py-1  "
+const imageThumbClass =
+  "size-10 shrink-0 rounded-[8px] object-cover  cursor-pointer"
+const imageRemoveClass =
+  "absolute top-1 right-1 size-3.5 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
+const fileCardClass =
+  "relative group flex items-center gap-1 shrink-0 h-[48px] w-[170px] rounded-[16px] bg-[var(--neutral-50)] px-1 py-2 "
+const fileMetaClass = "h-[18px] leading-[18px] text-[12px] font-normal text-[var(--neutral-400)]"
+const fileTitleClass = "h-4.5 leading-[18px] text-[12px] text-[var(--neutral-700)] truncate"
+
+const binaryBytes = (value: string) => {
+  const idx = value.indexOf(",")
+  const base = idx >= 0 ? value.slice(idx + 1) : value
+  if (!base) return 0
+  const padding = base.endsWith("==") ? 2 : base.endsWith("=") ? 1 : 0
+  return Math.max(0, Math.floor((base.length * 3) / 4) - padding)
+}
+
+const humanSize = (value: number) => {
+  if (value < 1024) return `${value}B`
+  if (value < 1024 * 1024) return `${(value / 1024).toFixed(1)}KB`
+  return `${(value / (1024 * 1024)).toFixed(1)}MB`
+}
+
+const fileExt = (name: string) => {
+  const idx = name.lastIndexOf(".")
+  if (idx <= 0 || idx >= name.length - 1) return "file"
+  return name.slice(idx + 1).toLowerCase()
+}
+
+/** 附件预览 URL：有 dataUrl（base64）用 dataUrl，否则用 file:// 磁盘路径。
+ *  路径必须经 encodeFilePath 编码：裸拼路径含空格/#/? 时 <img src> 会解析失败。 */
+export const previewUrl = (a: ImageAttachmentPart) =>
+  a.dataUrl || (a.filePath ? `file://${encodeFilePath(a.filePath)}` : "")
+
+export const PromptImageAttachments: Component<PromptImageAttachmentsProps> = (props) => {
+  const language = useLanguage()
+  const hasFileAttachments = createMemo(() =>
+    props.attachments.some((a) => !a.mime.startsWith("image/")),
+  )
+  const [scroll, setScroll] = createStore({ canLeft: false, canRight: false })
+  let viewport: HTMLDivElement | undefined
+  let observer: ResizeObserver | undefined
+
+  const sync = () => {
+    if (!viewport) return
+    setScroll({
+      canLeft: viewport.scrollLeft > 1,
+      canRight: viewport.scrollLeft + viewport.clientWidth < viewport.scrollWidth - 1,
+    })
+  }
+
+  const scrollTo = (step: number) => viewport?.scrollBy({ left: step, behavior: "smooth" })
+
+  const watch = (el: HTMLDivElement) => {
+    viewport = el
+    observer = new ResizeObserver(sync)
+    observer.observe(el)
+    sync()
+  }
+
+  // 附件增删会改变内容宽度，需在 DOM 更新后重算两侧可滚动状态
+  createEffect(() => {
+    props.attachments.length
+    requestAnimationFrame(sync)
+  })
+
+  onCleanup(() => observer?.disconnect())
+
+  return (
+    <Show when={props.attachments.length > 0}>
+      <div
+        data-component="prompt-attachments"
+        class="relative pt-4"
+        data-can-scroll-left={scroll.canLeft || undefined}
+        data-can-scroll-right={scroll.canRight || undefined}
+      >
+        <div
+          ref={watch}
+          onScroll={sync}
+          class="no-scrollbar flex flex-nowrap items-center gap-2 overflow-x-auto pb-3"
+        >
+          <For each={props.attachments}>
+            {(attachment) => {
+              const size = () => humanSize(attachment.fileSize ?? binaryBytes(attachment.dataUrl))
+              const ext = () => fileExt(attachment.filename)
+              return (
+                <Tooltip value={attachment.filename} placement="top" contentClass="break-all">
+                  <Show
+                    when={attachment.mime.startsWith("image/")}
+                    fallback={
+                      <div class={fileCardClass}>
+                        <FileIcon node={{ path: attachment.filename, type: attachment.mime === "application/x-directory" ? "directory" : "file" }} class="size-8 shrink-0" />
+                        <div class="min-w-0 flex-1">
+                          <div class={fileTitleClass}>{attachment.filename}</div>
+                          <div class={`flex items-center gap-2 ${fileMetaClass}`}>
+                            {attachment.mime === "application/x-directory" ? language.t("prompt.attachment.folder") : `${ext()}·${size()}`}
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => props.onRemove(attachment.id)}
+                          class={imageRemoveClass}
+                          aria-label={props.removeLabel}
+                        >
+                          <Icon name="remove-file" class="size-3.5" size="small"/>
+                        </button>
+                      </div>
+                    }
+                  >
+                    <Show
+                      when={hasFileAttachments()}
+                      fallback={
+                        <div class='relative group shrink-0'>
+                          <img
+                            src={previewUrl(attachment)}
+                            alt={attachment.filename}
+                            class={imageClass}
+                            onClick={() => props.onOpen(attachment)}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => props.onRemove(attachment.id)}
+                            class={imageRemoveClass}
+                            aria-label={props.removeLabel}
+                          >
+                            <Icon name="remove-file" class="size-3.5" size="small" />
+                          </button>
+                        </div>
+                      }
+                    >
+                      <div class={imageFileCardClass}>
+                        <img
+                          src={previewUrl(attachment)}
+                          alt={attachment.filename}
+                          class={imageThumbClass}
+                          onClick={() => props.onOpen(attachment)}
+                        />
+                        <div class="min-w-0 flex-1">
+                          <div class={fileTitleClass}>{attachment.filename}</div>
+                          <div class={`flex items-center gap-2 ${fileMetaClass}`}>{`${ext()}·${size()}`}</div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => props.onRemove(attachment.id)}
+                          class={imageRemoveClass}
+                          aria-label={props.removeLabel}
+                        >
+                          <Icon name="remove-file" class="size-3.5" size="small" />
+                        </button>
+                      </div>
+                    </Show>
+                  </Show>
+                </Tooltip>
+              )
+            }}
+          </For>
+        </div>
+        <Show when={scroll.canLeft}>
+          <button
+            type="button"
+            data-slot="prompt-attachments-arrow"
+            data-side="left"
+            onClick={() => scrollTo(-SCROLL_STEP)}
+            aria-label={language.t("prompt.attachment.scrollLeft")}
+          >
+            <Icon name="chevron-left" size="small" />
+          </button>
+        </Show>
+        <Show when={scroll.canRight}>
+          <button
+            type="button"
+            data-slot="prompt-attachments-arrow"
+            data-side="right"
+            onClick={() => scrollTo(SCROLL_STEP)}
+            aria-label={language.t("prompt.attachment.scrollRight")}
+          >
+            <Icon name="chevron-right" size="small" />
+          </button>
+        </Show>
+      </div>
+    </Show>
+  )
+}

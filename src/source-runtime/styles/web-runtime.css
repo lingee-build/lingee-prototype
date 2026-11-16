@@ -1,0 +1,1338 @@
+
+
+/* Permission dock style overrides */
+[data-component="session-prompt-dock"] {
+  padding: 0 24px 8px 24px;
+}
+
+
+[data-component="dock-prompt"][data-kind="permission"] {
+  width: 710px;
+  max-width: 100%;
+  border-radius: 24px;
+  border: 1px solid var(--neutral-200, rgba(0, 0, 0, 0.1));
+  background: var(--neutral-0);
+  box-shadow: 0px 4px 15px 0px #2f3e6126;
+  padding: 20px;
+}
+
+
+[data-component="dock-prompt"][data-kind="permission"] [data-slot="permission-body"] {
+  border-radius: 0;
+  border: none;
+  background: none;
+  box-shadow: none;
+  padding: 0;
+}
+
+
+[data-component="dock-prompt"][data-kind="permission"] [data-slot="permission-row"][data-variant="header"] {
+  grid-template-columns: 24px 1fr 23px;
+  gap: 8px;
+}
+
+
+[data-component="dock-prompt"][data-kind="permission"] [data-slot="permission-icon"] [data-component="icon"] {
+  width: 24px;
+  height: 24px;
+}
+
+
+[data-component="dock-prompt"][data-kind="permission"] [data-slot="permission-header-title"] {
+  color: var(--neutral-700, rgba(0, 0, 0, 0.82));
+  font-family: var(--family-title, "Microsoft YaHei");
+  font-size: var(--size-6, 20px);
+  font-weight: 600;
+  line-height: var(--line-height-6, 30px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+
+[data-component="dock-prompt"][data-kind="permission"] [data-slot="permission-hint"] {
+  color: var(--neutral-700, rgba(0, 0, 0, 0.94));
+  font-family: "PingFang SC";
+  font-size: 14px;
+  font-weight: 400;
+  line-height: normal;
+  padding-left: 6px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+
+[data-component="dock-prompt"][data-kind="permission"] [data-slot="permission-patterns"] {
+  padding-left: 6px;
+}
+
+
+[data-component="dock-prompt"][data-kind="permission"] [data-slot="permission-patterns"] code {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  display: block;
+}
+
+
+[data-component="dock-prompt"][data-kind="permission"] [data-slot="permission-footer"] {
+  padding: 12px 0 0;
+  margin-top: 0;
+  border-radius: 0;
+  background: none;
+  border: none;
+  box-shadow: none;
+}
+
+
+[data-component="dock-prompt"][data-kind="permission"] [data-slot="permission-footer-actions"] {
+  gap: 8px;
+}
+
+
+[data-component="dock-prompt"][data-kind="permission"]
+  [data-slot="permission-footer-actions"]
+  [data-component="button"][data-variant="ghost"] {
+  height: 36px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  color: var(--neutral-600, rgba(0, 0, 0, 0.64));
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 20px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  display: block;
+  text-align: center;
+}
+
+
+[data-component="dock-prompt"][data-kind="permission"]
+  [data-slot="permission-footer-actions"]
+  [data-component="button"][data-variant="secondary"] {
+  height: 36px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--Buttons-Secondary-Borders-BR-Color-1, #007aff);
+  background: none;
+  color: var(--Buttons-Secondary-Text-Color-1, #007aff);
+  font-family: "PingFang SC";
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 20px;
+  box-shadow: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  display: block;
+  text-align: center;
+}
+
+
+[data-component="dock-prompt"][data-kind="permission"]
+  [data-slot="permission-footer-actions"]
+  [data-component="button"][data-variant="primary"] {
+  height: 36px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: var(--primary-600, #495dff);
+  color: #fff;
+  font-family: "PingFang SC";
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 20px;
+  box-shadow: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  display: block;
+  text-align: center;
+}
+
+
+/* Question dock style tune */
+[data-component="dock-prompt"][data-kind="question"] {
+  border-radius: 24px;
+  border: 1px solid var(--docker-border);
+  background: var(--docker-bg);
+  box-shadow: 0px 4px 15px 0px #2f3e6126;
+  padding: 0;
+  overflow: hidden;
+}
+
+
+[data-component="dock-prompt"][data-kind="question"] [data-slot="question-body"] {
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  gap: 0;
+  padding: 0;
+}
+
+
+[data-component="dock-prompt"][data-kind="question"] [data-slot="question-header"] {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+  padding: 12px 16px 0 16px;
+}
+
+
+[data-component="dock-prompt"][data-kind="question"] [data-slot="question-header"]:empty {
+  display: none;
+}
+
+
+[data-component="dock-prompt"][data-kind="question"] [data-slot="question-header-main"] {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  padding: 4px 4px 8px;
+}
+
+
+[data-component="dock-prompt"][data-kind="question"] [data-slot="question-header-title"] {
+  font-size: 16px;
+  font-weight: 400;
+  line-height: 24px;
+  color: var(--neutral-600, rgba(0, 0, 0, 0.64));
+  min-width: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  user-select: text;
+  -webkit-user-select: text;
+  cursor: pointer;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  overflow: hidden;
+}
+
+
+[data-component="dock-prompt"][data-kind="question"] [data-slot="question-header-title"][data-expanded="true"] {
+  -webkit-line-clamp: unset;
+  line-clamp: unset;
+}
+
+
+[data-component="dock-prompt"][data-kind="question"] [data-slot="question-context"] {
+  margin-top: 4px;
+}
+
+
+[data-component="dock-prompt"][data-kind="question"] [data-slot="question-context-toggle"] {
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--primary-500, #1890ff);
+  cursor: pointer;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+
+[data-component="dock-prompt"][data-kind="question"] [data-slot="question-context-body"] {
+  margin-top: 4px;
+}
+
+
+[data-component="dock-prompt"][data-kind="question"] [data-slot="question-context-body"] [data-component="markdown"] {
+  font-size: 14px;
+  line-height: 22px;
+  color: var(--neutral-500, rgba(0, 0, 0, 0.45));
+}
+
+
+[data-component="dock-prompt"][data-kind="question"] [data-slot="question-context-body"] [data-component="markdown"] h1,
+[data-component="dock-prompt"][data-kind="question"] [data-slot="question-context-body"] [data-component="markdown"] h2,
+[data-component="dock-prompt"][data-kind="question"] [data-slot="question-context-body"] [data-component="markdown"] h3,
+[data-component="dock-prompt"][data-kind="question"] [data-slot="question-context-body"] [data-component="markdown"] h4,
+[data-component="dock-prompt"][data-kind="question"] [data-slot="question-context-body"] [data-component="markdown"] h5,
+[data-component="dock-prompt"][data-kind="question"] [data-slot="question-context-body"] [data-component="markdown"] h6 {
+  font-size: 14px;
+  font-weight: 600;
+  margin: 8px 0 4px;
+  color: var(--neutral-600, rgba(0, 0, 0, 0.64));
+}
+
+
+[data-component="dock-prompt"][data-kind="question"] [data-slot="question-context-body"] [data-component="markdown"] p {
+  margin: 4px 0;
+}
+
+
+[data-component="dock-prompt"][data-kind="question"] [data-slot="question-context-body"] [data-component="markdown"] ul,
+[data-component="dock-prompt"][data-kind="question"] [data-slot="question-context-body"] [data-component="markdown"] ol {
+  padding-left: 20px;
+  margin: 4px 0;
+}
+
+
+[data-component="dock-prompt"][data-kind="question"] [data-slot="question-context-body"] [data-component="markdown"] li {
+  margin: 2px 0;
+}
+
+
+[data-component="dock-prompt"][data-kind="question"] [data-slot="question-context-body"] [data-component="markdown"] strong {
+  color: var(--neutral-600, rgba(0, 0, 0, 0.64));
+}
+
+
+/* 授权引导卡（服务端下发 redirectUrl）：标题取 header，正文取 question。与工作模式（kwork）
+   侧的渲染一致 —— 同一张卡片在那边是「第三方授权」+ 说明正文，不是把整段问句当标题。 */
+[data-component="dock-prompt"][data-kind="question"]
+  [data-slot="question-section"][data-auth="true"]
+  [data-slot="question-header-title"] {
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 24px;
+  color: var(--neutral-700, rgba(0, 0, 0, 0.82));
+}
+
+
+[data-component="dock-prompt"][data-kind="question"] [data-slot="question-description"] {
+  margin-top: 4px;
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 22px;
+  color: var(--neutral-600, rgba(0, 0, 0, 0.64));
+  min-width: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  user-select: text;
+  -webkit-user-select: text;
+  cursor: text;
+}
+
+
+[data-component="dock-prompt"][data-kind="question"] [data-slot="question-progress-row"] {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+}
+
+
+[data-component="dock-prompt"][data-kind="question"] [data-slot="question-multi-title"] {
+  flex: 1;
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 24px;
+  color: var(--neutral-700, rgba(0, 0, 0, 0.82));
+}
+
+
+[data-component="dock-prompt"][data-kind="question"] [data-slot="question-progress-text"] {
+  flex-shrink: 0;
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 24px;
+  color: var(--neutral-600, rgba(0, 0, 0, 0.64));
+}
+
+
+[data-component="dock-prompt"][data-kind="question"] [data-slot="question-progress-count"] {
+  min-width: 32px;
+  font-size: 16px;
+  font-weight: 400;
+  line-height: 24px;
+  color: var(--neutral-600, rgba(0, 0, 0, 0.64));
+  text-align: center;
+}
+
+
+[data-component="dock-prompt"][data-kind="question"] [data-slot="question-progress-nav"] {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--neutral-600, rgba(0, 0, 0, 0.64));
+  cursor: pointer;
+  transition:
+    background-color 140ms ease,
+    color 140ms ease,
+    opacity 140ms ease,
+    transform 140ms ease;
+
+  [data-component="icon"] {
+  width: 20px;
+  height: 20px;
+  }
+}
+
+
+[data-component="dock-prompt"][data-kind="question"] [data-slot="question-progress-nav"]:hover:not(:disabled) {
+  color: var(--neutral-400, rgba(0, 0, 0, 0.28));
+  background: var(--neutral-50, rgba(0, 0, 0, 0.03));
+}
+
+
+[data-component="dock-prompt"][data-kind="question"] [data-slot="question-progress-nav"]:active:not(:disabled) {
+  transform: scale(0.96);
+  background: var(--neutral-150, rgba(0, 0, 0, 0.08));
+}
+
+
+[data-component="dock-prompt"][data-kind="question"] [data-slot="question-progress-nav"]:disabled {
+  color: var(--neutral-400, rgba(0, 0, 0, 0.28));
+  cursor: not-allowed;
+
+  [data-component="icon"] {
+    color: var(--neutral-400, rgba(0, 0, 0, 0.28));
+  }
+}
+
+
+[data-component="dock-prompt"][data-kind="question"] [data-slot="question-content"] {
+  gap: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+
+[data-component="dock-prompt"][data-kind="question"] [data-slot="question-hint"] {
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 20px;
+  color: var(--neutral-500, rgba(0, 0, 0, 0.46));
+  min-width: 0;
+}
+
+
+/* 409 授权引导：跳转按钮。按钮外观交给 @kcode/ui 的 Button（data-variant="primary"），
+   这里只负责排版，不要在此覆写颜色。卡片正文已经写明「完成后回到这里选择…」，
+   不再额外挂提示语（工作模式侧同样没有）。 */
+[data-component="dock-prompt"][data-kind="question"] [data-slot="question-redirect"] {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 10px 0 8px;
+}
+
+
+[data-component="dock-prompt"][data-kind="question"] [data-slot="question-options"] {
+  margin-top: 0;
+  gap: 0;
+  padding: 0;
+  flex: 0 0 auto;
+  height: 276px;
+  max-height: 276px;
+  position: relative;
+  z-index: 1;
+  overflow-y: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  /*
+   * 不要使用 CSS scroll-snap-type: y mandatory。
+   * 当 section 内选项较多导致其高度超过容器（min-height: 100%）时，mandatory 吸附会强制把
+   * 滚动位置回弹到 section 起点，造成两个问题：
+   * 1) 用户滚到底部查看末尾选项（如 "Type your own answer"）后，浏览器把内容回弹到顶部；
+   * 2) 在 mousedown 期间发生回弹，mouseup 时鼠标位置下方变成了第 1 项，导致点击落到第 1 项。
+   * 跨题之间的吸附已由 session-question-dock.tsx 的 settleToNearest 在 JS 层实现，
+   * 该逻辑允许在单题内自由滚动，仅在接近边界时才吸附，行为更符合预期。
+   */
+  scroll-behavior: smooth;
+  overscroll-behavior: contain;
+}
+
+
+[data-component="dock-prompt"][data-kind="question"] [data-slot="question-options"]::-webkit-scrollbar {
+  display: none;
+}
+
+
+/* 授权引导卡（服务端下发 redirectUrl）内容固定 —— 一题、两个选项（见 session-question-dock.tsx
+   的 authOnly）。这类卡片不需要滚动容器：固定 276px 会在卡片里留出空白，还会把选项区底部裁掉
+   一截（实测 scrollHeight 290 > clientHeight 276），于是内容能被滚轮推动。高度交给内容决定。 */
+[data-component="dock-prompt"][data-kind="question"] [data-slot="question-options"][data-auth="true"] {
+  height: auto;
+  max-height: none;
+  overflow: visible;
+  scroll-behavior: auto;
+}
+
+
+[data-component="dock-prompt"][data-kind="question"]
+  [data-slot="question-options"][data-auth="true"]
+  [data-slot="question-section"] {
+  min-height: auto;
+}
+
+
+[data-component="dock-prompt"][data-kind="question"] [data-slot="question-section"] {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px;
+  min-height: 100%;
+  flex: 0 0 auto;
+  box-sizing: border-box;
+  /* 同上：吸附行为交由 JS（settleToNearest）处理，CSS 不再强制 snap-align/stop。 */
+  opacity: 1;
+  transform: none;
+  transition: opacity 180ms ease-out;
+  overflow: hidden;
+}
+
+
+[data-component="dock-prompt"][data-kind="question"] [data-slot="question-section"][data-active="true"] {
+  opacity: 1;
+  transform: none;
+}
+
+
+[data-component="dock-prompt"][data-kind="question"] [data-slot="question-option"] {
+  border-radius: 16px;
+  border: 0;
+  background: transparent;
+  padding: 10px 16px;
+  gap: 12px;
+  align-items: center;
+  /* 整项是一个选择控件：连同内部文字一起给小手，不要出现 I 型文本光标 */
+  cursor: pointer;
+  transition:
+    border-color 140ms ease,
+    box-shadow 140ms ease,
+    background-color 140ms ease;
+}
+
+
+[data-component="dock-prompt"][data-kind="question"] [data-slot="question-option"]:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+
+
+[data-component="dock-prompt"][data-kind="question"] [data-slot="question-option"]:hover {
+  background: var(--neutral-50, rgba(0, 0, 0, 0.03));
+}
+
+
+[data-component="dock-prompt"][data-kind="question"] [data-slot="question-option"][data-picked="true"] {
+  border: none;
+  box-shadow: none;
+}
+
+
+[data-component="dock-prompt"][data-kind="question"] [data-slot="question-option-box"] {
+  width: 22px;
+  height: 22px;
+  border-color: var(--neutral-300, rgba(0, 0, 0, 0.18));
+}
+
+
+[data-component="dock-prompt"][data-kind="question"] [data-slot="question-option-check"] {
+  width: 20px;
+  min-width: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  align-self: center;
+  transform: none;
+}
+
+
+[data-component="dock-prompt"][data-kind="question"] [data-slot="question-option-box"][data-type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border-width: 1px;
+  border-style: solid;
+  border-color: var(--neutral-300, rgba(0, 0, 0, 0.18));
+  border-radius: 4px;
+  background: transparent;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  transition:
+    border-color 140ms ease,
+    background 140ms ease;
+}
+
+
+[data-component="dock-prompt"][data-kind="question"] [data-slot="question-option-checkmark"] {
+  opacity: 0;
+  width: 14px;
+  height: 14px;
+  display: block;
+  color: #fff;
+}
+
+
+[data-component="dock-prompt"][data-kind="question"]
+  [data-slot="question-option-box"][data-type="checkbox"][data-picked="true"] {
+  border-color: var(--primary-600, #495dff);
+  background: var(--primary-600, #495dff);
+}
+
+
+[data-component="dock-prompt"][data-kind="question"]
+  [data-slot="question-option-box"][data-type="checkbox"][data-picked="true"]
+  [data-slot="question-option-checkmark"] {
+  opacity: 1;
+}
+
+
+[data-component="dock-prompt"][data-kind="question"] [data-slot="question-option-box"][data-type="number"] {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid var(--neutral-200, rgba(0, 0, 0, 0.08));
+  border-radius: 999px;
+  background: transparent;
+  color: var(--neutral-500, rgba(0, 0, 0, 0.46));
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1;
+  transition:
+    border-color 140ms ease,
+    color 140ms ease;
+}
+
+
+[data-component="dock-prompt"][data-kind="question"]
+  [data-slot="question-option-box"][data-type="number"][data-picked="true"] {
+  border-color: var(--primary-600, #495dff);
+  color: var(--primary-600, #495dff);
+}
+
+
+[data-component="dock-prompt"][data-kind="question"] [data-slot="question-option-index"] {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+
+
+[data-component="dock-prompt"][data-kind="question"] [data-slot="option-label"] {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 22px;
+  color: var(--black-64, #000000A3);
+}
+
+
+[data-component="dock-prompt"][data-kind="question"] [data-slot="question-option"][data-picked="true"] [data-slot="option-label"] {
+  font-weight: 500;
+  color: var(--black-82, #000000D1);
+}
+
+
+:root[data-color-scheme="dark"] [data-component="dock-prompt"][data-kind="question"] [data-slot="option-label"] {
+  color: rgba(255, 255, 255, 0.64);
+}
+
+
+:root[data-color-scheme="dark"] [data-component="dock-prompt"][data-kind="question"] [data-slot="question-option"][data-picked="true"] [data-slot="option-label"] {
+  color: rgba(255, 255, 255, 0.82);
+}
+
+
+[data-component="dock-prompt"][data-kind="question"] [data-slot="option-label-text"] {
+  user-select: text;
+  -webkit-user-select: text;
+  cursor: pointer;
+}
+
+
+[data-component="dock-prompt"][data-kind="question"] [data-slot="option-label-tag"] {
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 8px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--icon-interactive-base) 28%, transparent);
+  background: color-mix(in srgb, var(--icon-interactive-base) 9%, transparent);
+  color: var(--icon-interactive-base);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 20px;
+}
+
+
+[data-component="dock-prompt"][data-kind="question"] [data-slot="option-description"] {
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 22px;
+  color: var(--black-28, #00000047);
+  user-select: text;
+  -webkit-user-select: text;
+  cursor: pointer;
+  display: block;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+
+[data-component="dock-prompt"][data-kind="question"] [data-slot="question-option"][data-picked="true"] [data-slot="option-description"] {
+  color: var(--black-46, #00000075);
+}
+
+
+:root[data-color-scheme="dark"] [data-component="dock-prompt"][data-kind="question"] [data-slot="option-description"] {
+  color: rgba(255, 255, 255, 0.28);
+}
+
+
+:root[data-color-scheme="dark"] [data-component="dock-prompt"][data-kind="question"] [data-slot="question-option"][data-picked="true"] [data-slot="option-description"] {
+  color: rgba(255, 255, 255, 0.46);
+}
+
+
+/* [data-component="dock-prompt"][data-kind="question"] [data-slot="question-option"][data-custom="true"] [data-slot="question-option-main"] {
+  gap: 12px;
+} */
+
+/* 选中带补充输入的选项后，选项下展开的输入区（左对齐选项正文） */
+[data-component="dock-prompt"][data-kind="question"] [data-slot="question-follow-up"] {
+  margin: -4px 2px 10px 44px;
+  padding: 4px 12px;
+  border-radius: 12px;
+  background: var(--neutral-100, rgba(0, 0, 0, 0.04));
+}
+
+[data-component="dock-prompt"][data-kind="question"] [data-slot="question-follow-up"] [data-slot="question-custom-input"] {
+  width: 100%;
+}
+
+[data-component="dock-prompt"][data-kind="question"] [data-slot="question-custom-input"] {
+  background: transparent;
+  min-height: 28px;
+  max-height: 84px;
+  line-height: 28px;
+  color: var(--neutral-700, rgba(0, 0, 0, 0.82));
+  box-sizing: border-box;
+  border: none;
+  resize: none;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overflow-wrap: break-word;
+  white-space: pre-wrap;
+
+  &:focus-visible {
+    outline: 0px solid var(--primary-600, #495dff);
+    outline-offset: 0px;
+  }
+}
+
+
+[data-component="dock-prompt"][data-kind="question"] [data-slot="question-footer"] {
+  margin: 0 16px;
+  padding: 12px 0;
+  position: relative;
+  z-index: 2;
+  border-top: 0;
+  gap: 8px;
+}
+
+
+/* Raise DockTray above DockShell so the unanswered popup (inside footer/tray)
+   renders above the options list (inside body/shell, z-index: 10) */
+[data-component="dock-prompt"][data-kind="question"] [data-dock-surface="tray"] {
+  z-index: 20;
+}
+
+
+[data-component="dock-prompt"][data-kind="question"]
+  [data-slot="question-footer"]
+  > [data-component="button"][data-variant="ghost"] {
+  color: var(--neutral-600, rgba(0, 0, 0, 0.64));
+  border: none;
+
+  &:hover {
+    background: initial;
+    color: var(--neutral-800, rgba(0, 0, 0, 0.94));
+  }
+}
+
+
+[data-component="dock-prompt"][data-kind="question"]
+  [data-slot="question-footer-actions"]
+  [data-component="button"][data-variant="primary"]:disabled {
+  opacity: 1;
+  background: var(--button-primary-bg-disabled, #1b55f580);
+  color: var(--button-primary-text-disabled, #fff);
+}
+
+
+@media (prefers-reduced-motion: reduce) {
+  [data-component="dock-prompt"][data-kind="question"] [data-slot="question-options"] {
+    scroll-behavior: auto;
+  }
+
+  [data-component="dock-prompt"][data-kind="question"] [data-slot="question-section"] {
+    transform: none;
+    transition: none;
+  }
+
+  [data-component="dock-prompt"][data-kind="question"] [data-slot="question-progress-nav"] {
+    transform: none;
+    transition:
+      background-color 120ms ease-out,
+      color 120ms ease-out,
+      opacity 120ms ease-out;
+  }
+}
+
+
+/* Floating popup for unanswered question numbers */
+[data-component="dock-prompt"][data-kind="question"] [data-slot="question-confirm-area"] {
+  position: relative;
+  display: inline-flex;
+}
+
+
+[data-component="dock-prompt"][data-kind="question"] [data-slot="question-unanswered-popup"] {
+  position: absolute;
+  bottom: 100%;
+  right: 0;
+  background: var(--surface-raised-base, #ffffff);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+  border-radius: 8px;
+  padding: 12px 16px;
+  margin-bottom: 8px;
+  animation: fadeIn 200ms ease;
+  z-index: 10;
+  min-width: 180px;
+}
+
+
+:root[data-color-scheme="dark"]
+  [data-component="dock-prompt"][data-kind="question"]
+  [data-slot="question-unanswered-popup"] {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.06);
+}
+
+
+[data-component="dock-prompt"][data-kind="question"] [data-slot="popup-hint"] {
+  display: block;
+  font-size: 13px;
+  color: var(--text-weak, #666666);
+  margin-bottom: 8px;
+  white-space: nowrap;
+}
+
+
+[data-component="dock-prompt"][data-kind="question"] [data-slot="popup-numbers"] {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  max-height: 90px;
+  overflow-y: auto;
+}
+
+
+[data-component="dock-prompt"][data-kind="question"] [data-slot="popup-number-btn"] {
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 0.5px solid var(--border-base, #d0d5dd);
+  border-radius: 4px;
+  background: var(--surface-base, #ffffff);
+  color: var(--text-base, #333333);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+
+[data-component="dock-prompt"][data-kind="question"] [data-slot="popup-number-btn"]:hover {
+  background: var(--surface-base-hover, #f5f5f5);
+  border-color: var(--border-strong-base, #999999);
+}
+
+
+[data-component="dock-prompt"][data-kind="question"] [data-slot="popup-number-btn"]:focus-visible {
+  outline: 2px solid var(--brand-focus, #4f6ef7);
+  outline-offset: 2px;
+}
+
+
+.group\/prompt-input[data-dock-surface="container"] {
+  border-color: var(--session-down-border-color);
+  box-shadow: var(--prompt-input-shadow-normal);
+}
+
+
+.group\/prompt-input[data-dock-surface="container"]:focus-within {
+  border-color: var(--neutral-200, rgba(0, 0, 0, 0.12));
+  box-shadow: var(--prompt-input-shadow-active);
+}
+
+
+/* 会话中(有 session id,见 prompt-input.tsx 的 data-in-session):阴影换成 1px 细边框;
+   新会话(无 id)保持阴影展示。 */
+.group\/prompt-input[data-dock-surface="container"][data-in-session],
+.group\/prompt-input[data-dock-surface="container"][data-in-session]:focus-within {
+  border: 1px solid var(--border-color-black-subtle, rgba(0, 0, 0, 0.06));
+  box-shadow: none;
+}
+
+
+[data-component="session-todo-dock"] {
+  border: none;
+  border-radius: 16px;
+  background: var(--todo-docker-bg);
+  box-shadow: none;
+  padding: 16px;
+  z-index: 100;
+}
+
+
+[data-component="session-todo-dock"] [data-action="session-todo-toggle-button"] {
+  border-radius: 4px;
+  color: var(--text-weaker);
+}
+
+
+[data-component="session-todo-dock"] [data-action="session-todo-toggle-button"]:hover {
+  background: color-mix(in srgb, var(--session-todo-accent) 8%, var(--surface-base));
+  color: color-mix(in srgb, var(--session-todo-accent) 68%, var(--text-base));
+}
+
+
+[data-component="session-todo-dock"] [data-slot="session-todo-list"] {
+  padding-top: 4px;
+}
+
+
+[data-component="session-todo-dock"] [data-slot="session-todo-scroll"] {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--todo-docker-num) 30%, transparent) transparent;
+}
+
+
+[data-component="session-todo-dock"] [data-slot="session-todo-scroll"]::-webkit-scrollbar {
+  width: 6px;
+}
+
+
+[data-component="session-todo-dock"] [data-slot="session-todo-scroll"]::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+
+[data-component="session-todo-dock"] [data-slot="session-todo-scroll"]::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--todo-docker-num) 22%, transparent);
+  border-radius: 999px;
+}
+
+
+[data-component="session-todo-dock"] [data-slot="session-todo-scroll"]:hover::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--todo-docker-num) 45%, transparent);
+}
+
+
+[data-component="session-todo-dock"] .session-todo-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+
+[data-component="session-todo-dock"] .session-todo-item-num {
+  position: relative;
+  width: 24px;
+  height: 24px;
+  min-width: 24px;
+  border-radius: 999px;
+  background: var(--todo-docker-num-bg);
+  color: var(--todo-docker-num);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: 500;
+  letter-spacing: 0;
+  flex: 0 0 auto;
+}
+
+
+[data-component="session-todo-dock"] .session-todo-item-check {
+  color: var(--todo-docker-check);
+}
+
+
+[data-component="session-todo-dock"] .session-todo-item-spinner {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  display: block;
+  transform-origin: center;
+  animation: session-todo-item-spin 1s linear infinite;
+}
+
+
+[data-component="session-todo-dock"] .session-todo-item-spinner svg {
+  position: absolute;
+  top: 0;
+  right: 0;
+}
+
+
+@keyframes session-todo-item-spin {
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+
+[data-component="session-todo-dock"] .session-todo-item[data-state="pending"] {
+  opacity: 0.94;
+}
+
+
+[data-component="session-todo-dock"] .session-todo-item[data-state="completed"] {
+  opacity: 0.76;
+}
+
+
+[data-component="session-todo-dock"] .session-todo-item [data-component="text-strikethrough"] {
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+
+[data-component="session-todo-dock"] .session-todo-item[data-state="completed"] [data-component="text-strikethrough"] {
+  color: var(--text-weaker);
+}
+
+
+/* TextShimmer 兼容 shim：镜像 @kcode-ui components/text-shimmer.css 的规则。
+ * 宿主端(lingee)内核版本较低，携带的 kcode-ui 组件样式里没有 text-shimmer 这套 CSS，
+ * 会话区「处理中/处理完成」「正在理解」等 shimmer 文本会渲染成错位的双层文本。
+ * 这里随 kcode-web 包一起下发同样规则兜底：内核较新时两份规则取值相同，无副作用；
+ * 内核较旧时由本 shim 接管。升级内核包含 text-shimmer 后可删除。
+ * 注意与 kcode-ui 源文件保持同步。 */
+[data-component="text-shimmer"] {
+  --text-shimmer-step: 45ms;
+  --text-shimmer-duration: 1200ms;
+  --text-shimmer-swap: 220ms;
+  --text-shimmer-index: 0;
+  --text-shimmer-angle: 90deg;
+  --text-shimmer-spread: 5.2ch;
+  --text-shimmer-size: 360%;
+  --text-shimmer-base-color: var(--neutral-600);
+  --text-shimmer-peak-color: var(--neutral-600);
+  --text-shimmer-sweep: linear-gradient(
+    var(--text-shimmer-angle),
+    transparent calc(50% - var(--text-shimmer-spread)),
+    var(--text-shimmer-peak-color) 50%,
+    transparent calc(50% + var(--text-shimmer-spread))
+  );
+  --text-shimmer-base: linear-gradient(var(--text-shimmer-base-color), var(--text-shimmer-base-color));
+
+  display: inline-flex;
+  align-items: baseline;
+  font: inherit;
+  letter-spacing: inherit;
+  line-height: inherit;
+}
+
+
+[data-component="text-shimmer"] [data-slot="text-shimmer-char"] {
+  display: inline-grid;
+  white-space: pre;
+  font: inherit;
+  letter-spacing: inherit;
+  line-height: 22px;
+  font-weight: 400;
+}
+
+
+[data-component="text-shimmer"] [data-slot="text-shimmer-char-base"],
+[data-component="text-shimmer"] [data-slot="text-shimmer-char-shimmer"] {
+  grid-area: 1 / 1;
+  white-space: pre;
+  transition: opacity var(--text-shimmer-swap) ease-out;
+  font: inherit;
+  letter-spacing: inherit;
+  line-height: inherit;
+}
+
+
+[data-component="text-shimmer"] [data-slot="text-shimmer-char-base"] {
+  color: inherit;
+  opacity: 1;
+}
+
+
+[data-component="text-shimmer"] [data-slot="text-shimmer-char-shimmer"] {
+  color: var(--text-weaker);
+  opacity: 0;
+}
+
+
+/* 非激活时 shimmer 层不可见且不拦截鼠标事件，
+ * 避免与 char-base 重叠导致标题文字无法被选中复制。 */
+[data-component="text-shimmer"]:not([data-active="true"]) [data-slot="text-shimmer-char-shimmer"] {
+  pointer-events: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+
+[data-component="text-shimmer"][data-active="true"] [data-slot="text-shimmer-char-shimmer"] {
+  opacity: 1;
+}
+
+
+[data-component="text-shimmer"] [data-slot="text-shimmer-char-shimmer"][data-run="true"] {
+  animation-name: text-shimmer-pulse;
+  animation-duration: var(--text-shimmer-duration);
+  animation-iteration-count: infinite;
+  animation-timing-function: ease-in-out;
+  animation-fill-mode: both;
+  animation-delay: calc(var(--text-shimmer-step) * var(--text-shimmer-index) * -1);
+}
+
+
+@keyframes text-shimmer-pulse {
+  0%,
+  100% {
+    opacity: 0.3;
+  }
+
+  50% {
+    opacity: 1;
+  }
+}
+
+
+@media (prefers-reduced-motion: reduce) {
+  [data-component="text-shimmer"] [data-slot="text-shimmer-char-base"],
+  [data-component="text-shimmer"] [data-slot="text-shimmer-char-shimmer"] {
+    transition-duration: 0ms;
+  }
+
+  [data-component="text-shimmer"] [data-slot="text-shimmer-char-shimmer"] {
+    animation: none !important;
+    color: inherit;
+    -webkit-text-fill-color: currentColor;
+    background-image: none;
+  }
+
+  [data-component="text-shimmer"] [data-slot="text-shimmer-char-base"] {
+    opacity: 1 !important;
+  }
+}
+
+
+[data-slot="session-turn-list"]
+  [data-component="collapsible"].tool-stage-collapsible
+  [data-slot="collapsible-content"] {
+  animation: none !important;
+  display: grid !important;
+  grid-template-rows: 0fr;
+  overflow: hidden !important;
+  border: none !important;
+  background: transparent !important;
+  opacity: 0;
+  transition:
+    grid-template-rows 280ms cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 220ms ease;
+}
+
+
+[data-slot="session-turn-list"]
+  [data-component="collapsible"].tool-stage-collapsible
+  [data-slot="collapsible-content"][data-expanded] {
+  animation: none !important;
+}
+
+
+[data-slot="session-turn-list"]
+  [data-component="collapsible"].tool-stage-collapsible
+  [data-slot="collapsible-content"]:not([data-expanded]) {
+  animation: none !important;
+}
+
+
+[data-slot="session-turn-list"]
+  [data-component="collapsible"].tool-stage-collapsible
+  [data-slot="collapsible-content"]
+  > [data-slot="stage-collapsible-inner"] {
+  min-height: 0;
+  overflow: hidden;
+}
+
+
+[data-slot="session-turn-list"] [data-component="collapsible"].tool-stage-collapsible[data-stage-motion="opening"],
+[data-slot="session-turn-list"] [data-component="collapsible"].tool-stage-collapsible[data-stage-motion="open"],
+[data-slot="session-turn-list"] [data-component="collapsible"].tool-stage-collapsible[data-stage-motion="closing"] {
+  border-radius: 16px !important;
+}
+
+
+[data-slot="session-turn-list"]
+  [data-component="collapsible"].tool-stage-collapsible[data-stage-motion="opening"]
+  [data-slot="collapsible-content"],
+[data-slot="session-turn-list"]
+  [data-component="collapsible"].tool-stage-collapsible[data-stage-motion="open"]
+  [data-slot="collapsible-content"] {
+  grid-template-rows: 1fr;
+  opacity: 1;
+}
+
+
+/* ── ASR 波形动画（prompt-input 语音识别麦克风按钮）── */
+@keyframes asr-waveform {
+  0%,
+  100% {
+    transform: scaleY(0.5);
+  }
+  50% {
+    transform: scaleY(1);
+  }
+}
+
+
+/* ── 提示词增强按钮 spin 动画 ── */
+@keyframes enhance-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+
+/* class 引用防止 Lightning CSS tree-shake 掉 keyframes */
+.enhance-spinner {
+  animation: enhance-spin 0.8s linear infinite;
+}
+
+
+/* ── 提示词增强按钮颜色（亮暗模式自适应）── */
+/* 亮色：black-82；暗色：white-82 —— 与设计稿底栏图标 black 0.82 统一 */
+[data-action="prompt-enhance"] {
+  color: var(--neutral-700);
+}
+
+[data-action="prompt-enhance"].enhance-btn--idle,
+[data-action="prompt-enhance"].enhance-btn--applied {
+  color: var(--neutral-700);
+}
+
+[data-action="prompt-enhance"].enhance-btn--disabled {
+  color: var(--enhance-btn-disabled);
+}
+
+.enhance-text-shimmer {
+  background: linear-gradient(
+    90deg,
+    var(--prompt-input-text) 30%,
+    var(--enhance-shimmer-overlay) 50%,
+    var(--prompt-input-text) 70%
+  );
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: enhance-text-flow 1.5s linear infinite;
+}
+
+/* 增强 shimmer 时保持附件 pill 的原有颜色 */
+.enhance-text-shimmer [data-type="file"],
+.enhance-text-shimmer [data-type="agent"] {
+  -webkit-text-fill-color: initial;
+  background: none;
+}
+
+
+/* 禁用 prompt-submit 按钮的 stop-pulse 呼吸动画 */
+[data-action="prompt-submit"][data-icon="stop"] [data-slot="icon-svg"] path {
+  animation: none;
+}
+
+
+/* 禁用状态点击发送按钮：左右晃动反馈 */
+@keyframes prompt-submit-shake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  15% {
+    transform: translateX(-4px);
+  }
+  30% {
+    transform: translateX(4px);
+  }
+  45% {
+    transform: translateX(-3px);
+  }
+  60% {
+    transform: translateX(3px);
+  }
+  75% {
+    transform: translateX(-2px);
+  }
+}
+
+.prompt-submit-shake {
+  animation: prompt-submit-shake 0.4s ease-in-out;
+}
+
+
+/* 新会话头部「项目块/分支块」图标与文字、worktree 勾选框文案的暗黑适配:
+   浅色下取黑色 64%/82% 透明度,暗黑下切换为等透明度的白色,保证深色背景下的对比度。 */
+:root {
+  --fg-color-black-muted: rgba(0, 0, 0, 0.64);
+  --fg-color-black-muted-hover: var(--black-94);
+  --fg-color-black-full: rgba(0, 0, 0, 1);
+  --text-color-secondary-82: rgba(0, 0, 0, 0.82);
+  --dropdown-fg-color-text-grouplabel: rgba(0, 0, 0, 0.46);
+  --enhance-shimmer-overlay: rgba(0, 0, 0, 0.15);
+  --enhance-btn-disabled: rgba(0, 0, 0, 0.28);
+  /* 会话区 Spec 卡片背景:浅色为半透明白,暗黑切换为半透明白色叠加以贴合深色底。 */
+  --spec-result-card-bg: rgba(255, 255, 255, 0.82);
+}
+
+
+:root[data-color-scheme="dark"] {
+  --fg-color-black-muted: rgba(255, 255, 255, 0.64);
+  --fg-color-black-muted-hover: var(--white-94);
+  --fg-color-black-full: rgba(255, 255, 255, 1);
+  --text-color-secondary-82: rgba(255, 255, 255, 0.82);
+  --dropdown-fg-color-text-grouplabel: rgba(255, 255, 255, 0.46);
+  --enhance-shimmer-overlay: rgba(255, 255, 255, 0.15);
+  --enhance-btn-disabled: rgba(255, 255, 255, 0.28);
+  --spec-result-card-bg: rgba(255, 255, 255, 0.06);
+}

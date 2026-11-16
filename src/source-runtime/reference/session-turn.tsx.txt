@@ -1,0 +1,1288 @@
+import {
+  AssistantMessage,
+  type SnapshotFileDiff,
+  Message as MessageType,
+  Part as PartType,
+  TextPart,
+} from "@opencode-ai/sdk/v2/client"
+import type { SessionStatus } from "@opencode-ai/sdk/v2"
+import { useData } from "../context"
+import { useFileComponent } from "../context/file"
+
+import { Binary } from "@opencode-ai/core/util/binary"
+import { sessionTurnStartTime } from "@opencode-ai/core/util/session-turn"
+import {
+  deriveTurnState,
+  isHiddenContinuationUser as isHiddenContinuation,
+  resolveTurnReplies,
+  turnIntervalEnd,
+} from "@opencode-ai/core/util/session-turn-continuation"
+import { getDirectory, getFilename } from "@opencode-ai/core/util/path"
+import { toAbsolutePath } from "../util/path"
+import { createEffect, createMemo, createSignal, For, on, onCleanup, ParentProps, Show } from "solid-js"
+import { createStore } from "solid-js/store"
+import { Dynamic } from "solid-js/web"
+import {
+  AssistantParts,
+  Message,
+  MessageDivider,
+  PART_MAPPING,
+  computeTurnDisplayMode,
+  type UserActions,
+} from "./message-part"
+import { TextShimmer } from "./text-shimmer"
+import { Card } from "./card"
+import { Accordion } from "./accordion"
+import { StickyAccordionHeader } from "./sticky-accordion-header"
+import { DiffChanges } from "./diff-changes"
+import { Icon } from "./icon"
+import { IconButton } from "./icon-button"
+import { Tooltip } from "./tooltip"
+import { SessionRetry } from "./session-retry"
+import { createAutoScroll } from "../hooks"
+import { useI18n } from "../context/i18n"
+import { normalize } from "./session-diff"
+
+function record(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === "object" && !Array.isArray(value)
+}
+
+function unwrap(message: string) {
+  const text = message.replace(/^Error:\s*/, "").trim()
+
+  const parse = (value: string) => {
+    try {
+      return JSON.parse(value) as unknown
+    } catch {
+      return undefined
+    }
+  }
+
+  const read = (value: string) => {
+    const first = parse(value)
+    if (typeof first !== "string") return first
+    return parse(first.trim())
+  }
+
+  let json = read(text)
+
+  if (json === undefined) {
+    const start = text.indexOf("{")
+    const end = text.lastIndexOf("}")
+    if (start !== -1 && end > start) {
+      json = read(text.slice(start, end + 1))
+    }
+  }
+
+  if (!record(json)) return message
+
+  const err = record(json.error) ? json.error : undefined
+  if (err) {
+    const type = typeof err.type === "string" ? err.type : undefined
+    const msg = typeof err.message === "string" ? err.message : undefined
+    if (type && msg) return `${type}: ${msg}`
+    if (msg) return msg
+    if (type) return type
+    const code = typeof err.code === "string" ? err.code : undefined
+    if (code) return code
+  }
+
+  const msg = typeof json.message === "string" ? json.message : undefined
+  if (msg) return msg
+
+  const reason = typeof json.error === "string" ? json.error : undefined
+  if (reason) return reason
+
+  return message
+}
+
+const MAAS_PROVIDER_ID = "kingdee-maas"
+
+const KNOWN_MAAS_ERROR_TYPES = new Set([
+  "authentication_error",
+  "permission_error",
+  "invalid_request_error",
+  "not_found_error",
+  "model_not_found_error",
+  "model_no_available_instance_error",
+  "rate_limit_error",
+  "internal_server_error",
+  "upstream_error",
+  "model_error",
+  "model_no_auth_error",
+  "network_error",
+  "insufficient_balance_error",
+  "tenant_not_found_error",
+  "internal_error",
+  "api_key_no_permission_product_model",
+])
+
+function safeParseJson(value: string): unknown {
+  try {
+    return JSON.parse(value)
+  } catch {
+    return undefined
+  }
+}
+
+function deepParseJson(value: unknown): unknown {
+  if (typeof value === "string") {
+    const trimmed = value.trim()
+    if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
+      const parsed = safeParseJson(value)
+      if (parsed !== undefined) return deepParseJson(parsed)
+    }
+    return value
+  }
+  if (Array.isArray(value)) return value.map(deepParseJson)
+  if (record(value)) {
+    const result: Record<string, unknown> = {}
+    for (const key of Object.keys(value)) result[key] = deepParseJson(value[key])
+    return result
+  }
+  return value
+}
+
+function formatResponseBody(raw: string): string {
+  const parsed = safeParseJson(raw)
+  if (parsed === undefined) return raw
+  return JSON.stringify(deepParseJson(parsed), null, 2)
+}
+
+function isKnownMaasErrorType(value: unknown): value is string {
+  return typeof value === "string" && KNOWN_MAAS_ERROR_TYPES.has(value)
+}
+
+function apiErrorData(err: unknown): { responseBody?: string; statusCode?: number } | undefined {
+  if (!record(err)) return undefined
+  const data = record((err as { data?: unknown }).data) ? (err as { data: Record<string, unknown> }).data : undefined
+  if (!data) return undefined
+  return {
+    responseBody: typeof data.responseBody === "string" ? data.responseBody : undefined,
+    statusCode: typeof data.statusCode === "number" ? data.statusCode : undefined,
+  }
+}
+
+function same<T>(a: readonly T[], b: readonly T[]) {
+  if (a === b) return true
+  if (a.length !== b.length) return false
+  return a.every((x, i) => x === b[i])
+}
+
+function list<T>(value: T[] | undefined | null, fallback: T[]) {
+  if (Array.isArray(value)) return value
+  return fallback
+}
+
+const hidden = new Set(["todowrite"])
+
+function partState(part: PartType, showReasoningSummaries: boolean) {
+  if (part.type === "tool") {
+    if (hidden.has(part.tool)) return
+    return "visible" as const
+  }
+  if (part.type === "text") {
+    const trimmed = part.text?.trim()
+    // Filter orphaned JSON braces leaked by LLM streaming (mirrors renderable() in message-part.tsx)
+    if (!trimmed || trimmed === "{" || trimmed === "}") return undefined
+    return "visible" as const
+  }
+  if (part.type === "reasoning") {
+    if (showReasoningSummaries && part.text?.trim()) return "visible" as const
+    return
+  }
+  if (PART_MAPPING[part.type]) return "visible" as const
+  return
+}
+
+function latestReasoningLine(text: string) {
+  const value = text.trimEnd()
+  if (!value) return
+  return value.slice(value.lastIndexOf("\n") + 1).trim() || undefined
+}
+
+
+export function SessionTurn(
+  props: ParentProps<{
+    sessionID: string
+    messageID: string
+    messages?: MessageType[]
+    getParts?: (messageID: string) => PartType[] | undefined
+    actions?: UserActions
+    showReasoningSummaries?: boolean
+    shellToolDefaultOpen?: boolean
+    editToolDefaultOpen?: boolean
+    showSessionDiffs?: boolean
+    active?: boolean
+    status?: SessionStatus
+    /** 停滞提示行的手动刷新入口：重拉引擎权威会话状态并 resync（引擎说 idle 才会收敛，前端不自行改状态） */
+    onRefreshStatus?: () => void
+    /** 本地对账发现与引擎失联（连续核对失败）：思考行呈现“连接中断，正在重连”而非 loading 动画 */
+    connectionInterrupted?: boolean
+    onUserInteracted?: () => void
+    onCardClick?: (kind: string, config: Record<string, string>) => void
+    isLocalTestCardDisabled?: (kind: string, config: Record<string, string>) => boolean
+    /** 会话 turn 出现模型相关错误时回调，供调用方写入诊断日志 */
+    onModelError?: (info: { sessionID: string; messageID: string; type?: string; message: string }) => void
+    turnCredits?: number | null
+    turnCreditsLoading?: boolean
+    shareMode?: boolean
+    selectedParts?: Set<string>
+    onTogglePartSelection?: (key: string) => void
+    classes?: {
+      root?: string
+      content?: string
+      container?: string
+    }
+  }>,
+) {
+  const data = useData()
+  const i18n = useI18n()
+  const fileComponent = useFileComponent()
+
+  const emptyMessages: MessageType[] = []
+  const emptyParts: PartType[] = []
+  const emptyAssistant: AssistantMessage[] = []
+  const emptyDiffs: SnapshotFileDiff[] = []
+  const idle = { type: "idle" as const }
+
+  const allMessages = createMemo(() => props.messages ?? list(data.store.message?.[props.sessionID], emptyMessages))
+
+  const messageIndex = createMemo(() => {
+    const messages = allMessages() ?? emptyMessages
+    const result = Binary.search(messages, props.messageID, (m) => m.id)
+
+    const index = result.found ? result.index : messages.findIndex((m) => m.id === props.messageID)
+    if (index < 0) return -1
+
+    const msg = messages[index]
+    if (!msg || msg.role !== "user") return -1
+
+    return index
+  })
+
+  const message = createMemo(() => {
+    const index = messageIndex()
+    if (index < 0) return undefined
+
+    const messages = allMessages() ?? emptyMessages
+    const msg = messages[index]
+    if (!msg || msg.role !== "user") return undefined
+
+    return msg
+  })
+
+  // 判断一条 user 消息是否为后端注入的隐藏 continuation 消息（如语言提醒等）：
+  // 这类消息不包含任何可见文本或非文本内容，与 session.tsx 中 visibleUserMessages 的过滤条件保持一致。
+  // 若不把它们排除在轮次边界之外，其后的 assistant 活动（包括工具调用）会因为这条隐藏
+  // 消息本身也不展示而完全消失于时间线，用户无法感知后台仍在工作；同时也会导致
+  // isLastUserTurn 误判为“后面还有新的一轮”，从而错误隐藏中断轮的继续/重试按钮。
+  const isHiddenContinuationUser = (id: string) =>
+    isHiddenContinuation(list(props.getParts?.(id) ?? data.store.part?.[id], emptyParts))
+
+  // 是否为会话中最后一轮 user message。在后面又发过新轮后，历史中断轮不再允许 “继续 / 重试”：
+  // 重试会 revert 并删除该轮之后所有内容（包括用户后续新轮、新产出文件），“继续”则会在会话末尾插入
+  // 一条语义错乱的 prompt，两者都是破坏性体验。仅最后一轮中断才设置动作按钮；divider 本身仍保留，仅隐藏右侧动作。
+  const isLastUserTurn = createMemo(() => {
+    const idx = messageIndex()
+    if (idx < 0) return false
+    const messages = allMessages() ?? emptyMessages
+    for (let i = idx + 1; i < messages.length; i++) {
+      const item = messages[i]
+      if (item?.role === "user" && !isHiddenContinuationUser(item.id)) return false
+    }
+    return true
+  })
+
+  const pending = createMemo(() => {
+    if (typeof props.active === "boolean") return
+    const messages = allMessages() ?? emptyMessages
+    return messages.findLast(
+      (item): item is AssistantMessage => item.role === "assistant" && typeof item.time.completed !== "number",
+    )
+  })
+
+  const pendingUser = createMemo(() => {
+    const item = pending()
+    if (!item?.parentID) return
+    const messages = allMessages() ?? emptyMessages
+    const result = Binary.search(messages, item.parentID, (m) => m.id)
+    const msg = result.found ? messages[result.index] : messages.find((m) => m.id === item.parentID)
+    if (!msg || msg.role !== "user") return
+    return msg
+  })
+
+  const active = createMemo(() => {
+    if (typeof props.active === "boolean") return props.active
+    const msg = message()
+    const parent = pendingUser()
+    if (!msg || !parent) return false
+    return parent.id === msg.id
+  })
+
+  const parts = createMemo(() => {
+    const msg = message()
+    if (!msg) return emptyParts
+    return list(props.getParts?.(msg.id) ?? data.store.part?.[msg.id], emptyParts)
+  })
+
+  const compaction = createMemo(() => parts().find((part) => part.type === "compaction"))
+  const compactionResult = createMemo(() => {
+    const request = message()
+    if (!request || !compaction()) return
+    return (allMessages() ?? emptyMessages).findLast(
+      (item): item is AssistantMessage => item.role === "assistant" && item.parentID === request.id && item.agent === "compaction",
+    )
+  })
+
+  const diffs = createMemo(() => {
+    const files = message()?.summary?.diffs
+    if (!files?.length) return emptyDiffs
+
+    const seen = new Set<string>()
+    return files
+      .reduceRight<SnapshotFileDiff[]>((result, diff) => {
+        if (seen.has(diff.file)) return result
+        seen.add(diff.file)
+        result.push(diff)
+        return result
+      }, [])
+      .reverse()
+  })
+  const MAX_FILES = 3
+  const edited = createMemo(() => diffs().length)
+  const [state, setState] = createStore({
+    showAll: false,
+    expanded: [] as string[],
+  })
+  const showAll = () => state.showAll
+  const expanded = () => state.expanded
+  const overflow = createMemo(() => Math.max(0, edited() - MAX_FILES))
+  const visible = createMemo(() => (showAll() ? diffs() : diffs().slice(0, MAX_FILES)))
+  const toggleAll = () => {
+    autoScroll.preserveLayoutPosition()
+    setState("showAll", !showAll())
+  }
+
+  const assistantMessages = createMemo(
+    () => {
+      const msg = message()
+      if (!msg) return emptyAssistant
+
+      const messages = allMessages() ?? emptyMessages
+      const index = messageIndex()
+      if (index < 0) return emptyAssistant
+
+      // 追发（queue/steer）会把存储顺序打散：本回合的回复可能排在追发消息之后，
+      // 因此按 parentID 链全局解析归属，而不是从本消息位置向后位置扫描。
+      return (
+        resolveTurnReplies(messages, (item) => isHiddenContinuationUser(item.id), (item) => {
+          // 压缩回放是段边界：压缩线后的内容独立成段，归入回放自己的段
+          const parts = list(props.getParts?.(item.id) ?? data.store.part?.[item.id], emptyParts)
+          return parts.some(
+            (part): part is TextPart =>
+              part.type === "text" && part.metadata?.compaction_replay === true,
+          )
+        }).get(msg.id) ?? []
+      ).filter(
+        (item) => {
+          // compaction 生成的摘要只用于大模型上下文，不需要展示给用户；但若压缩失败则保留 error 提示。
+          const assistant = item as AssistantMessage
+          return !(assistant.agent === "compaction" && !assistant.error)
+        },
+      ) as AssistantMessage[]
+    },
+    emptyAssistant,
+    { equals: same },
+  )
+
+  const interrupted = createMemo(() => assistantMessages().some((m) => m.error?.name === "MessageAbortedError"))
+  // 轮级中断原因：从中断该轮的 assistant message metadata 上读 abort_reason，供 label 与动作按钮分支复用。
+  const abortReason = createMemo(() => {
+    if (!interrupted()) return undefined
+    const aborted = assistantMessages().find((m) => m.error?.name === "MessageAbortedError") as
+      | (AssistantMessage & { metadata?: Record<string, unknown> })
+      | undefined
+    const meta = aborted?.metadata
+    const reasonRaw = meta && typeof meta === "object" ? meta.abort_reason : undefined
+    return typeof reasonRaw === "string" && reasonRaw ? reasonRaw : "unknown"
+  })
+  // 轮级中断主标题：根据 abort_reason 在同一行 divider 中直接表达最终结果。
+  // - 超时场景采用详细文案（如“会话超时，已自动停止”）
+  // - 用户主动取消（user_abort_request / ui_*_abort）统一展示“已中止”
+  // - 未知/未配词条的 reason 兑底为“已中止”，避免 i18n.t 在 key 缺失时返回 undefined 导致整个中断 UI 不渲染。
+  // - 兑底：即使 abortReason 路径未能拿到 reason（SolidJS createStore 对初始不存在的 message.metadata 字段追踪可能失效），
+  //   只要 interrupted() 成立就以 “已中止” 兑底，保证中断 UI 一定能呈现。
+  const interruptedLabel = createMemo(() => {
+    const userKey = "ui.toolErrorCard.aborted.user_abort_request" as const
+    const reason = abortReason()
+    if (reason) {
+      // 用户从各种 UI 入口主动取消（停止按钮 / undo / revert / archive / runtime-missing）统一面向 user_abort_request 文案。
+      const userInitiated = reason === "user_abort_request" || reason.startsWith("ui_")
+      if (userInitiated) return i18n.t(userKey)
+      const key = `ui.toolErrorCard.aborted.${reason}` as const
+      const text = i18n.t(key)
+      if (typeof text === "string" && text !== "" && text !== key) return text
+      return i18n.t(userKey)
+    }
+    // abortReason 拿不到（metadata 字段追踪失效 / 后端未写入）时，只要 interrupted() 成立就兑底到“已中止”。
+    if (interrupted()) return i18n.t(userKey)
+    return ""
+  })
+  const error = createMemo(
+    () => assistantMessages().find((m) => m.error && m.error.name !== "MessageAbortedError")?.error,
+  )
+  const showAssistantCopyPartID = createMemo(() => {
+    const messages = assistantMessages()
+
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const message = messages[i]
+      if (!message) continue
+
+      const parts = list(data.store.part?.[message.id], emptyParts)
+      for (let j = parts.length - 1; j >= 0; j--) {
+        const part = parts[j]
+        if (!part || part.type !== "text" || part.synthetic || !part.text?.trim()) continue
+        return part.id
+      }
+    }
+
+    return undefined
+  })
+  const errorText = createMemo(() => {
+    const msg = error()?.data?.message
+    if (typeof msg === "string") return unwrap(msg)
+    if (msg === undefined || msg === null) return ""
+    return unwrap(String(msg))
+  })
+
+  const isMaasError = createMemo(() => message()?.model.providerID === MAAS_PROVIDER_ID)
+
+  // 检测 "terminated" 流中断错误：由 streamInterrupted() 在 message-v2.ts 中分类为 APIError，
+  // metadata.code 为 UND_ERR_* 或 TERMINATED（直接匹配底层网络错误码，不依赖硬编码 message）
+  const isStreamTerminated = createMemo(() => {
+    const err = error()
+    if (!err || err.name !== "APIError") return false
+    const data = record(err.data) ? err.data : undefined
+    if (!data) return false
+    const meta = record(data.metadata) ? data.metadata : undefined
+    const code = typeof meta?.code === "string" ? meta.code : undefined
+    return code === "TERMINATED" || code?.startsWith("UND_ERR_") === true
+  })
+
+  const maasErrorType = createMemo(() => {
+    const data = apiErrorData(error())
+    const body = data?.responseBody
+    if (!body) return undefined
+    const parsed = safeParseJson(body)
+    if (!record(parsed)) return undefined
+    const errorObj = record(parsed.error) ? parsed.error : undefined
+    const type = errorObj?.type
+    return isKnownMaasErrorType(type) ? type : undefined
+  })
+
+  const maasErrorMessage = createMemo(() => {
+    const data = apiErrorData(error())
+    const body = data?.responseBody
+    if (!body) return undefined
+    const parsed = safeParseJson(body)
+    if (!record(parsed)) return undefined
+    const errorObj = record(parsed.error) ? parsed.error : undefined
+    const message = errorObj?.message
+    return typeof message === "string" && message.length > 0 ? message : undefined
+  })
+
+  const maasErrorStatusCode = createMemo(() => apiErrorData(error())?.statusCode)
+
+  const maasErrorLabel = createMemo(() => {
+    const message = maasErrorMessage()
+    if (message) return message
+    const type = maasErrorType()
+    if (type) {
+      const key = `session.errorBanner.errorType.${type}`
+      const text = i18n.t(key)
+      if (text !== key) return text
+    }
+    const status = maasErrorStatusCode()
+    if (status) {
+      const key = `session.errorBanner.statusCode.${status}`
+      const text = i18n.t(key)
+      if (text !== key) return text
+    }
+    return errorText()
+  })
+
+  const maasErrorDetails = createMemo(() => {
+    const body = apiErrorData(error())?.responseBody
+    if (body) return formatResponseBody(body)
+    return errorText()
+  })
+
+  // 模型相关错误（如 Model not found / Model ... is not supported）上报给调用方，便于集中诊断
+  createEffect(() => {
+    const type = maasErrorType()
+    const message = maasErrorMessage() ?? errorText()
+    if (!message) return
+    if (!type?.includes("model") && !/model/i.test(message)) return
+    props.onModelError?.({ sessionID: props.sessionID, messageID: props.messageID, type, message })
+  })
+
+  const status = createMemo(() => {
+    if (props.status !== undefined) return props.status
+    if (typeof props.active === "boolean" && !props.active) return idle
+    return data.store.session_status[props.sessionID] ?? idle
+  })
+  // assistant steps are persisted one by one. Between two steps the previous
+  // message is already completed while the next message does not exist yet, so
+  // active() briefly becomes false even though the session is still busy.
+  // 本轮最后一条 assistant 已带 error ⇒ 轮次确定已结束（循环遇错即 break）：
+  // 停止计时与 loading，否则历史中断轮的时长会随时间无限增长、shimmer 常驻。
+  const turnEnded = createMemo(() => !!assistantMessages().at(-1)?.error)
+  const working = createMemo(
+    () =>
+      !turnEnded() &&
+      status().type !== "idle" &&
+      (active() || (typeof props.active !== "boolean" && isLastUserTurn())),
+  )
+  // A compaction divider represents a completed summary only after its own
+  // compaction assistant succeeded. Errors remain visible in the assistant
+  // error card and must never be rendered as a successful compaction.
+  const divider = createMemo(() => {
+    if (!compaction()) return ""
+    const result = compactionResult()
+    if (result?.error) return ""
+    if (!result?.summary || !result.finish) return ""
+    return i18n.t("ui.messagePart.compaction")
+  })
+  // 压缩回放锚点判定：本回合的 user 锚点是压缩回放消息（携带 compaction_replay 标记
+  // 的重建消息，内容与压缩前的用户消息重复）。此类回合隐藏用户消息区域，只渲染其后的回复。
+  const compactionReplayAnchor = createMemo(() => {
+    const msg = message()
+    if (!msg) return false
+    return parts().some((p): p is TextPart => p.type === "text" && p.metadata?.compaction_replay === true)
+  })
+  const showReasoningSummaries = createMemo(() => props.showReasoningSummaries ?? true)
+  const turnDisplayMode = createMemo(() =>
+    computeTurnDisplayMode(
+      assistantMessages().flatMap((assistant) =>
+        list(props.getParts?.(assistant.id) ?? data.store.part?.[assistant.id], emptyParts)
+          .map((part) => ({ messageID: assistant.id, part })),
+      ),
+      showReasoningSummaries(),
+    ),
+  )
+
+  const assistantCopyPartID = createMemo(() => {
+    if (working()) return null
+    return showAssistantCopyPartID() ?? null
+  })
+  const [durationTick, setDurationTick] = createSignal(0)
+  let durationTimer: ReturnType<typeof setInterval> | undefined
+  createEffect(
+    on(
+      () => working(),
+      (isWorking) => {
+        if (isWorking) {
+          durationTimer = setInterval(() => setDurationTick((t) => t + 1), 1000)
+        } else if (durationTimer) {
+          clearInterval(durationTimer)
+          durationTimer = undefined
+        }
+      },
+    ),
+  )
+  onCleanup(() => {
+    if (durationTimer) clearInterval(durationTimer)
+  })
+  const turnStartTime = createMemo(() =>
+    sessionTurnStartTime(allMessages() ?? emptyMessages, messageIndex(), (id) =>
+      list(props.getParts?.(id) ?? data.store.part?.[id], emptyParts),
+    ),
+  )
+  // The server echo can replace the optimistic user-message timestamp with a
+  // slightly later value. Never move an already-visible turn timer backwards.
+  const [stableTurnStartTime, setStableTurnStartTime] = createSignal<number>()
+  createEffect(() => {
+    const start = turnStartTime()
+    if (typeof start !== "number") return
+    setStableTurnStartTime((current) => current === undefined ? start : Math.min(current, start))
+  })
+  const turnDurationMs = createMemo(() => {
+    durationTick()
+    const start = stableTurnStartTime() ?? turnStartTime()
+    if (typeof start !== "number") return undefined
+
+    // An agent loop can complete one assistant message before starting its next
+    // continuation. Keep the turn timer live until the whole turn becomes idle.
+    if (working()) return Math.max(0, Date.now() - start)
+
+    const end = assistantMessages().reduce<number | undefined>((max, item) => {
+      const completed = item.time.completed
+      if (typeof completed !== "number") return max
+      if (max === undefined) return completed
+      return Math.max(max, completed)
+    }, undefined)
+
+    if (typeof end !== "number") {
+      return undefined
+    }
+    if (end < start) return undefined
+    return end - start
+  })
+  const assistantDerived = createMemo(() => {
+    let visible = 0
+    let textVisible = 0
+    let lastVisibleType: string | undefined
+    let reason: string | undefined
+    // 同一 turn 可能包含多个 assistant 段：真实用户消息一段，后端隐藏续写（异步任务
+    // 结果投递、MAX_STEPS 追问）各一段。思考指示按"最后一段"判断——续写段刚开轮、
+    // 还没有任何可见输出时也要显示 loading，否则子任务结束后主智能体输出前整轮
+    // 看起来完全静止（整轮维度的 visible 因前段文本恒 > 0，永远不触发）。
+    let segmentVisible = 0
+    let segmentLastVisibleType: string | undefined
+    let segmentParentID: string | undefined
+    const show = showReasoningSummaries()
+    for (const message of assistantMessages()) {
+      if (message.parentID !== segmentParentID) {
+        segmentParentID = message.parentID
+        segmentVisible = 0
+        segmentLastVisibleType = undefined
+      }
+      for (const part of list(props.getParts?.(message.id) ?? data.store.part?.[message.id], emptyParts)) {
+        if (partState(part, show) === "visible" && part.type !== "reasoning") {
+          visible++
+          if (part.type === "text") textVisible++
+          lastVisibleType = part.type
+          segmentVisible++
+          segmentLastVisibleType = part.type
+        }
+        if (part.type === "reasoning" && typeof part.time.end !== "number" && part.text) {
+          reason = latestReasoningLine(part.text)
+        }
+      }
+    }
+    return {
+      visible,
+      textVisible,
+      lastVisibleIsTool: lastVisibleType === "tool",
+      reason,
+      segmentVisible,
+      segmentLastIsTool: segmentLastVisibleType === "tool",
+    }
+  })
+  const assistantVisible = createMemo(() => assistantDerived().visible)
+  const assistantTextVisible = createMemo(() => assistantDerived().textVisible)
+  const reasoningSummary = createMemo(() => assistantDerived().reason)
+  const thinkingDuration = createMemo(() => {
+    if (assistantDerived().segmentVisible > 0) return
+    const ms = turnDurationMs()
+    if (typeof ms !== "number") return
+    const total = Math.max(0, Math.round(ms / 1000))
+    if (total < 60) return i18n.t("ui.message.duration.seconds", { count: total })
+    return i18n.t("ui.message.duration.minutesSeconds", { minutes: Math.floor(total / 60), seconds: total % 60 })
+  })
+  const compacting = createMemo(() => {
+    // 服务端 session.status 的 compacting 态：覆盖压缩早期（摘要消息尚未创建）的空窗
+    if (status().type === "compacting") return true
+    if (!compaction()) return false
+    const result = compactionResult()
+    if (result?.error) return false
+    return !result?.summary || !result?.finish
+  })
+  // 看门狗权威停滞信号：busy/compacting + stalledMs（毫秒，引擎在 ask/stuck 阈值附加、
+  // 活动恢复自动摘除）。只影响展示——停止 shimmer、切换文案、提供手动刷新入口——
+  // 不据此改变任何行为；是否真正结束仍以引擎后续的 idle/终态事件为准。
+  const stalledMs = createMemo(() => {
+    if (!working()) return undefined
+    const current = status()
+    return current.type === "busy" || current.type === "compacting" ? current.stalledMs : undefined
+  })
+  const stalledMinutes = createMemo(() => {
+    const ms = stalledMs()
+    if (typeof ms !== "number" || ms <= 0) return
+    return Math.max(1, Math.round(ms / 60_000))
+  })
+  const showThinking = createMemo(() => {
+    // Session-level compaction remains visible even when the resumed turn has
+    // an earlier error or visible content from before compression.
+    if (status().type === "compacting" && active()) return true
+    if (!working() || !!error()) return false
+    if (status().type === "retry") return false
+    // 思考过程由 reasoning 模块展示（限高滚动块）时，不再显示单行 loading，避免重复。
+    // 压缩期间例外：压缩 assistant 的 reasoning 在时间线里不渲染为正文（仅完成后的
+    // 分隔条），若按普通轮次因 reasoningSummary 非空而关闭 loading，压缩全程将无
+    // 任何可见反馈。
+    if (!compacting() && showReasoningSummaries() && reasoningSummary()) return false
+    // 没有可见内容 → 显示 loading
+    // 或者最后一个可见 part 是工具（工具完成但 LLM 尚未输出新文字）→ 显示 loading
+    // 视觉桥接进度 part 在 showReasoningSummaries=false 时也可见，
+    // 因此有进度时 loading 自动隐藏
+    // 以上均按最后一个 assistant 段判断（见 assistantDerived 的分段说明）。
+    const { segmentVisible, segmentLastIsTool } = assistantDerived()
+    return segmentVisible === 0 || segmentLastIsTool
+  })
+  const revertMessageID = createMemo(
+    () => data.store.session?.find((item) => item.id === props.sessionID)?.revert?.messageID,
+  )
+  const turnEndIndex = createMemo(() =>
+    turnIntervalEnd(allMessages() ?? emptyMessages, messageIndex(), (id) =>
+      list(props.getParts?.(id) ?? data.store.part?.[id], emptyParts),
+    ),
+  )
+  const revertIndex = createMemo(() => {
+    const revert = revertMessageID()
+    if (!revert) return -1
+    return (allMessages() ?? emptyMessages).findIndex((item) => item?.id === revert)
+  })
+  const forkTurnState = createMemo(() => {
+    const msg = message()
+    if (!msg) return "inProgress"
+    const messages = allMessages() ?? emptyMessages
+    const index = messageIndex()
+    if (index < 0) return "inProgress"
+
+    const memberUserIDs = [msg.id]
+    const assistants: Parameters<typeof deriveTurnState>[0]["assistants"][number][] = []
+    for (let i = index + 1; i < messages.length; i++) {
+      const item = messages[i]
+      if (!item) continue
+      if (item.role === "user") {
+        if (isHiddenContinuationUser(item.id)) {
+          memberUserIDs.push(item.id)
+          continue
+        }
+        break
+      }
+      if (item.role !== "assistant" || !memberUserIDs.includes(item.parentID)) continue
+      assistants.push({
+        parentID: item.parentID,
+        time: item.time,
+        finish: item.finish,
+        error: item.error,
+        metadata: item.metadata,
+        tools: list(props.getParts?.(item.id) ?? data.store.part?.[item.id], emptyParts).flatMap((part) =>
+          part.type === "tool" ? [part.state] : [],
+        ),
+      })
+    }
+    return deriveTurnState({ memberUserIDs, assistants })
+  })
+  const forkEligible = createMemo(() => {
+    if (props.shareMode || status().type !== "idle") return false
+    const revert = revertIndex()
+    if (revert >= 0 && (turnEndIndex() < 0 || revert <= turnEndIndex())) return false
+    return forkTurnState() === "completed"
+  })
+  const onFork = createMemo(() =>
+    forkEligible() && props.actions?.fork
+      ? () => props.actions!.fork!({ sessionID: props.sessionID, messageID: props.messageID })
+      : undefined,
+  )
+  const onRegenerate = createMemo(() =>
+    isLastUserTurn() && props.actions?.regenerate
+      ? () => props.actions!.regenerate!({ sessionID: props.sessionID, messageID: props.messageID })
+      : undefined,
+  )
+  // 超时中断后的“继续”动作：不删除已产出的 assistant 内容，仅发一条提示词“继续”让模型接着推进。
+  // 仅最后一轮 user message 才提供：后面又发过新轮后，该动作会在末尾插入语义错乱的 prompt。
+  const onContinue = createMemo(() =>
+    isLastUserTurn() && props.actions?.continue
+      ? () => props.actions!.continue!({ sessionID: props.sessionID, messageID: props.messageID })
+      : undefined,
+  )
+  const onUserShare = createMemo(() =>
+    !props.shareMode && props.actions?.share
+      ? () => props.actions!.share!({ sessionID: props.sessionID, messageID: props.messageID, part: "user" })
+      : undefined,
+  )
+  const onAssistantShare = createMemo(() =>
+    !props.shareMode && props.actions?.share
+      ? () => props.actions!.share!({ sessionID: props.sessionID, messageID: props.messageID, part: "assistant" })
+      : undefined,
+  )
+  const userPartKey = () => `user:${props.messageID}`
+  const assistantPartKey = () => `assistant:${props.messageID}`
+  const userSelected = createMemo(() => props.selectedParts?.has(userPartKey()) ?? false)
+  const assistantSelected = createMemo(() => props.selectedParts?.has(assistantPartKey()) ?? false)
+
+  const autoScroll = createAutoScroll({
+    working,
+    onUserInteracted: props.onUserInteracted,
+    overflowAnchor: "dynamic",
+  })
+
+  return (
+    <div data-component="session-turn" class={props.classes?.root}>
+      <div
+        ref={autoScroll.scrollRef}
+        onScroll={autoScroll.handleScroll}
+        data-slot="session-turn-content"
+        data-share-mode={props.shareMode ? "" : undefined}
+        class={props.classes?.content}
+      >
+        <div onClick={autoScroll.handleInteraction}>
+          <Show when={message()}>
+            <div
+              ref={autoScroll.contentRef}
+              data-message={message()!.id}
+              data-slot="session-turn-message-container"
+              class={props.classes?.container}
+            >
+              <div
+                data-slot="session-turn-message-content"
+                aria-live="off"
+              >
+                {/* 压缩回放锚点：用户内容（原始问题/附件拷贝）已在压缩前的回合展示过，
+                    本段隐藏用户消息区域，只渲染其后的回复 */}
+                <Show when={!compactionReplayAnchor()}>
+                <Show
+                  when={props.shareMode}
+                  fallback={<Message message={message()!} parts={parts()} actions={props.actions} onShare={onUserShare()} onCardClick={props.onCardClick} />}
+                >
+                  <div
+                    class="message-block--share-mode"
+                    data-selected={userSelected() ? "true" : undefined}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      props.onTogglePartSelection?.(userPartKey())
+                    }}
+                  >
+                    <button
+                      type="button"
+                      class="share-radio-btn"
+                      data-selected={userSelected() ? "true" : undefined}
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        props.onTogglePartSelection?.(userPartKey())
+                      }}
+                    >
+                      <Show when={userSelected()}>
+                        <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                          <path d="M3 7.5L5.5 10L11 4.5" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+                        </svg>
+                      </Show>
+                    </button>
+                    <Message message={message()!} parts={parts()} actions={props.actions} onShare={onUserShare()} onCardClick={props.onCardClick} />
+                  </div>
+                </Show>
+                </Show>
+              </div>
+              <Show when={divider()}>
+                <div data-slot="session-turn-compaction">
+                  <MessageDivider label={divider()} />
+                </div>
+              </Show>
+              <Show when={assistantMessages().length > 0}>
+                <div
+                  data-slot="session-turn-assistant-content"
+                  aria-hidden={working()}
+                >
+                  <Show
+                    when={props.shareMode}
+                    fallback={
+                      <AssistantParts
+                        messages={assistantMessages()}
+                        showAssistantCopyPartID={assistantCopyPartID()}
+                        turnDurationMs={turnDurationMs()}
+                        turnCredits={props.turnCredits}
+                        turnCreditsLoading={props.turnCreditsLoading}
+                        working={working()}
+                        turnDisplayMode={turnDisplayMode()}
+                        showReasoningSummaries={showReasoningSummaries()}
+                        shellToolDefaultOpen={props.shellToolDefaultOpen}
+                        editToolDefaultOpen={props.editToolDefaultOpen}
+                        onFork={onFork()}
+                        onRegenerate={onRegenerate()}
+                        onShare={onAssistantShare()}
+                        onCardClick={props.onCardClick}
+                        isLocalTestCardDisabled={props.isLocalTestCardDisabled}
+                        getParts={props.getParts}
+                      />
+                    }
+                  >
+                    <div
+                      class="message-block--share-mode"
+                      data-selected={assistantSelected() ? "true" : undefined}
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        props.onTogglePartSelection?.(assistantPartKey())
+                      }}
+                    >
+                      <button
+                        type="button"
+                        class="share-radio-btn"
+                        data-selected={assistantSelected() ? "true" : undefined}
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          props.onTogglePartSelection?.(assistantPartKey())
+                        }}
+                      >
+                        <Show when={assistantSelected()}>
+                          <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                            <path d="M3 7.5L5.5 10L11 4.5" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+                          </svg>
+                        </Show>
+                      </button>
+                      <AssistantParts
+                        messages={assistantMessages()}
+                        showAssistantCopyPartID={assistantCopyPartID()}
+                        turnDurationMs={turnDurationMs()}
+                        turnCredits={props.turnCredits}
+                        turnCreditsLoading={props.turnCreditsLoading}
+                        working={working()}
+                        turnDisplayMode={turnDisplayMode()}
+                        showReasoningSummaries={showReasoningSummaries()}
+                        shellToolDefaultOpen={props.shellToolDefaultOpen}
+                        editToolDefaultOpen={props.editToolDefaultOpen}
+                        onFork={onFork()}
+                        onRegenerate={onRegenerate()}
+                        onShare={onAssistantShare()}
+                        onCardClick={props.onCardClick}
+                        isLocalTestCardDisabled={props.isLocalTestCardDisabled}
+                        getParts={props.getParts}
+                      />
+                    </div>
+                  </Show>
+                </div>
+              </Show>
+              <Show when={interruptedLabel()}>
+                <div data-slot="session-turn-compaction">
+                  <MessageDivider
+                    label={interruptedLabel()}
+                    action={
+                      abortReason() === "watchdog-idle-timeout" && onContinue()
+                        ? <Tooltip value={i18n.t("ui.message.continue")} placement="top" gutter={4}>
+                          <IconButton
+                            icon="play-triangle"
+                            size="small"
+                            variant="ghost"
+                            iconClass="!text-[var(--neutral-500)]"
+                            onClick={() => onContinue()!()}
+                            aria-label={i18n.t("ui.message.continue")}
+                          />
+                        </Tooltip>
+                        : onRegenerate() && assistantVisible() === 0
+                          ? <Tooltip value={i18n.t("ui.message.regenerate")} placement="top" gutter={4}>
+                            <IconButton
+                              icon="refresh"
+                              size="small"
+                              variant="ghost"
+                              iconClass="!text-[var(--neutral-500)]"
+                              onClick={() => onRegenerate()!()}
+                              aria-label={i18n.t("ui.message.regenerate")}
+                            />
+                          </Tooltip>
+                          : undefined
+                    }
+                  />
+                </div>
+              </Show>
+              <Show when={showThinking()}>
+                <div
+                  data-slot="session-turn-thinking"
+                  data-state={props.connectionInterrupted ? "interrupted" : stalledMinutes() ? "stalled" : "running"}
+                  role="status"
+                  aria-live="polite"
+                >
+                  <Show
+                    when={stalledMinutes() && !props.connectionInterrupted}
+                    fallback={
+                      <TextShimmer
+                        text={
+                          props.connectionInterrupted
+                            ? i18n.t("ui.process.connectionInterrupted")
+                            : compacting()
+                              ? i18n.t("ui.reasoning.compacting")
+                              : i18n.t("ui.reasoning.understanding")
+                        }
+                        active={!props.connectionInterrupted}
+                      />
+                    }
+                  >
+                    {/* 停滞态：停止 shimmer 动画改为静态文案，明确传达"可能卡住"而非仍在生成 */}
+                    <span data-slot="session-turn-thinking-stalled-label">{i18n.t("ui.process.stalled")}</span>
+                  </Show>
+                  <Show when={stalledMinutes() && !props.connectionInterrupted}>
+                    {(minutes) => (
+                      <>
+                        <span data-slot="session-turn-thinking-separator" aria-hidden="true" />
+                        <span
+                          data-slot="session-turn-thinking-stalled-hint"
+                          title={i18n.t("ui.process.stalled.hint", { minutes: minutes() })}
+                        >
+                          {i18n.t("ui.process.stalled.hint", { minutes: minutes() })}
+                        </span>
+                      </>
+                    )}
+                  </Show>
+                  <Show when={thinkingDuration() && !compacting()}>
+                    {(d) => (
+                      <>
+                        {/* <span data-slot="session-turn-thinking-separator" aria-hidden="true" /> */}
+                        <span data-slot="session-turn-thinking-duration" aria-hidden="true">{d()}</span>
+                      </>
+                    )}
+                  </Show>
+                  <Show when={reasoningSummary()}>
+                    {(summary) => (
+                      <>
+                        <span data-slot="session-turn-thinking-separator" aria-hidden="true" />
+                        <span data-slot="session-turn-thinking-summary" title={summary()} aria-hidden="true">
+                          {summary()}
+                        </span>
+                      </>
+                    )}
+                  </Show>
+                  <Show when={stalledMinutes() && !props.connectionInterrupted && props.onRefreshStatus}>
+                    {/* 停滞场景的读者是困惑中的用户：刷新入口必须带文字，纯图标不会被注意 */}
+                    <button
+                      type="button"
+                      data-slot="session-turn-stalled-refresh"
+                      class="flex shrink-0 cursor-pointer items-center gap-1 text-[12px] font-[500] text-[var(--primary-600)] hover:opacity-80"
+                      onClick={() => props.onRefreshStatus?.()}
+                    >
+                      <Icon name="refresh" class="size-3" />
+                      <span>{i18n.t("ui.process.stalled.refresh")}</span>
+                    </button>
+                  </Show>
+                </div>
+              </Show>
+              <SessionRetry status={status()} show={active()} />
+              <Show when={edited() > 0 && !working() && (props.showSessionDiffs ?? false)}>
+                <div
+                  data-slot="session-turn-diffs"
+                  data-component="session-turn-diffs-group"
+                  data-show-all={showAll() || undefined}
+                >
+                  <div data-slot="session-turn-diffs-header">
+                    <span data-slot="session-turn-diffs-label">
+                      {i18n.t(edited() === 1 ? "ui.sessionTurn.diffs.changedFile" : "ui.sessionTurn.diffs.changedFiles", { count: String(edited()) })}
+                    </span>
+                    <DiffChanges changes={diffs()} />
+                    <Show when={props.actions?.openReview && isLastUserTurn()}>
+                      <div data-slot="session-turn-diffs-open-review">
+                        <Tooltip value={i18n.t("ui.sessionTurn.diffs.openReview")} placement="top" gutter={4}>
+                          <IconButton
+                            icon="session-review"
+                            size="small"
+                            variant="ghost"
+                            onClick={() =>
+                              props.actions!.openReview!({ sessionID: props.sessionID, messageID: props.messageID })
+                            }
+                            aria-label={i18n.t("ui.sessionTurn.diffs.openReview")}
+                          />
+                        </Tooltip>
+                      </div>
+                    </Show>
+                    <Show when={props.actions?.revert}>
+                      <div data-slot="session-turn-diffs-revert">
+                        <Tooltip value={i18n.t("ui.sessionTurn.diffs.revert")} placement="top" gutter={4}>
+                          <IconButton
+                            icon="undo"
+                            size="small"
+                            variant="ghost"
+                            onClick={() => props.actions!.revert!({ sessionID: props.sessionID, messageID: props.messageID })}
+                            aria-label={i18n.t("ui.sessionTurn.diffs.revert")}
+                          />
+                        </Tooltip>
+                      </div>
+                    </Show>
+                  </div>
+                  <div data-component="session-turn-diffs-content">
+                    <Accordion
+                      multiple
+                      style={{ "--sticky-accordion-offset": "44px" }}
+                      value={expanded()}
+                      onChange={(value) => setState("expanded", Array.isArray(value) ? value : value ? [value] : [])}
+                    >
+                      <For each={visible()}>
+                        {(diff) => {
+                          const view = normalize(diff)
+                          const active = createMemo(() => expanded().includes(diff.file))
+                          const [shown, setShown] = createSignal(false)
+
+                          createEffect(
+                            on(
+                              active,
+                              (value) => {
+                                if (!value) {
+                                  setShown(false)
+                                  return
+                                }
+
+                                requestAnimationFrame(() => {
+                                  if (!active()) return
+                                  setShown(true)
+                                })
+                              },
+                              { defer: true },
+                            ),
+                          )
+
+                          return (
+                            <Accordion.Item value={diff.file}>
+                              <StickyAccordionHeader>
+                                <Accordion.Trigger>
+                                  {/* \u884C\u70B9\u51FB = \u8DF3\u8F6C\u5BA1\u67E5\u5E76\u6253\u5F00\u8BE5\u6587\u4EF6\uFF08\u4E0E\u300C\u6253\u5F00\u6587\u4EF6\u300D\u6309\u94AE\u4E00\u81F4\uFF09\uFF1B\u4EC5\u70B9\u51FB\u5C3E\u90E8\u7BAD\u5934\u624D\u5C55\u5F00/\u6536\u8D77 diff\u3002 */}
+                                  <div
+                                    data-slot="session-turn-diff-trigger"
+                                    onClick={(e: MouseEvent) => {
+                                      const open = props.actions?.openReviewFile
+                                      if (!open) return
+                                      const target = e.target as HTMLElement | null
+                                      if (target?.closest('[data-slot="session-turn-diff-chevron"]')) return
+                                      e.preventDefault()
+                                      e.stopPropagation()
+                                      void open({
+                                        sessionID: props.sessionID,
+                                        messageID: props.messageID,
+                                        file: diff.file,
+                                      })
+                                    }}
+                                  >
+                                    <span data-slot="session-turn-diff-path">
+                                      <Show when={diff.file.includes("/")}>
+                                        <span data-slot="session-turn-diff-directory">
+                                          {`\u202A${getDirectory(diff.file)}\u202C`}
+                                        </span>
+                                      </Show>
+                                      <span
+                                        data-slot="session-turn-diff-filename"
+                                        data-clickable={props.actions?.openReviewFile ? "" : undefined}
+                                        title={toAbsolutePath(data.directory, diff.file)}
+                                      >
+                                        {getFilename(diff.file)}
+                                      </span>
+                                    </span>
+                                    <div data-slot="session-turn-diff-meta">
+                                      <Show when={props.actions?.openFileInTree}>
+                                        <Tooltip
+                                          value={i18n.t("ui.sessionTurn.diffs.openFile")}
+                                          placement="top"
+                                          gutter={4}
+                                        >
+                                          <IconButton
+                                            data-slot="session-turn-diff-open-file"
+                                            icon="open-file"
+                                            size="small"
+                                            variant="ghost"
+                                            onClick={(e: MouseEvent) => {
+                                              e.stopPropagation()
+                                              void props.actions!.openFileInTree!({
+                                                sessionID: props.sessionID,
+                                                messageID: props.messageID,
+                                                file: diff.file,
+                                              })
+                                            }}
+                                            aria-label={i18n.t("ui.sessionTurn.diffs.openFile")}
+                                          />
+                                        </Tooltip>
+                                      </Show>
+                                      <span data-slot="session-turn-diff-changes">
+                                        <DiffChanges changes={diff} />
+                                      </span>
+                                      <span data-slot="session-turn-diff-chevron">
+                                        <Icon name="tool-arrow-right" size="small" class="text-[var(--neutral-500)]" />
+                                      </span>
+                                    </div>
+                                  </div>
+                                </Accordion.Trigger>
+                              </StickyAccordionHeader>
+                              <Accordion.Content>
+                                <Show when={shown()}>
+                                  <div data-slot="session-turn-diff-view" data-scrollable>
+                                    <Dynamic component={fileComponent} mode="diff" fileDiff={view.fileDiff} />
+                                  </div>
+                                </Show>
+                              </Accordion.Content>
+                            </Accordion.Item>
+                          )
+                        }}
+                      </For>
+                    </Accordion>
+                    <Show when={overflow() > 0}>
+                      <div data-slot="session-turn-diffs-more" onClick={toggleAll}>
+                        {showAll()
+                          ? i18n.t("ui.sessionTurn.diffs.collapse")
+                          : i18n.t("ui.sessionTurn.diffs.more", { count: String(overflow()) })}
+                        <Icon name="tool-arrow-right" size="small" class={showAll() ? "rotate-[-90deg]" : "rotate-90"} />
+                      </div>
+                    </Show>
+                  </div>
+                </div>
+              </Show>
+              <Show when={error()}>
+                {isMaasError() ? (
+                  <MaasErrorBanner
+                    label={maasErrorLabel()}
+                    details={maasErrorDetails()}
+                    onRetry={onContinue()}
+                  />
+                ) : isStreamTerminated() ? (
+                  <MaasErrorBanner
+                    label={i18n.t("session.errorBanner.streamTerminated")}
+                    details={errorText()}
+                    onRetry={onContinue()}
+                    showDetails={false}
+                  />
+                ) : (
+                  <Card variant="error" class="error-card">
+                    {errorText()}
+                  </Card>
+                )}
+              </Show>
+            </div>
+          </Show>
+          {props.children}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function MaasErrorBanner(props: {
+  label: string
+  details: string
+  onRetry: (() => void) | undefined
+  showDetails?: boolean
+}) {
+  const i18n = useI18n()
+  const [expanded, setExpanded] = createSignal(false)
+  const showDetails = () => props.showDetails !== false
+
+  return (
+    <Card variant="error" class="error-card">
+      <div class="session-turn-error-banner">
+        <div class="session-turn-error-banner-label">
+          <Icon name="warning-triangle" size="small" />
+          <span>{props.label}</span>
+        </div>
+        <div class="session-turn-error-banner-actions">
+          <Show when={showDetails()}>
+            <button
+              type="button"
+              class="session-turn-error-banner-action"
+              onClick={() => setExpanded(!expanded())}
+            >
+              {expanded()
+                ? i18n.t("session.errorBanner.showLess")
+                : i18n.t("session.errorBanner.viewDetails")}
+            </button>
+          </Show>
+          <Show when={props.onRetry}>
+            <button
+              type="button"
+              class="session-turn-error-banner-action"
+              onClick={() => props.onRetry?.()}
+            >
+              {i18n.t("session.errorBanner.retry")}
+            </button>
+          </Show>
+        </div>
+      </div>
+      <Show when={showDetails() && expanded()}>
+        <pre class="session-turn-error-banner-details">{props.details}</pre>
+      </Show>
+    </Card>
+  )
+}

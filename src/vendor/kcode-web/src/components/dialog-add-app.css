@@ -1,0 +1,273 @@
+/* dialog-add-app: 自定义输入框外观与 focus 样式 */
+.dialog-add-app-input [data-slot="input-wrapper"] {
+  display: inline-flex;
+  height: 40px;
+  box-sizing: border-box;
+  padding: 10px 12px;
+  justify-content: space-between;
+  align-items: center;
+  border-radius: 12px;
+  border: 1px solid var(--neutral-200, rgba(0, 0, 0, 0.08));
+  background: var(--main-bg);
+}
+
+/* focus 态：border 改为 --primary-400，去除默认 box-shadow */
+.dialog-add-app-input [data-slot="input-wrapper"]:focus-within:not(:has([data-readonly])) {
+  border-color: var(--primary-400);
+  box-shadow: none;
+}
+
+/* 内部 input：去除默认 padding/height，继承 wrapper 文字样式 */
+.dialog-add-app-input [data-slot="input-input"] {
+  padding: 0;
+  height: auto;
+  color: var(--neutral-700);
+  font-size: 14px;
+  font-style: normal;
+  font-weight: 400;
+  line-height: normal;
+}
+
+.dialog-add-app-input [data-slot="input-input"]::placeholder {
+  color: var(--neutral-400, rgba(0, 0, 0, 0.28));
+}
+
+/* 多行描述：与单行输入保持一致的文字/placeholder 颜色，允许自适应高度 */
+.dialog-add-app-textarea [data-slot="input-wrapper"] {
+  display: flex;
+  box-sizing: border-box;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--neutral-200, rgba(0, 0, 0, 0.08));
+  background: var(--main-bg);
+}
+
+/* focus 态：border 改为 --primary-400，去除默认 box-shadow */
+.dialog-add-app-textarea [data-slot="input-wrapper"]:focus-within:not(:has([data-readonly])) {
+  border-color: var(--primary-400);
+  box-shadow: none;
+}
+
+.dialog-add-app-textarea [data-slot="input-input"] {
+  padding: 0;
+  color: var(--neutral-700);
+  font-size: 14px;
+  font-style: normal;
+  font-weight: 400;
+  line-height: normal;
+}
+
+.dialog-add-app-textarea [data-slot="input-input"]::placeholder {
+  color: var(--neutral-400, rgba(0, 0, 0, 0.28));
+}
+
+/* Select 已选值颜色与字体大小 */
+.dialog-add-app-select-filled {
+  color: var(--neutral-700);
+  font-size: 14px !important;
+}
+
+/* Select placeholder 颜色与字体大小：与 combobox-input 的 placeholder 保持一致 */
+.dialog-add-app-select-placeholder {
+  color: var(--neutral-400, rgba(0, 0, 0, 0.28)) !important;
+  font-size: 14px !important;
+}
+
+/* ===================== 关联应用：下拉选择器 ===================== */
+.dialog-add-app-combobox {
+  position: relative;
+  width: 100%;
+}
+
+.dialog-add-app-combobox-trigger {
+  display: flex;
+  align-items: center;
+  height: 40px;
+  box-sizing: border-box;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--neutral-200, rgba(0, 0, 0, 0.08));
+  background: var(--main-bg);
+  cursor: text;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.dialog-add-app-combobox-trigger:focus-within,
+.dialog-add-app-combobox-trigger.is-open {
+  border-color: var(--brand-base, #2970ff);
+}
+
+.dialog-add-app-combobox-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  padding: 0;
+  color: var(--neutral-700);
+  font-family: "PingFang SC";
+  font-size: 14px;
+  font-style: normal;
+  font-weight: 400;
+  line-height: 20px;
+}
+
+.dialog-add-app-combobox-input::placeholder {
+  color: var(--neutral-400, rgba(0, 0, 0, 0.28));
+}
+
+.dialog-add-app-combobox-icon {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: 8px;
+  color: #666;
+  pointer-events: none;
+}
+
+.dialog-add-app-combobox-panel {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: 50;
+  background: var(--main-bg);
+  border-radius: 12px;
+  border: 1px solid var(--neutral-200, rgba(0, 0, 0, 0.08));
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+  padding: 4px;
+  /* 正常列表最多展示 4 项：单项 ~40px + gap/padding，溢出滚动 */
+  max-height: 176px;
+  overflow-y: auto;
+}
+
+.dialog-add-app-combobox-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background-color 0.12s ease;
+}
+
+.dialog-add-app-combobox-item:hover {
+  background: var(--black-3, rgba(0, 0, 0, 0.03));
+}
+
+.dialog-add-app-combobox-item[data-selected="true"] {
+  background: var(--surface-base-hover, rgba(0, 0, 0, 0.04));
+}
+
+.dialog-add-app-combobox-item-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  color: var(--neutral-700);
+  font-family: "PingFang SC";
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 20px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dialog-add-app-combobox-item-cloud {
+  flex-shrink: 0;
+  color: var(--neutral-400, rgba(0, 0, 0, 0.28));
+  font-family: "PingFang SC";
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 20px;
+}
+
+.dialog-add-app-combobox-empty {
+  padding: 16px 12px;
+  text-align: center;
+  color: var(--neutral-400, rgba(0, 0, 0, 0.28));
+  font-family: "PingFang SC";
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 20px;
+  /* 错误文本可能包含 \n 换行，保持原始换行格式展示 */
+  white-space: pre-wrap;
+  /* 错误文本对齐左对齐，方便阅读 */
+  text-align: left;
+  word-break: break-all;
+}
+
+/* ===================== 类型 Select 下拉面板：与 combobox-panel 样式保持一致 ===================== */
+.dialog-add-app-select-content[data-component="select-content"] {
+  min-width: 0;
+  max-width: none;
+  border-radius: 20px;
+  border: 1px solid var(--neutral-200, rgba(0, 0, 0, 0.08));
+  background: var(--main-bg);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+  padding: 4px;
+  overflow: hidden;
+}
+
+.dialog-add-app-select-content [data-slot="select-select-content-list"] {
+  /* 最多展示 4 项：单项 ~40px + gap/padding，溢出滚动（与 combobox-panel 对齐） */
+  max-height: 176px;
+  overflow-y: auto;
+
+  > *:not([role="presentation"]) + *:not([role="presentation"]) {
+    margin-top: 0;
+  }
+}
+
+.dialog-add-app-select-content [data-slot="select-select-item"] {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 999px;
+  cursor: pointer;
+  color: var(--neutral-700);
+  font-family: "PingFang SC";
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 20px;
+  transition: background-color 0.12s ease;
+}
+
+.dialog-add-app-select-content [data-slot="select-select-item"][data-highlighted],
+.dialog-add-app-select-content [data-slot="select-select-item"]:hover {
+  background: var(--black-3, rgba(0, 0, 0, 0.03));
+}
+
+.dialog-add-app-select-content [data-slot="select-select-item-label"] {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Select trigger 聚焦态（弹出层展开时）：border 改为 --primary-400，去除默认 box-shadow */
+.dialog-add-app-select-trigger:has([aria-expanded="true"]) {
+  outline: none;
+  border: 1px solid var(--primary-400) !important;
+  box-shadow: none !important;
+}
+
+/* ===================== 取消按钮：悬停透明度 + 点击加深 + 点击手势 ===================== */
+.dialog-add-app-cancel-btn {
+  cursor: pointer;
+  transition: opacity 0.15s ease, color 0.15s ease;
+}
+
+/* 悬停：65% 透明度反馈 */
+.dialog-add-app-cancel-btn:hover {
+  opacity: 0.65;
+}
+
+/* 点击/按下：文字颜色加深（内联 style 的 color 优先级更高，需 !important 覆盖） */
+.dialog-add-app-cancel-btn:active {
+  color: var(--neutral-700, rgba(0, 0, 0, 0.78)) !important;
+}

@@ -1,0 +1,105 @@
+/* 会话内容搜索悬浮栏样式。
+ * 使用项目设计 token，亮暗模式自适应。
+ * 视觉风格参照 sidebar-shell.tsx 搜索框和 model-selector.css 浮动面板阴影。 */
+
+.conv-search-bar {
+  --conv-search-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+
+  position: absolute;
+  top: 52px;
+  right: 12px;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 320px;
+  height: 40px;
+  padding: 0 8px 0 12px;
+  background: var(--neutral-0, #fff);
+  border: 0.5px solid var(--border-weak-base);
+  border-radius: 8px;
+  box-shadow: var(--conv-search-shadow);
+  backdrop-filter: blur(8px);
+  animation: conv-search-appear 150ms ease-out;
+}
+
+:root[data-color-scheme="dark"] .conv-search-bar {
+  --conv-search-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+}
+
+@keyframes conv-search-appear {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.conv-search-icon {
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  color: var(--neutral-400);
+}
+
+.conv-search-input {
+  flex: 1;
+  min-width: 0;
+  background: transparent;
+  border: none;
+  outline: none;
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 20px;
+  color: var(--neutral-900);
+}
+
+.conv-search-input::placeholder {
+  color: var(--neutral-400);
+}
+
+.conv-search-count {
+  flex-shrink: 0;
+  min-width: 40px;
+  text-align: right;
+  font-size: 13px;
+  color: var(--neutral-500);
+  user-select: none;
+}
+
+.conv-search-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--neutral-400);
+  cursor: pointer;
+  transition: color 150ms ease, background-color 150ms ease;
+}
+
+.conv-search-btn:hover {
+  color: var(--neutral-600);
+  background: var(--button-ghost-hover, rgba(0, 0, 0, 0.05));
+}
+
+:root[data-color-scheme="dark"] .conv-search-btn:hover {
+  background: var(--button-ghost-hover, rgba(255, 255, 255, 0.05));
+}
+
+.conv-search-close {
+  width: 28px;
+  height: 28px;
+  color: var(--neutral-600);
+}
+
+.conv-search-close:hover {
+  color: var(--neutral-700);
+}

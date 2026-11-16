@@ -1,0 +1,81 @@
+import { Fragment, useEffect, useRef, useState } from "react"
+import { Dialog as Radix } from "radix-ui"
+import { BrandButton, Dialog } from "@/ui"
+import { useT } from "@/i18n"
+import { useSync } from "@/stores/sync"
+import { EvaluationModelSelect } from "./EvaluationModelSelect"
+import { resolveEvaluationModels, resolveRerunModels, evaluationModelText, type EvalModelIds, type EvalRunModels } from "@/services/evaluation-models"
+
+export function RunEvaluationDialog({ name, count, scope, initial, defaults, rerun, originalModels, missingCount, version, breakdown, onClose, onStart }: {
+  name: string; count: number; scope: string; initial: EvalModelIds; defaults: EvalModelIds; rerun: boolean; missingCount: number
+  originalModels?: EvalRunModels
+  version?: string; breakdown?: string
+  onClose: () => void; onStart: (models: EvalRunModels) => void | Promise<void>
+}) {
+  const t = useT()
+  const models = useSync(s => s.models)
+  const ready = useSync(s => s.ready)
+  const [selection, setSelection] = useState(initial)
+  const [starting, setStarting] = useState(false)
+  const submitting = useRef(false)
+  const returnFocus = useRef(document.activeElement as HTMLElement | null)
+  useEffect(() => {
+    const trigger = returnFocus.current
+    return () => { queueMicrotask(() => { if (trigger?.isConnected) trigger.focus() }) }
+  }, [])
+  const [error, setError] = useState("")
+  const close = () => { if (!submitting.current) onClose() }
+  const modelError = (id: string) => !ready ? undefined : !models.length ? t("proto.eval.models.empty")
+    : !id ? t(rerun ? "proto.eval.models.legacy" : "proto.eval.models.required")
+    : !models.some(model => model.id === id) ? t("proto.eval.models.unavailable") : undefined
+  const resolve = () => rerun ? resolveRerunModels(originalModels, useSync.getState().models) : resolveEvaluationModels(selection, useSync.getState().models)
+  const valid = ready && !!resolve()
+  async function start(event: React.FormEvent) {
+    event.preventDefault()
+    if (submitting.current || !valid) return
+    const resolved = resolve()
+    if (!resolved) { setError(t("proto.eval.models.changed")); return }
+    submitting.current = true
+    setStarting(true)
+    setError("")
+    try { await onStart(resolved) }
+    catch (error) { setError(error instanceof Error ? error.message : t("proto.eval.models.startFailed")) }
+    finally { submitting.current = false; setStarting(false) }
+  }
+  return <Radix.Root open modal onOpenChange={open => { if (!open) close() }}>
+    <Radix.Portal>
+      <Radix.Overlay data-component="dialog-overlay" />
+      <Dialog fit title={rerun ? "确认重新运行" : t("proto.eval.models.title")} width="min(440px, calc(100vw - 32px))" className="eval-run-dialog" onClose={close}>
+        <form onSubmit={start} aria-busy={starting}>
+          <dl className="eval-run-context">
+            <dt>{t("proto.eval.models.object")}</dt><dd>{name}</dd>
+            <dt>{t("proto.eval.models.scope")}</dt><dd>{scope} · {t("proto.eval.models.count", { count })}</dd>
+            {breakdown && <><dt>范围明细</dt><dd>{breakdown}</dd></>}
+            <dt>用例来源</dt><dd>{version || "当前用例"}</dd>
+          </dl>
+          <p className="eval-run-note">{rerun ? "使用来源报告的用例快照与最新已保存的对象内容。当前列表中的修改或删除不会改变本次重跑用例。" : "使用当前用例与最新已保存的对象内容，发起运行时保存本次使用的用例。"}</p>
+          {!!missingCount && <p className="eval-run-note" role="status">{t("proto.eval.models.deletedCases", { count: missingCount })}</p>}
+          {rerun ? <>
+            <dl className="eval-run-context">{(["execution", "judging"] as const).map(role => <Fragment key={role}>
+              <dt>{t(`proto.eval.models.${role}`)}</dt><dd>{evaluationModelText(originalModels?.[role])}</dd>
+            </Fragment>)}</dl>
+            <p className="eval-muted">沿用来源报告的执行模型和判定模型，本次不可修改。</p>
+            {ready && !valid && <p role="alert" className="eval-field-error">来源报告模型未记录或已不可用，请从当前用例新建运行。</p>}
+          </> : (["execution", "judging"] as const).map(role => <EvaluationModelSelect key={role}
+            label={t(`proto.eval.models.${role}`)} hint={t(`proto.eval.models.${role}Hint`)}
+            value={selection[role]} models={models} disabled={starting || !ready}
+            defaultId={defaults[role]} defaultLabel={t(`proto.eval.models.${role}Default`)}
+            error={modelError(selection[role])}
+            onChange={id => { setSelection(current => ({ ...current, [role]: id })); setError("") }} />)}
+          {!ready && <p role="status" className="eval-muted">{t("proto.eval.models.loading")}</p>}
+          {error && <p className="eval-field-error" role="alert">{error}</p>}
+          <div className="eval-run-dialog-actions">
+            <BrandButton variant="primary" type="submit" disabled={!valid || starting || !count}>
+              {t(starting ? "proto.eval.models.starting" : "proto.eval.models.start")}
+            </BrandButton>
+          </div>
+        </form>
+      </Dialog>
+    </Radix.Portal>
+  </Radix.Root>
+}

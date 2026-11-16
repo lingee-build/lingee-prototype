@@ -1,0 +1,65 @@
+/* 同一配置面板：主编辑区 16px，控件及列表卡片 12px，正文 14px、辅助文字 12px。 */
+.agent-config-panel,
+.agent-config-drawer {
+  --agent-config-card-radius: 16px;
+  --agent-config-list-radius: 12px;
+  --agent-config-card-padding: 16px;
+  --agent-config-field-radius: 12px;
+  --agent-config-section-gap: 20px;
+}
+
+.agent-config-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: 12px;
+  row-gap: 2px;
+}
+.agent-config-header-identity { display: contents; }
+.agent-config-header-name { grid-column: 1; grid-row: 1; }
+.agent-config-header-code { grid-column: 1; grid-row: 2; }
+.agent-config-header-actions {
+  grid-column: 2;
+  grid-row: 1;
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.agent-config-surface {
+  border-radius: var(--agent-config-card-radius);
+  padding: var(--agent-config-card-padding);
+  background: var(--agent-config-card-bg, var(--surface-raised-stronger-non-alpha));
+}
+.agent-config-section-title {
+  color: var(--text-strong);
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 22px;
+}
+.agent-basic-info { gap: var(--agent-config-section-gap); }
+.agent-config-sections > section { margin-top: var(--agent-config-section-gap); }
+.agent-config-tab-scroll { min-width: 0; overflow-x: auto; scrollbar-width: none; }
+.agent-config-tab-scroll::-webkit-scrollbar { display: none; }
+.agent-config-tab-scroll [data-component="segmented-control"] { min-width: max-content; }
+
+.agent-config-fields { display: flex; flex-direction: column; gap: 16px; }
+.agent-config-fields > [data-component="form-input"],
+.agent-config-fields > [data-component="domain-select"] { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.agent-config-fields [data-slot="dropdown-menu-trigger"],
+.agent-config-fields [data-slot="domain-select-value"] { border-radius: var(--agent-config-field-radius); }
+.agent-config-editor { border-radius: var(--agent-config-card-radius); }
+.agent-config-list-card { border-radius: var(--agent-config-list-radius, 12px); }
+.agent-config-panel .agent-config-editor,
+.agent-config-panel .agent-config-list-card { background: var(--agent-config-card-bg, var(--surface-raised-stronger-non-alpha)); }
+.agent-config-panel [data-component="form-input"] { gap: 8px; }
+
+.agent-config-sections { scrollbar-width: thin; scrollbar-color: var(--border-base) transparent; }
+.agent-config-sections::-webkit-scrollbar { width: 4px; }
+.agent-config-sections::-webkit-scrollbar-thumb { border-radius: 2px; background: var(--border-base); }
+.agent-changelog-toggle { color: var(--text-weak); font-size: 12px; line-height: 20px; cursor: pointer; }
+.agent-changelog-toggle:hover { color: var(--text-strong); }
+.agent-changelog-history { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border-weak-base); }
+
+.agent-config-identity-row { display: flex; align-items: center; gap: 12px; }
+.agent-config-avatar-field { display: flex; align-items: center; }
+.agent-config-identity-row .agent-header-avatar { width: 52px; height: 52px; }

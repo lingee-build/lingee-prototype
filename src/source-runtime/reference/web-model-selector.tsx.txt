@@ -1,0 +1,463 @@
+import { DropdownMenu } from "@kcode/ui/dropdown-menu"
+import { Component, createMemo, createSignal, Show, For, type JSX } from "solid-js"
+import { Button } from "@kcode/ui/button"
+import { Icon } from "@kcode/ui/icon"
+import { IconButton } from "@kcode/ui/icon-button"
+import { Tooltip, TooltipKeybind } from "@kcode/ui/tooltip"
+import { useLocal } from "@/context/local"
+import { useLanguage } from "@/context/language"
+import { useCommand } from "@/context/command"
+import { useModels } from "@/context/models"
+import { CustomScrollContainer } from "@/components/custom-scroll-container"
+import {
+  computeMaxContextLimit,
+  getCapabilityContext,
+  getModelLevelIcon,
+  modelSortComparator,
+  presetOptions,
+  MODEL_LEVEL_ORDER,
+} from "@/utils/maas-display-name"
+import "./model-selector.css"
+
+import modelQwenIcon from "@/assets/model-icons/model-qwen-16.svg"
+import modelDeepseekIcon from "@/assets/model-icons/model-deepseek-16.svg"
+import modelGmlIcon from "@/assets/model-icons/model-gml-16.svg"
+import modelKimiIcon from "@/assets/model-icons/model-kimi-16.svg"
+import modelMinimaxIcon from "@/assets/model-icons/model-minimax-16.svg"
+import modelTraeIcon from "@/assets/model-icons/model-trae-16.svg"
+import modelSeedIcon from "@/assets/model-icons/model-seed-16.svg"
+import modelHyIcon from "@/assets/model-icons/model-hy-16.svg"
+import modelStepIcon from "@/assets/model-icons/model-step-16.svg"
+
+/** 模型等级键名，对应 MaaS 返回的 modelLevel 字段 */
+const LEVEL_KEYS = ["fast", "deep", "expert"] as const
+
+/** 格式化消耗系数为一位小数 + "x" */
+function formatCoefficient(value?: string): string | undefined {
+  if (!value) return undefined
+  const num = parseFloat(value)
+  return Number.isNaN(num) ? `${value}x` : `${num.toFixed(1)}x`
+}
+
+/** 模型品牌图标映射：根据 modelId/name 关键词匹配静态预览中的品牌 SVG */
+const BRAND_ICON_MAP: { match: string; icon: string }[] = [
+  { match: "qwen", icon: modelQwenIcon },
+  { match: "deepseek", icon: modelDeepseekIcon },
+  { match: "glm", icon: modelGmlIcon },
+  { match: "kimi", icon: modelKimiIcon },
+  { match: "minimax", icon: modelMinimaxIcon },
+  { match: "trae", icon: modelTraeIcon },
+  { match: "seed", icon: modelSeedIcon },
+  { match: "hy3", icon: modelHyIcon },
+  { match: "hy-", icon: modelHyIcon },
+  { match: "step-5", icon: modelStepIcon },
+]
+
+function getBrandIcon(id?: string, name?: string): string | undefined {
+  const text = `${id ?? ""} ${name ?? ""}`.toLowerCase()
+  return BRAND_ICON_MAP.find((m) => text.includes(m.match))?.icon
+}
+
+interface ModelSelectorProps {
+  placement: string
+  buttonsStyle: () => JSX.CSSProperties
+  restoreFocus: () => void
+}
+
+/**
+ * 模型选择器：等级模型（快速/深度/专家）与具体模型统一在同一下拉列表中选择
+ *
+ * 点击触发按钮 → 弹出模型列表（等级模型在顶部，非等级模型在下方）
+ */
+
+/** models.list() 模型项中可编辑项用到的最小字段集 */
+interface EditableModelItemData {
+  id: string
+  name: string
+  modelLevel?: string
+  lingeeModelId?: string
+  consumptionCoefficient?: string
+  capability?: unknown
+}
+
+/** 可编辑模型项：模型选择区 + 编辑按钮（点击弹独立 DropdownMenu 选档位） */
+const EditableModelItem: Component<{
+  item: EditableModelItemData
+  isCurrent: boolean
+  onSelectModel: () => void
+  onSelectLimit: (value: number) => void
+  currentOverride?: number
+  editingKey?: string
+  setEditingKey?: (key: string | undefined) => void
+}> = (props) => {
+  const language = useLanguage()
+  const level = () => props.item.modelLevel ?? "deep"
+  const isLevelModel = () => props.item.modelLevel != null && props.item.modelLevel in MODEL_LEVEL_ORDER
+  const levelLabel = (lvl: string) => language.t(`model.displayName.${lvl}`) || language.t("model.displayName.deep")
+  const presets = createMemo(() => presetOptions(props.item.capability))
+  // selected 钳制到「不大于上限的最大档位」，确保始终有高亮项
+  const initialSelected = (() => {
+    const oVal = props.currentOverride ?? 200_000
+    const opts = presetOptions(props.item.capability)
+    const maxPreset = opts.filter((p) => p.value <= oVal).at(-1)?.value ?? opts[0]?.value ?? 200_000
+    return maxPreset
+  })()
+  const [selected, setSelected] = createSignal(initialSelected)
+  const itemKey = () => props.item.lingeeModelId ?? props.item.id
+  const editOpen = () => props.editingKey === itemKey()
+  const setEditOpen = (open: boolean) => props.setEditingKey?.(open ? itemKey() : undefined)
+  return (
+    <div class="kcode-model-selector__model-option" role="option" aria-selected={props.isCurrent} data-can-edit="" data-edit-open={editOpen() ? "" : undefined}>
+      <div class="kcode-model-selector__model-selectable" tabindex={0} onClick={() => props.onSelectModel()} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); props.onSelectModel() } }}>
+        <Show when={isLevelModel()} fallback={
+          <Show when={getBrandIcon(props.item.id, props.item.name)} fallback={<Icon name={getModelLevelIcon(props.item.modelLevel)} size="small" class="shrink-0" />}>
+            <img src={getBrandIcon(props.item.id, props.item.name)} alt="" class="size-4 shrink-0 object-contain" />
+          </Show>
+        }>
+          <Icon name={getModelLevelIcon(level())} size="small" class="shrink-0" />
+        </Show>
+        <span class="kcode-model-selector__model-main">
+          <span class="kcode-model-selector__model-label">{isLevelModel() ? levelLabel(level()) : props.item.name}</span>
+        </span>
+        <span class="kcode-model-selector__model-end">
+          <Show when={props.item.consumptionCoefficient}>
+            <span class="kcode-model-selector__model-ratio">{formatCoefficient(props.item.consumptionCoefficient)}</span>
+          </Show>
+          <Show when={props.isCurrent}>
+            <span class="kcode-model-selector__model-check">
+              <Icon name="check" size="small" />
+            </span>
+          </Show>
+        </span>
+      </div>
+      <DropdownMenu open={editOpen()} onOpenChange={setEditOpen} placement="right-start" gutter={28}>
+        <DropdownMenu.Trigger as="button" type="button" class="kcode-model-selector__edit-btn" title={language.t("model.context.editor.edit")}>
+          <span class="kcode-model-selector__edit-btn-label">{language.t("model.context.editor.edit")}</span>
+          <Icon name="pencil" size="xs" />
+        </DropdownMenu.Trigger>
+        <DropdownMenu.Portal>
+          <DropdownMenu.Content class="kcode-model-selector__edit-popover">
+            <div class="kcode-model-selector__edit-title">{language.t("model.context.editor.title")}</div>
+            <For each={presets()}>
+              {(preset) => (
+                <DropdownMenu.Item
+                  class="kcode-model-selector__edit-option"
+                  classList={{ "kcode-model-selector__edit-option--active": selected() === preset.value }}
+                  onSelect={() => {
+                    setSelected(preset.value)
+                    props.onSelectLimit(preset.value)
+                  }}
+                >
+                  <DropdownMenu.ItemLabel class="flex-1">{preset.label}</DropdownMenu.ItemLabel>
+                  <Show when={selected() === preset.value}>
+                    <Icon name="check" size="small" class="text-[var(--neutral-600)]" />
+                  </Show>
+                </DropdownMenu.Item>
+              )}
+            </For>
+          </DropdownMenu.Content>
+        </DropdownMenu.Portal>
+      </DropdownMenu>
+    </div>
+  )
+}
+
+export const ModelSelector: Component<ModelSelectorProps> = (props: ModelSelectorProps) => {
+  const local = useLocal()
+  const language = useLanguage()
+  const command = useCommand()
+  const models = useModels()
+  const model = local.model
+
+  const [open, setOpen] = createSignal(false)
+  const [refreshingModels, setRefreshingModels] = createSignal(false)
+  const [editingKey, setEditingKey] = createSignal<string | undefined>(undefined)
+
+  /** 编辑按钮是否可见：kingdee-maas 模型，且（capability 缺失 或 capability.context >= 200K）。
+   *  capability 缺失时上限默认 500K；capability < 200K 时不显示（无法调）。 */
+  const canEditContext = (item: { provider?: { id: string }; capability?: unknown }) => {
+    if (item.provider?.id !== "kingdee-maas") return false
+    const ctx = getCapabilityContext(item.capability)
+    return ctx == null || ctx >= 200_000
+  }
+
+  /** 模型项的 limit 覆盖 key：优先 lingeeModelId，回退 modelId */
+  const limitKey = (item: { lingeeModelId?: string; id: string }) => item.lingeeModelId ?? item.id
+
+  const modelItems = createMemo(() =>
+    model
+      .list()
+      .filter((item: { id: string; provider: { id: string }; lingeeModelId?: string; name: string; modelLevel?: string }) =>
+        model.visible({ modelID: item.id, providerID: item.provider.id, lingeeModelId: item.lingeeModelId }),
+      )
+      .sort(modelSortComparator),
+  )
+
+  const isLevelModel = (item: unknown): boolean => {
+    const level = (item as { modelLevel?: string }).modelLevel
+    return level != null && level in MODEL_LEVEL_ORDER
+  }
+
+  /** 等级模型（fast / deep / expert） */
+  const levelModels = createMemo(() => modelItems().filter(isLevelModel))
+
+  /** 非等级模型（排除快速/深度/专家以外的模型） */
+  const nonLevelModels = createMemo(() =>
+    modelItems().filter((item) => !isLevelModel(item)),
+  )
+
+  /** 无可用模型（加载失败或未返回任何模型） */
+  const noModels = createMemo(() => modelItems().length === 0)
+
+  const currentModelLevel = (): string | undefined =>
+    (model.current() as { modelLevel?: string } | undefined)?.modelLevel
+
+  /** 默认模式：当前选中的是等级模型（或未选择） */
+  const isDefaultMode = createMemo(() => {
+    const current = model.current()
+    return !current || isLevelModel(current)
+  })
+
+  /** 判断某个模型是否为当前选中 */
+  const isCurrentModel = (item: { provider: { id: string }; id: string; lingeeModelId?: string }) =>
+    model.current()?.provider.id === item.provider.id &&
+    model.current()?.id === item.id &&
+    model.current()?.lingeeModelId === item.lingeeModelId
+
+  /** 刷新模型列表 */
+  const refreshModels = async () => {
+    if (refreshingModels()) return
+    setRefreshingModels(true)
+    try {
+      await model.refresh()
+    } finally {
+      setRefreshingModels(false)
+    }
+  }
+
+  /** 当前等级索引（基于选中模型的 modelLevel，未匹配回退到 deep=1） */
+  const currentSliderIndex = createMemo(() => {
+    const level = currentModelLevel()
+    if (!level) return 1
+    const idx = LEVEL_KEYS.indexOf(level as (typeof LEVEL_KEYS)[number])
+    return idx >= 0 ? idx : 1
+  })
+
+  /** 查找指定等级的 MaaS 模型 */
+  const findLevelModel = (level: string) =>
+    levelModels().find((item) => (item as { modelLevel?: string }).modelLevel === level)
+
+  /** 当前显示等级（用于触发按钮图标） */
+  const displayLevel = createMemo(() => LEVEL_KEYS[currentSliderIndex()])
+
+  /** 选择等级模型 */
+  const selectLevel = (index: number) => {
+    const level = LEVEL_KEYS[index]
+    if (!level) return
+    const target = findLevelModel(level) ?? levelModels()[0]
+    if (target) {
+      model.set(
+        { providerID: target.provider.id, modelID: target.id, lingeeModelId: target.lingeeModelId },
+        { recent: true },
+      )
+    }
+    setOpen(false)
+    props.restoreFocus()
+  }
+
+  /** 选择非等级模型 */
+  const selectModel = (item: { provider: { id: string }; id: string; lingeeModelId?: string; name: string }) => {
+    model.set(
+      { providerID: item.provider.id, modelID: item.id, lingeeModelId: item.lingeeModelId },
+      { recent: true },
+    )
+    setOpen(false)
+    props.restoreFocus()
+  }
+
+  /** 等级标签（i18n） */
+  const levelLabel = (level: string) =>
+    language.t(`model.displayName.${level}`) || language.t("model.displayName.deep")
+
+  /* ── 触发按钮显示文本 ── */
+  const triggerLabel = createMemo(() =>
+    isDefaultMode() ? "" : (model.current()?.name ?? ""),
+  )
+  const triggerValue = createMemo(() => {
+    if (noModels()) return ""
+    if (isDefaultMode()) {
+      return levelLabel(displayLevel())
+    }
+    return ""
+  })
+
+  /** 弹层列表高度 */
+  const listHeight = createMemo(() => {
+    if (modelItems().length === 0) return 100
+    const count = levelModels().length + nonLevelModels().length
+    return Math.min(count * 34 + 8, 312)
+  })
+
+  const handleOpenChange = (next: boolean) => {
+    setOpen(next)
+    if (!next) setEditingKey(undefined)
+  }
+
+  return (
+    <TooltipKeybind
+      placement="top"
+      gutter={4}
+      title={model.current()?.name ?? language.t("command.model.choose")}
+      keybind={command.keybind("model.choose")}
+    >
+      <DropdownMenu
+        open={open()}
+        onOpenChange={handleOpenChange}
+        placement={props.placement.replace("start", "end") as any}
+        gutter={8}
+      >
+        <DropdownMenu.Trigger
+          as={Button}
+          variant="ghost"
+          size="normal"
+          class="kcode-model-selector__trigger group max-w-[200px] h-9 py-[7px] px-[8px] rounded-[12px] text-[var(--prompt-input-trigger-text)] text-[14px] font-[400] leading-[22px] gap-1 hover:bg-[var(--prompt-input-trigger-bg)] border-none"
+          style={props.buttonsStyle()}
+          data-action="prompt-model"
+        >
+          <Show when={!isDefaultMode() && getBrandIcon(model.current()?.id, model.current()?.name)} fallback={<Icon name={noModels() ? "refresh" : isDefaultMode() ? getModelLevelIcon(displayLevel()) : "models"} size="small" class="shrink-0 text-[var(--neutral-600)]" />}>
+            <img src={getBrandIcon(model.current()?.id, model.current()?.name)} alt="" class="size-4 shrink-0 object-contain" />
+          </Show>
+          <span class="kcode-model-selector__trigger-label truncate text-[14px] leading-[22px] font-[400] text-[var(--neutral-700)]">
+            {triggerLabel()}
+          </span>
+          <Show when={triggerValue()}>
+            <span class="kcode-model-selector__trigger-label text-[14px] leading-[22px] font-[400] text-[var(--neutral-700)]">{triggerValue()}</span>
+          </Show>
+          <Icon name="arrow-down-12" size="small" class="kcode-model-selector__trigger-chevron size-3 shrink-0 transition-transform duration-150 group-data-[expanded]:rotate-180 text-[var(--neutral-700)]" />
+        </DropdownMenu.Trigger>
+        <DropdownMenu.Portal>
+          <DropdownMenu.Content
+            class="kcode-model-selector__popover"
+            style={{
+              height: `${listHeight()}px`,
+            } as JSX.CSSProperties}
+            onOpenAutoFocus={(e: Event) => {
+              e.preventDefault()
+            }}
+            onCloseAutoFocus={(e: Event) => {
+              e.preventDefault()
+              props.restoreFocus()
+            }}
+          >
+            <div class="kcode-model-selector__viewport">
+              <section
+                class="kcode-model-selector__panel kcode-model-selector__panel--models"
+                tabIndex={-1}
+              >
+                {/* 空状态：无可用模型 */}
+                <Show when={modelItems().length === 0}>
+                  <div class="px-3 py-2 flex items-center justify-center flex-col gap-1 text-[var(--neutral-500)] text-[13px] font-[400] leading-[20px] text-center">
+                    <Icon name="empty-box" containerClass="size-8" />
+                    <div class="flex items-center justify-center gap-1">
+                      <span>{model.loading() || model.recovering() ? language.t("prompt.model.loading") : language.t("prompt.model.empty")}</span>
+                      <IconButton
+                        icon="refresh"
+                        size="small"
+                        variant="ghost"
+                        class="shrink-0"
+                        classList={{ "[&_svg]:animate-spin": refreshingModels() || model.loading() }}
+                        disabled={refreshingModels() || model.loading()}
+                        onClick={refreshModels}
+                      />
+                    </div>
+                  </div>
+                </Show>
+                <Show when={modelItems().length > 0}>
+                  <CustomScrollContainer class="kcode-model-selector__scroll">
+                    <div class="kcode-model-selector__model-list" role="listbox" aria-label={language.t("model.selector.aria.chooseModel")}>
+                      {/* 等级模型（快速 / 深度 / 专家） */}
+                      <For each={levelModels()}>
+                        {(item) => {
+                          const level = (item as { modelLevel?: string }).modelLevel ?? "deep"
+                          const onSelect = () => {
+                            const idx = LEVEL_KEYS.indexOf(level as (typeof LEVEL_KEYS)[number])
+                            if (idx >= 0) selectLevel(idx)
+                          }
+                          return (
+                            <Show when={canEditContext(item)} fallback={
+                              <DropdownMenu.Item as="div" tabindex={0} class="kcode-model-selector__model-option" role="option" aria-selected={isCurrentModel(item)} onSelect={onSelect}>
+                                <Icon name={getModelLevelIcon(level)} size="small" class="shrink-0" />
+                                <span class="kcode-model-selector__model-main">
+                                  <span class="kcode-model-selector__model-label">{levelLabel(level)}</span>
+                                </span>
+                                <span class="kcode-model-selector__model-end">
+                                  <Show when={(item as { consumptionCoefficient?: string }).consumptionCoefficient}>
+                                    <span class="kcode-model-selector__model-ratio">{formatCoefficient((item as { consumptionCoefficient?: string }).consumptionCoefficient)}</span>
+                                  </Show>
+                                  <Show when={isCurrentModel(item)}>
+                                    <span class="kcode-model-selector__model-check">
+                                      <Icon name="check" size="small" />
+                                    </span>
+                                  </Show>
+                                </span>
+                              </DropdownMenu.Item>
+                            }>
+                              <EditableModelItem
+                                item={item}
+                                isCurrent={isCurrentModel(item)}
+                                onSelectModel={onSelect}
+                                onSelectLimit={(value) => models.limitOverrides.set(limitKey(item), value)}
+                                currentOverride={models.limitOverrides.get(limitKey(item))}
+                                editingKey={editingKey()}
+                                setEditingKey={setEditingKey}
+                              />
+                            </Show>
+                          )
+                        }}
+                      </For>
+                      {/* 非等级模型列表 */}
+                      <For each={nonLevelModels()}>
+                        {(item) => (
+                          <Show when={canEditContext(item)} fallback={
+                            <DropdownMenu.Item as="div" tabindex={0} class="kcode-model-selector__model-option" role="option" aria-selected={isCurrentModel(item)} onSelect={() => selectModel(item)}>
+                              <Show when={getBrandIcon(item.id, item.name)} fallback={<Icon name={getModelLevelIcon((item as { modelLevel?: string }).modelLevel)} size="small" class="shrink-0" />}>
+                                <img src={getBrandIcon(item.id, item.name)} alt="" class="size-4 shrink-0 object-contain" />
+                              </Show>
+                              <span class="kcode-model-selector__model-main">
+                                <span class="kcode-model-selector__model-label">{item.name}</span>
+                              </span>
+                              <span class="kcode-model-selector__model-end">
+                                <Show when={(item as { consumptionCoefficient?: string }).consumptionCoefficient}>
+                                  <span class="kcode-model-selector__model-ratio">{formatCoefficient((item as { consumptionCoefficient?: string }).consumptionCoefficient)}</span>
+                                </Show>
+                                <Show when={isCurrentModel(item)}>
+                                  <span class="kcode-model-selector__model-check">
+                                    <Icon name="check" size="small" />
+                                  </span>
+                                </Show>
+                              </span>
+                            </DropdownMenu.Item>
+                          }>
+                            <EditableModelItem
+                              item={item}
+                              isCurrent={isCurrentModel(item)}
+                              onSelectModel={() => selectModel(item)}
+                              onSelectLimit={(value) => models.limitOverrides.set(limitKey(item), value)}
+                              currentOverride={models.limitOverrides.get(limitKey(item))}
+                              editingKey={editingKey()}
+                              setEditingKey={setEditingKey}
+                            />
+                          </Show>
+                        )}
+                      </For>
+                    </div>
+                  </CustomScrollContainer>
+                </Show>
+              </section>
+            </div>
+          </DropdownMenu.Content>
+        </DropdownMenu.Portal>
+      </DropdownMenu>
+    </TooltipKeybind>
+  )
+}

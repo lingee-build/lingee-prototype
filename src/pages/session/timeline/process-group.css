@@ -1,0 +1,93 @@
+/* React DOM adaptation of production kcode-ui/message-part.tsx + session-turn.css.
+   The provided product screenshot is the visual reference for the filled stage surface.
+   Keep vendor files untouched; use the same slots and theme tokens as production. */
+[data-slot="session-turn-list"] [data-component="assistant-parts"]{display:flex;flex-direction:column;gap:12px;min-width:0;width:100%}
+[data-slot="session-turn-list"] [data-component="assistant-part-group"]{min-width:0;width:100%}
+[data-slot="session-turn-list"] [data-component="assistant-parts"] [data-component="text-part"]{margin:4px 0 6px}
+[data-slot="session-turn-list"] [data-component="assistant-parts"] [data-component="text-part"] [data-component="markdown"]{line-height:1.75}
+[data-slot="session-turn-list"] [data-component="collapsible"].tool-stage-collapsible,
+[data-slot="session-turn-list"] .tool-single-step{
+  width:100%;border:0;border-radius:16px!important;background:var(--user-message-bg, color-mix(in srgb, var(--neutral-900) 3%, transparent))!important;padding:8px 12px!important;box-shadow:none;overflow:hidden
+}
+[data-slot="session-turn-list"] [data-component="collapsible"].tool-stage-collapsible>[data-slot="collapsible-trigger"]{height:auto;min-height:22px;padding:0;background:transparent;border:0;font:inherit;color:var(--neutral-800);cursor:pointer}
+[data-slot="session-turn-list"] [data-component="tool-stage-group-trigger"]{width:100%;height:auto;min-height:22px}
+[data-slot="session-turn-list"] [data-component="tool-stage-group-trigger"] [data-component="tool-trigger"][data-tool-kind="tool-stage"]{width:100%;display:flex;justify-content:space-between;gap:8px;padding:0;min-height:22px;background:transparent;border:0;box-shadow:none}
+[data-slot="session-turn-list"] [data-component="tool-stage-group-trigger"] [data-slot="basic-tool-tool-trigger-content"],
+[data-slot="session-turn-list"] [data-component="tool-stage-group-trigger"] [data-slot="basic-tool-tool-info"],
+[data-slot="session-turn-list"] [data-component="tool-stage-group-trigger"] [data-slot="basic-tool-tool-info-structured"]{min-width:0;flex:1}
+[data-slot="session-turn-list"] [data-component="tool-stage-group-trigger"] [data-slot="basic-tool-tool-info-main"]{display:flex;align-items:center;gap:6px;min-width:0;width:100%}
+[data-slot="session-turn-list"] [data-component="tool-stage-group-trigger"] [data-slot="basic-tool-tool-title"]{color:var(--neutral-800)!important;font-size:14px;line-height:22px;font-weight:400;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+[data-slot="session-turn-list"] [data-component="tool-stage-group-trigger"] [data-slot-kind="tool-stage-action"]{opacity:1!important;margin-left:auto;flex:0 0 14px;display:flex;align-items:center}
+[data-slot="session-turn-list"] [data-slot="tool-stage-chevron"]{display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;color:var(--neutral-500);transition:transform 180ms ease;flex-shrink:0}
+[data-slot="session-turn-list"] [data-slot="tool-stage-status-icon"]{width:14px;height:14px;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;color:var(--neutral-500)}
+[data-slot="session-turn-list"] [data-slot="tool-stage-status-icon"] svg{width:14px;height:14px;flex-shrink:0}
+[data-slot="session-turn-list"] [data-slot="tool-stage-status-icon"][data-status="running"]{animation:spin 1s linear infinite}
+[data-slot="session-turn-list"] [data-slot="tool-stage-status-icon"][data-status="error"]{color:var(--icon-critical-base)}
+[data-slot="session-turn-list"] [data-component="tool-stage-group-list"]{max-height:min(44vh,320px);overflow:auto;padding:4px 0 0;gap:0;margin:0;background:transparent;display:flex;flex-direction:column}
+[data-slot="session-turn-list"] [data-component="tool-stage-group-list"]> *{position:relative;padding-top:6px!important;padding-bottom:6px!important;flex-shrink:0}
+[data-slot="session-turn-list"] [data-component="tool-stage-group-list"]>*:not(:last-child)::after{content:'';position:absolute;top:28px;bottom:-5px;left:7px;width:1px;background:var(--neutral-200);pointer-events:none}
+[data-slot="session-turn-list"] [data-component="tool-stage-group-list"] [data-component="tool-trigger"]{background:transparent;border:0;box-shadow:none;min-height:22px;padding:0}
+[data-slot="session-turn-list"] [data-component="tool-stage-group-list"] [data-slot="basic-tool-tool-info-main"]{min-height:22px;gap:5px}
+[data-slot="session-turn-list"] [data-component="tool-part-wrapper"][data-compact="true"] [data-slot="basic-tool-tool-indicator"]{width:14px;height:14px;margin-right:5px;flex-shrink:0;animation:none}
+[data-slot="session-turn-list"] [data-component="tool-part-wrapper"][data-compact="true"] [data-slot="basic-tool-tool-title"]{color:var(--neutral-900)!important;font-weight:400;font-size:14px;line-height:22px;flex-shrink:0}
+[data-slot="session-turn-list"] [data-component="tool-part-wrapper"][data-compact="true"] [data-slot="basic-tool-tool-subtitle"]{color:var(--neutral-600);font-size:14px;line-height:22px;min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+[data-slot="session-turn-list"] [data-component="tool-part-wrapper"][data-compact="true"] [data-slot="basic-tool-tool-arg"]{min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;color:var(--neutral-500);font-size:12px}
+[data-slot="session-turn-list"] [data-component="tool-part-wrapper"][data-compact="true"] [data-slot="collapsible-arrow"]{opacity:1!important;margin-left:auto!important}
+[data-slot="session-turn-list"] [data-component="tool-part-wrapper"][data-compact="true"] [data-component="tool-output"]{margin:6px 0 0 20px;padding:10px 12px;border-radius:8px;background:var(--background-page);max-height:240px;overflow:auto}
+[data-slot="session-turn-list"] [data-component="tool-part-wrapper"][data-compact="true"] [data-slot="skill-tool-status"]{font-size:14px;color:var(--neutral-600);white-space:nowrap}
+[data-slot="session-turn-list"] [data-component="context-tool-group-trigger"]{display:flex;width:100%;align-items:center;gap:6px;color:var(--neutral-800);font:inherit;font-size:14px;line-height:22px;border:0;background:transparent;cursor:pointer;text-align:left}
+[data-slot="session-turn-list"] [data-component="context-tool-group-trigger"]>span:nth-child(2){min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+[data-slot="session-turn-list"] [data-component="context-tool-group-trigger"]>[data-slot="tool-stage-chevron"]{margin-left:auto}
+[data-slot="session-turn-list"] [data-component="context-tool-group-list"]{margin:6px 0 0 20px!important;padding:0 0 0 12px!important;border-left:1px solid var(--neutral-200)}
+[data-slot="session-turn-list"] [data-component="context-tool-group-list"]>[data-component="tool-part-wrapper"]{padding:5px 0}
+[data-slot="session-turn-list"] [data-component="collapsible"].turn-process-collapsible{background:transparent;padding:0;overflow:visible;border:0}
+/* Use a single spacing rhythm in the process, without stacked text margins. */
+[data-slot="session-turn-list"] [data-slot="turn-process-inner"]{gap:8px!important}
+[data-slot="session-turn-list"] [data-slot="turn-process-inner"] [data-component="assistant-parts"]{gap:8px}
+[data-slot="session-turn-list"] [data-slot="turn-process-inner"] [data-component="text-part"],
+[data-slot="session-turn-list"] [data-slot="turn-process-inner"] [data-component="execution-plan"]{margin:0}
+[data-slot="session-turn-list"] [data-slot="turn-process-inner"] [data-component="text-part"] [data-component="markdown"]{line-height:1.6}
+[data-slot="session-turn-list"] [data-slot="turn-process-inner"] [data-component="markdown"] p{margin:8px 0}
+[data-slot="session-turn-list"] [data-slot="turn-process-inner"] [data-component="markdown"]>:first-child{margin-top:0}
+[data-slot="session-turn-list"] [data-slot="turn-process-inner"] [data-component="markdown"]>:last-child{margin-bottom:0}
+[data-slot="session-turn-list"] [data-slot="turn-process-inner"] [data-component="collapsible"].tool-stage-collapsible,
+[data-slot="session-turn-list"] [data-slot="turn-process-inner"] .tool-single-step{padding-block:6px!important}
+[data-slot="session-turn-list"] [data-slot="turn-process-divider"]{margin:4px 0 6px}
+[data-slot="session-turn-list"] [data-slot="turn-process-header"]{font-size:14px;line-height:22px}
+[data-slot="session-turn-list"] [data-slot="turn-process-summary"]{font-size:12px}
+[data-slot="session-turn-list"] [data-component="tool-stage-group-list"] [data-component="reasoning-part"]{margin:0;min-width:0}
+[data-slot="session-turn-list"] [data-component="tool-stage-group-list"] [data-slot="reasoning-header"]{min-height:22px;font-size:14px}
+@media(prefers-reduced-motion:reduce){[data-slot="session-turn-list"] [data-slot="tool-stage-status-icon"]{animation:none!important}[data-slot="session-turn-list"] [data-slot="collapsible-content"]{transition:none!important}}
+/* Keep the product's trailing chevron at the end of the filled row. */
+[data-slot="session-turn-list"] [data-component="session-turn"] [data-slot="session-turn-assistant-content"] [data-component="tool-stage-group-trigger"] [data-component="tool-trigger"][data-tool-kind="tool-stage"]{width:100%;flex:1 1 auto;justify-content:space-between}
+[data-slot="session-turn-list"] [data-component="session-turn"] [data-slot="session-turn-assistant-content"] [data-component="tool-stage-group-trigger"] [data-slot="basic-tool-tool-trigger-content"]{flex:1 1 auto;min-width:0;width:auto}
+[data-slot="session-turn-list"] [data-component="session-turn"] [data-slot="session-turn-assistant-content"] [data-component="tool-stage-group-trigger"] [data-slot-kind="tool-stage-action"]{margin-left:auto;opacity:1;flex:0 0 14px}
+/* The plan is a standalone Markdown block; remove pre's collapsed 1rem margins. */
+[data-slot="session-turn-list"] [data-component="execution-plan"] { margin: 4px 0 6px; }
+[data-slot="session-turn-list"] [data-component="execution-plan"] [data-component="markdown"] pre.shiki { margin: 0; }
+/* Show a short, scrolling business analysis while the entity candidate match is running. */
+[data-slot="session-turn-list"] [data-component="reasoning-part"][data-auto-scroll="true"][data-preview="true"] [data-slot="reasoning-body"] { max-height: 48px; }
+
+/* New paragraphs and tool rows enter gently; existing history stays still. */
+@keyframes runtime-part-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+@media (prefers-reduced-motion: no-preference) {
+  [data-slot="session-turn-list"] [data-component="assistant-part-group"],
+  [data-slot="session-turn-list"] [data-component="tool-stage-group-list"] > * { animation: runtime-part-in 220ms ease-out; }
+}
+
+/* Keep the final artifact close to its completion text, without stacked margins. */
+[data-slot="session-turn-list"] [data-component="assistant-parts"]:has(> [data-component="text-part"] [data-component="render-card"]) {
+  gap: 8px;
+}
+[data-slot="session-turn-list"] [data-component="assistant-parts"] > [data-component="text-part"]:has(+ [data-component="text-part"] [data-component="render-card"]) {
+  margin-bottom: 0;
+}
+[data-slot="session-turn-list"] [data-component="assistant-parts"] > [data-component="text-part"]:has([data-component="render-card"]) {
+  margin-top: 0;
+}
+[data-slot="session-turn-list"] [data-component="text-part"] [data-slot="text-part-body"] > [data-component="render-card"] {
+  margin-top: 0;
+}
+[data-slot="session-turn-list"] [data-slot="text-part-body"] > [data-component="markdown"] + [data-component="render-card"] {
+  margin-top: 8px;
+}

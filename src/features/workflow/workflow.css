@@ -1,0 +1,479 @@
+/* 工作流画布（会话右侧面板）。颜色、圆角、字号取 Build token；节点类型色与 Build 开发入口的图标色一致 */
+
+.workflow-editor { min-width: 0; overflow: hidden; }
+
+.workflow-canvas-shell {
+  position: relative;
+  display: flex;
+  flex: 1 1 0;
+  min-width: 0;
+  height: 100%;
+  overflow: hidden;
+}
+
+/* ---------- 画布 ---------- */
+.workflow-canvas {
+  position: relative;
+  flex: 1 1 0;
+  min-width: 0;
+  overflow: hidden;
+  cursor: grab;
+  background-color: var(--background-page);
+  background-image: radial-gradient(circle, var(--neutral-130, rgba(0, 0, 0, 0.08)) 1px, transparent 1px);
+  background-size: 16px 16px;
+  touch-action: none;
+}
+.workflow-canvas.is-panning { cursor: grabbing; }
+.workflow-viewport { position: absolute; left: 0; top: 0; transform-origin: 0 0; }
+.workflow-edges { position: absolute; left: 0; top: 0; width: 1px; height: 1px; pointer-events: none; }
+.workflow-edge { fill: none; stroke: var(--neutral-300, #c4c4c4); stroke-width: 1.5; }
+.workflow-edge.is-active { stroke: var(--primary-600); }
+.workflow-edge.is-draft { stroke: var(--primary-600); stroke-dasharray: 4 4; }
+
+.workflow-edge-mid {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  transform: translate(-50%, -50%);
+  z-index: 2;
+}
+.workflow-edge-label {
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--main-bg);
+  border: 1px solid var(--neutral-100);
+  color: var(--text-weak);
+  font-size: 12px;
+  line-height: 18px;
+  white-space: nowrap;
+}
+.workflow-edge-actions { display: flex; gap: 4px; opacity: 0; transition: opacity 0.15s ease; }
+.workflow-edge-mid:hover .workflow-edge-actions,
+.workflow-edge-actions:focus-within,
+.workflow-edge-actions:has([data-expanded]) { opacity: 1; }
+.workflow-edge-add {
+  display: inline-flex;
+  width: 20px;
+  height: 20px;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 1px solid var(--neutral-100);
+  border-radius: 50%;
+  background: var(--main-bg);
+  color: var(--text-base);
+  cursor: pointer;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+  --icon-fill: currentColor;
+}
+.workflow-edge-add:hover { color: var(--primary-600); border-color: var(--primary-600); }
+
+/* 节点卡片：同 Build 卡片（白底、12px 圆角、轻阴影），选中时品牌蓝描边 */
+.workflow-node {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
+  padding: 10px 12px;
+  border: 1px solid var(--neutral-100);
+  border-radius: 12px;
+  background: var(--main-bg);
+  box-shadow: 0 1px 6px 0 var(--neutral-50, rgba(0, 0, 0, 0.04));
+  cursor: pointer;
+  user-select: none;
+  z-index: 1;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.workflow-node:hover { box-shadow: 0 2px 10px 0 var(--neutral-130, rgba(0, 0, 0, 0.08)); }
+.workflow-node:focus-visible { outline: 2px solid var(--primary-600); outline-offset: 2px; }
+.workflow-node.is-selected { border-color: var(--primary-600); box-shadow: 0 0 0 3px rgba(73, 93, 255, 0.12); }
+.workflow-node.is-highlight { animation: workflow-flash 1.3s ease 2; }
+.workflow-node.is-running { border-color: var(--primary-600); }
+.workflow-node.is-done { border-color: color-mix(in srgb, #08c787 50%, transparent); }
+.workflow-node.is-waiting { border-color: #ff9e1b; box-shadow: 0 0 0 3px rgba(255, 158, 27, 0.14); }
+.workflow-node.is-skipped { opacity: 0.45; }
+@keyframes workflow-flash {
+  0%, 100% { box-shadow: 0 1px 6px 0 var(--neutral-50); }
+  40% { box-shadow: 0 0 0 4px rgba(73, 93, 255, 0.22); border-color: var(--primary-600); }
+}
+.workflow-node-head { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.workflow-node-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; font-weight: 500; line-height: 20px; color: var(--text-strong); }
+.workflow-node-sub { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding-left: 32px; font-size: 12px; line-height: 18px; color: var(--text-weak); }
+.workflow-node-badge { flex-shrink: 0; padding: 0 6px; border-radius: 999px; background: #fff4e5; color: #d97a00; font-size: 12px; line-height: 18px; }
+.workflow-port {
+  position: absolute;
+  left: 50%;
+  bottom: -6px;
+  width: 12px;
+  height: 12px;
+  margin-left: -6px;
+  border: 2px solid var(--main-bg);
+  border-radius: 50%;
+  background: var(--neutral-300, #c4c4c4);
+  cursor: crosshair;
+  opacity: 0;
+  transition: opacity 0.15s ease, background-color 0.15s ease;
+}
+.workflow-node:hover .workflow-port,
+.workflow-node.is-selected .workflow-port { opacity: 1; }
+.workflow-port:hover { background: var(--primary-600); }
+
+/* 节点类型色块 */
+.workflow-node-icon {
+  display: inline-flex;
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  background: var(--tone-bg);
+  color: var(--tone);
+  --icon-fill: var(--tone);
+  --tone: var(--primary-600);
+  --tone-bg: var(--primary-50);
+}
+[data-tone="agent"] { --tone: #8f40ff; --tone-bg: #f4edff; }
+[data-tone="tool"] { --tone: #0f8fb3; --tone-bg: #e7f6fb; }
+[data-tone="code"] { --tone: #2970ff; --tone-bg: #eef5ff; }
+[data-tone="condition"] { --tone: #ff6d37; --tone-bg: #fff1eb; }
+[data-tone="parallel"],
+[data-tone="join"] { --tone: #08a873; --tone-bg: #e8f9f2; }
+[data-tone="loop"] { --tone: #495dff; --tone-bg: #f3f5ff; }
+[data-tone="human"] { --tone: #d97a00; --tone-bg: #fff4e5; }
+[data-tone="end"] { --tone: #08a873; --tone-bg: #e8f9f2; }
+
+/* 画布工具：左下角浮层，同 Build 浮层按钮 */
+.workflow-toolbar {
+  position: absolute;
+  left: 12px;
+  bottom: 12px;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 4px;
+  border: 1px solid var(--neutral-100);
+  border-radius: 12px;
+  background: var(--main-bg);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  z-index: 3;
+  cursor: default;
+}
+.workflow-tool {
+  display: inline-flex;
+  width: 28px;
+  height: 28px;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-base);
+  cursor: pointer;
+  --icon-fill: currentColor;
+}
+.workflow-tool:hover:not(:disabled) { background: var(--surface-base-hover); color: var(--text-strong); }
+.workflow-tool:disabled { opacity: 0.35; cursor: default; }
+.workflow-toolbar-sep { width: 1px; height: 16px; margin: 0 4px; background: var(--neutral-100); }
+.workflow-zoom { min-width: 40px; text-align: center; font-size: 12px; color: var(--text-weak); }
+.workflow-canvas-hint {
+  position: absolute;
+  left: 50%;
+  bottom: 64px;
+  transform: translateX(-50%);
+  margin: 0;
+  color: var(--text-weaker);
+  font-size: 13px;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+/* ---------- 右栏：节点配置 / 试运行 ---------- */
+.workflow-side {
+  display: flex;
+  flex-direction: column;
+  /* 默认占画布区域的一半（与会话、画布形成 1:1:1），可拖动分隔线调整 */
+  width: var(--wf-side, 50%);
+  min-width: 300px;
+  flex-shrink: 0;
+  height: 100%;
+  border-left: 1px solid var(--neutral-100);
+  background: var(--main-bg);
+}
+.workflow-side-head { display: flex; align-items: center; gap: 8px; height: 48px; flex-shrink: 0; padding: 0 12px 0 16px; border-bottom: 1px solid var(--neutral-100); }
+.workflow-side-body { display: flex; flex: 1; min-height: 0; flex-direction: column; gap: 20px; overflow-x: hidden; overflow-y: auto; padding: 16px; }
+.workflow-side-foot { display: flex; justify-content: flex-end; gap: 8px; flex-shrink: 0; padding: 12px 16px; border-top: 1px solid var(--neutral-100); }
+
+.workflow-var-list { display: flex; flex-direction: column; gap: 0; margin: 0; padding: 0; list-style: none; border: 1px solid var(--border-weak-base); border-radius: 12px; overflow: hidden; }
+.workflow-var-list li { display: flex; align-items: center; gap: 8px; padding: 8px 12px; font-size: 13px; line-height: 20px; }
+.workflow-var-list li + li { border-top: 1px solid var(--border-weak-base); }
+.workflow-var-list li > :first-child { flex: 1; min-width: 0; }
+
+.workflow-step-list { display: flex; flex-direction: column; gap: 8px; margin: 0; padding: 0; list-style: none; font-size: 13px; color: var(--text-strong); }
+.workflow-step-list li { display: flex; align-items: center; gap: 8px; }
+.workflow-step-index {
+  display: inline-flex;
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--primary-50);
+  color: var(--primary-600);
+  font-size: 12px;
+  --icon-fill: currentColor;
+}
+.workflow-step-index.is-done { background: #e8f9f2; color: #08a873; }
+
+.workflow-code {
+  width: 100%;
+  min-height: 140px;
+  padding: 10px 12px;
+  resize: vertical;
+  border: 1px solid var(--border-weak-base);
+  border-radius: 12px;
+  background: var(--surface-raised-base, #f7f8fa);
+  color: var(--text-strong);
+  font-family: var(--font-family-mono);
+  font-size: 12px;
+  line-height: 18px;
+  outline: none;
+}
+.workflow-code:focus { border-color: var(--primary-600); }
+
+.workflow-note { display: flex; align-items: flex-start; gap: 6px; margin: 0; padding: 8px 10px; border-radius: 12px; background: var(--surface-raised-base, #f7f8fa); color: var(--text-weak); font-size: 12px; line-height: 18px; --icon-fill: currentColor; }
+.workflow-note [data-component="icon"] { margin-top: 1px; }
+.workflow-chip { padding: 2px 10px; border-radius: 999px; background: var(--neutral-50, rgba(0, 0, 0, 0.04)); color: var(--text-base); font-size: 12px; line-height: 20px; }
+
+.workflow-section { display: flex; flex-direction: column; gap: 12px; }
+.workflow-section-head { display: flex; align-items: center; gap: 8px; width: 100%; padding: 0; border: 0; background: transparent; cursor: pointer; }
+.workflow-section-head.is-static { cursor: default; }
+.workflow-issues { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; border-radius: 12px; background: #fff3f3; }
+.workflow-issue { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 0; border: 0; background: transparent; color: var(--text-base); font-size: 13px; line-height: 20px; text-align: left; cursor: pointer; }
+
+.workflow-run-steps { display: flex; flex-direction: column; margin: 0; padding: 0; list-style: none; }
+.workflow-run-steps li button { display: flex; align-items: flex-start; gap: 10px; width: 100%; padding: 8px 6px; border: 0; border-radius: 10px; background: transparent; cursor: pointer; }
+.workflow-run-steps li button:hover { background: var(--surface-base-hover); }
+.workflow-run-dot { width: 8px; height: 8px; flex-shrink: 0; margin-top: 6px; border-radius: 50%; background: var(--neutral-300, #c4c4c4); }
+.workflow-run-steps .is-running .workflow-run-dot { background: var(--primary-600); animation: workflow-pulse 1s ease infinite; }
+.workflow-run-steps .is-done .workflow-run-dot { background: #08c787; }
+.workflow-run-steps .is-waiting .workflow-run-dot { background: #ff9e1b; }
+.workflow-run-steps .is-error .workflow-run-dot { background: #e53535; }
+.workflow-run-steps .is-skipped { opacity: 0.5; }
+@keyframes workflow-pulse { 50% { opacity: 0.35; } }
+
+.workflow-file,
+.workflow-version { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid var(--border-weak-base); border-radius: 12px; }
+.workflow-todo { display: flex; flex-direction: column; gap: 8px; padding: 12px; border: 1px solid #ffd9a8; border-radius: 12px; background: #fffaf3; }
+
+.workflow-spinner { display: inline-block; width: 12px; height: 12px; border: 2px solid currentColor; border-top-color: transparent; border-radius: 50%; animation: spin 1s linear infinite; }
+
+
+/* ---------- 第二版补充：分组、行内编辑、分支、预览、提交 ---------- */
+
+fieldset.workflow-side-body { margin: 0; border: 0; min-inline-size: 0; }
+.workflow-group { display: flex; flex-direction: column; gap: 10px; }
+.workflow-group + .workflow-group { padding-top: 16px; border-top: 1px solid var(--neutral-100); }
+.workflow-group-head { display: flex; align-items: center; gap: 8px; min-height: 24px; }
+.workflow-group-head > :first-child { flex-shrink: 0; }
+.workflow-group-head > :last-child:not(:first-child) { margin-left: auto; }
+
+.workflow-card { display: flex; flex-direction: column; gap: 6px; padding: 8px 8px 8px 10px; border: 1px solid var(--border-weak-base); border-radius: 12px; background: var(--main-bg); }
+.workflow-inline-input {
+  width: 100%;
+  min-width: 0;
+  height: 28px;
+  padding: 0 8px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: var(--surface-raised-base, #f7f8fa);
+  color: var(--text-strong);
+  font-size: 13px;
+  line-height: 20px;
+  outline: none;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+.workflow-inline-input:hover:not(:disabled) { border-color: var(--border-base); }
+.workflow-inline-input:focus { border-color: var(--primary-600); background: var(--main-bg); }
+.workflow-inline-input::placeholder { color: var(--text-weaker); }
+.workflow-inline-input.is-short { width: 80px; flex: none; text-align: right; }
+.workflow-inline-input.is-invalid { border-color: var(--danger-600, #e53535); }
+.workflow-inline-input:disabled { background: transparent; }
+
+.workflow-add {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  height: 24px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--primary-600);
+  font-size: 13px;
+  cursor: pointer;
+  --icon-fill: currentColor;
+}
+.workflow-add:hover:not(:disabled) { background: var(--primary-50); }
+.workflow-add:disabled { opacity: 0.4; cursor: default; }
+.workflow-check { display: inline-flex; flex-shrink: 0; align-items: center; gap: 4px; color: var(--text-weak); font-size: 12px; cursor: pointer; }
+.workflow-check input { accent-color: var(--primary-600); }
+.workflow-hint { margin: 0; color: var(--text-weaker); font-size: 12px; line-height: 18px; }
+.workflow-hint.is-error { color: var(--danger-600, #e53535); }
+.workflow-switch-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.workflow-link { padding: 0; border: 0; background: transparent; color: var(--primary-600); font-size: 12px; cursor: pointer; }
+
+.workflow-branch { display: flex; align-items: center; gap: 8px; width: 100%; padding: 8px 10px; border: 1px solid var(--border-weak-base); border-radius: 12px; background: var(--main-bg); cursor: pointer; --icon-fill: currentColor; }
+.workflow-branch:hover { border-color: var(--border-base); }
+
+/* 连线标签可点击：选中后右栏显示分支配置 */
+button.workflow-edge-label { cursor: pointer; font-family: inherit; }
+.workflow-edge-label:hover,
+.workflow-edge-label.is-selected { border-color: var(--primary-600); color: var(--primary-600); }
+.workflow-edge-label.is-invalid { border-color: var(--danger-600, #e53535); color: var(--danger-600, #e53535); }
+.workflow-edge.is-selected { stroke: var(--primary-600); stroke-width: 2; }
+
+.workflow-node.is-proposed { border: 1.5px dashed var(--primary-600); box-shadow: 0 0 0 3px rgba(73, 93, 255, 0.1); }
+.workflow-node-badge.is-error { background: #fff0f0; color: #e53535; }
+.workflow-node-badge.is-write { background: #fff4e5; color: #d97a00; }
+.workflow-node-dot { width: 6px; height: 6px; flex-shrink: 0; border-radius: 50%; background: #e53535; }
+
+/* 画布顶部提示条：助手修改预览 / 已提交只读 */
+.workflow-banner {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: min(560px, calc(100% - 24px));
+  padding: 8px 8px 8px 12px;
+  transform: translateX(-50%);
+  border: 1px solid var(--primary-100);
+  border-radius: 14px;
+  background: var(--main-bg);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+}
+.workflow-banner strong { margin-right: 6px; }
+.workflow-banner.is-muted { width: auto; max-width: calc(100% - 24px); padding: 6px 12px; border-color: var(--neutral-100); color: var(--text-weak); box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05); --icon-fill: currentColor; }
+
+/* 会话里的修改卡片：沿用 render-card，右侧放应用 / 放弃 */
+.workflow-change-card.is-done { cursor: default; opacity: 0.85; }
+.workflow-card-btn { height: 30px; padding: 0 12px; border: 1px solid var(--border-weak-base); border-radius: 10px; background: var(--main-bg); color: var(--text-strong); font-size: 13px; cursor: pointer; }
+.workflow-card-btn:hover { border-color: var(--border-base); }
+.workflow-card-btn.is-primary { border-color: var(--primary-600); background: var(--primary-600); color: #fff; }
+.workflow-card-btn.is-primary:hover { opacity: 0.9; }
+
+/* 试运行：四格汇总、步骤详情 */
+.workflow-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.workflow-stats > span { display: flex; flex-direction: column; gap: 2px; padding: 8px 10px; border-radius: 12px; background: var(--surface-raised-base, #f7f8fa); color: var(--text-weaker); font-size: 12px; }
+.workflow-stats em { color: var(--text-strong); font-size: 14px; font-style: normal; font-weight: 500; }
+.workflow-run-detail { display: flex; flex-direction: column; gap: 4px; margin: 0 0 8px 24px; padding: 8px 10px; border-radius: 10px; background: var(--surface-raised-base, #f7f8fa); }
+.workflow-run-detail-label { margin-top: 2px; color: var(--text-weaker); font-size: 12px; }
+button.workflow-file { width: 100%; background: var(--main-bg); cursor: pointer; --icon-fill: currentColor; }
+button.workflow-file:hover { border-color: var(--border-base); }
+
+.workflow-kv { display: grid; grid-template-columns: auto 1fr; gap: 6px 16px; font-size: 14px; line-height: 20px; }
+.workflow-kv span { color: var(--text-weak); }
+.workflow-kv strong { color: var(--text-strong); font-weight: 500; }
+
+/* ---------- 第三版：底部节点库、节点搜索、四页节点配置 ---------- */
+.workflow-canvas.is-dropping { box-shadow: inset 0 0 0 2px var(--primary-600); }
+.workflow-tool.is-text { width: auto; gap: 2px; padding: 0 10px 0 6px; font-size: 13px; color: var(--text-strong); }
+.workflow-tool.is-active { background: var(--primary-50); color: var(--primary-600); }
+.workflow-node-icon.is-small { width: 20px; height: 20px; border-radius: 6px; }
+
+.workflow-library {
+  position: absolute;
+  left: 12px;
+  bottom: 56px;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: min(420px, calc(100% - 24px));
+  padding: 12px;
+  border: 1px solid var(--neutral-100);
+  border-radius: 16px;
+  background: var(--main-bg);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
+  cursor: default;
+}
+.workflow-library-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; padding: 0 4px; }
+.workflow-library-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px; }
+.workflow-library-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 8px;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  background: transparent;
+  cursor: grab;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+.workflow-library-item:hover { background: var(--surface-base-hover); border-color: var(--neutral-100); }
+.workflow-library-item:active { cursor: grabbing; }
+
+.workflow-search { position: relative; width: 200px; flex-shrink: 1; min-width: 120px; }
+.workflow-search [data-component="form-search"],
+.workflow-search [data-slot="form-search-wrapper"] { width: 100%; }
+.workflow-search-list { position: absolute; top: 100%; left: 0; right: 0; z-index: 20; min-width: 220px; margin-top: 4px; padding: 4px; border: 1px solid var(--neutral-100); border-radius: 12px; background: var(--main-bg); box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1); }
+.workflow-search-item { display: flex; align-items: center; gap: 8px; width: 100%; padding: 6px 8px; border: 0; border-radius: 8px; background: transparent; cursor: pointer; }
+.workflow-search-item:hover { background: var(--surface-base-hover); }
+
+/* 节点上方的入口点：只示意，连线从下方端口拖出 */
+.workflow-port.is-in { top: -6px; bottom: auto; cursor: default; pointer-events: none; }
+
+.workflow-side-tabs { flex-shrink: 0; padding: 10px 16px 0; }
+.workflow-side-tabs [data-component="segmented-control"] { width: 100%; }
+
+.workflow-outlet { display: grid; grid-template-columns: 72px minmax(0, 1fr); align-items: center; gap: 8px; }
+.workflow-field-row { display: grid; grid-template-columns: 76px minmax(0, 1fr); align-items: center; gap: 8px; }
+.workflow-field-row > span:first-child { color: var(--text-weak); font-size: 12px; line-height: 18px; }
+.workflow-readonly { display: flex; align-items: center; min-height: 32px; padding: 0 10px; border-radius: 10px; background: var(--surface-raised-base, #f7f8fa); color: var(--text-base); font-size: 13px; line-height: 20px; }
+
+.workflow-choice { display: flex; flex-direction: column; gap: 2px; padding: 10px 12px; border: 1px solid var(--border-weak-base); border-radius: 12px; background: var(--main-bg); text-align: left; cursor: pointer; }
+.workflow-choice:hover { border-color: var(--border-base); }
+.workflow-choice.is-active { border-color: var(--primary-600); background: var(--primary-50); }
+
+.workflow-table { display: flex; flex-direction: column; border: 1px solid var(--border-weak-base); border-radius: 12px; overflow: hidden; }
+.workflow-table-group { display: flex; flex-direction: column; gap: 4px; padding: 6px 8px; }
+.workflow-table-group + .workflow-table-group,
+.workflow-table-row + .workflow-table-row,
+.workflow-table-row + .workflow-table-group { border-top: 1px solid var(--border-weak-base); }
+.workflow-table-group > .workflow-table-row { padding: 0; border: 0; }
+.workflow-table-row { display: grid; grid-template-columns: minmax(0, 1.2fr) 92px minmax(0, 1fr) 40px 28px; align-items: center; gap: 6px; padding: 6px 8px; font-size: 13px; }
+.workflow-table-row.is-head { background: var(--surface-raised-base, #f7f8fa); color: var(--text-weak); font-size: 12px; line-height: 18px; }
+.workflow-table-row.is-two { grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr) 28px; }
+.workflow-table-row.is-five { grid-template-columns: 1.1fr 1fr 0.9fr 0.9fr 0.6fr; }
+.workflow-table-row.is-runs { grid-template-columns: 1.4fr 0.9fr 0.8fr 0.7fr 0.5fr 40px; }
+.workflow-table-row.is-text { color: var(--text-strong); font-size: 12px; line-height: 18px; }
+
+.workflow-card.is-branch { gap: 8px; background: var(--surface-raised-base, #f7f8fa); border-color: transparent; }
+.workflow-card.is-branch .workflow-inline-input { background: var(--main-bg); }
+.workflow-card.is-nested { background: var(--surface-raised-base, #f7f8fa); border-color: transparent; }
+.workflow-rule { display: flex; flex-direction: column; gap: 6px; padding: 8px; border-radius: 10px; background: var(--main-bg); }
+.workflow-chip.is-success { background: #e8f9f2; color: #08a873; }
+.workflow-var-list li.is-head { background: var(--surface-raised-base, #f7f8fa); color: var(--text-weak); font-size: 12px; }
+
+.workflow-record-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; color: var(--text-weak); }
+.workflow-record-status { padding: 0 6px; border-radius: 999px; background: var(--neutral-50, rgba(0, 0, 0, 0.04)); color: var(--text-base); font-size: 12px; line-height: 18px; width: fit-content; }
+.workflow-record-status.is-done { background: #e8f9f2; color: #08a873; }
+.workflow-record-status.is-running { background: var(--primary-50); color: var(--primary-600); }
+.workflow-record-status.is-waiting { background: #fff4e5; color: #d97a00; }
+.workflow-record-status.is-error,
+.workflow-record-status.is-failed { background: #fff0f0; color: #e53535; }
+
+.workflow-form-group { display: flex; flex-direction: column; gap: 10px; margin: 0; padding: 10px 12px 12px; border: 1px solid var(--border-weak-base); border-radius: 12px; }
+.workflow-form-group legend { padding: 0 4px; color: var(--text-weak); font-size: 13px; }
+
+/* ---------- 可拖动的分隔线：沿用 Build 的 resize-handle，悬浮 / 拖动时显示中性色细线 ---------- */
+[data-component="resize-handle"].workflow-resize-handle::after { border-radius: 999px; background-color: var(--border-base); }
+[data-component="resize-handle"][data-direction="horizontal"].workflow-resize-handle.is-side { inset-inline-end: var(--wf-side, 50%); z-index: 6; }

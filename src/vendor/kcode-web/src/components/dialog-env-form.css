@@ -1,0 +1,104 @@
+/**
+ * dialog-env-form: 覆盖 dialog-add-app-input 的文字色，
+ * 让已填充字段的文字更深，避免与 placeholder 一样灰。
+ */
+
+/* TextField 值文字：比默认 --neutral-700 更深，看起来像"真值"而不像 placeholder */
+.dialog-env-form-input [data-slot="input-input"] {
+  color: var(--neutral-800, rgba(0, 0, 0, 0.84));
+  font-weight: 400;
+}
+
+/* disabled 状态下保持可读 */
+.dialog-env-form-input [data-slot="input-input"]:disabled,
+.dialog-env-form-input [data-slot="input-input"][data-disabled] {
+  color: var(--neutral-700, rgba(0, 0, 0, 0.64));
+  -webkit-text-fill-color: var(--neutral-700, rgba(0, 0, 0, 0.64));
+  opacity: 1;
+}
+
+/* Select 已填充值文字：与 TextField 对齐 */
+.dialog-env-form-select-filled {
+  color: var(--neutral-800, rgba(0, 0, 0, 0.84)) !important;
+  font-weight: 400;
+}
+
+/* 表单滚动区：细滚动条，参考 mcp-dialog-scroll */
+.env-form-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: var(--neutral-200) transparent;
+  scrollbar-gutter: stable;
+}
+
+.env-form-scroll::-webkit-scrollbar {
+  width: 10px;
+}
+
+.env-form-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.env-form-scroll::-webkit-scrollbar-thumb {
+  background-color: var(--neutral-200);
+  border-radius: 999px;
+  border: 3px solid transparent;
+  background-clip: content-box;
+  min-height: 48px;
+}
+
+.env-form-scroll::-webkit-scrollbar-thumb:hover {
+  background-color: var(--neutral-300);
+}
+
+/* ── 锁定 / 只读态 ──
+ * 身份字段创建后不可改，查看态则整表不可改。这类字段要一眼看出是「已确定的值」，
+ * 而不是一个能点、看着能改、实际改不动的输入框。
+ * 底色沿用本弹窗身份摘要块与 dialog-json-preview 的 --neutral-100，不引入新色值，
+ * 也不改公共 TextField / Select 组件。
+ *
+ * 选择器必须带上 .dialog-add-app-input：dialog-add-app.css 里那条
+ * `.dialog-add-app-input [data-slot=input-wrapper] { background: var(--main-bg) }`
+ * 与本规则特异性完全相同（都是 1 类 + 1 属性），打平时由样式表先后顺序决定胜负；
+ * 而两个文件被 Vite 分到了不同 chunk，加载顺序由路由和动态 import 决定，
+ * 源码里的 import 顺序不作数——实测打包产物中 add-app 后加载，锁定底色被白底覆盖。
+ * 两个类连写把特异性抬到 (0,3,0)，与加载顺序解耦。
+ * 这两个类由 inputClass() 同时输出，不会漏匹配。
+ */
+.dialog-add-app-input.dialog-env-form-locked [data-slot="input-wrapper"] {
+  background: var(--neutral-100);
+  border-color: transparent;
+  cursor: default;
+}
+
+/* 锁定态不需要 focus 反馈：它本来就接不到输入 */
+.dialog-add-app-input.dialog-env-form-locked [data-slot="input-wrapper"]:focus-within {
+  border-color: transparent;
+  box-shadow: none;
+}
+
+.dialog-env-form-locked [data-slot="input-input"]:disabled,
+.dialog-env-form-locked [data-slot="input-input"][data-disabled] {
+  cursor: default;
+}
+
+/* Select 触发器的锁定态：与输入框同一套观感（背景走内联 style，此处只管文字与光标） */
+.dialog-env-form-select-locked {
+  cursor: default !important;
+  color: var(--neutral-700, rgba(0, 0, 0, 0.64)) !important;
+}
+
+/* 「设为默认环境」勾选框：组件默认边框是 --neutral-100（0.06 alpha），
+ * 16px 的小控件用这个色在白底上几乎看不见。小控件需要比大输入框更重的边框才
+ * 读得出同等视觉分量，所以这里取 --neutral-300。只在本弹窗内生效，不动公共组件。 */
+.dialog-env-form-checkbox [data-slot="checkbox-checkbox-control"] {
+  border-color: var(--neutral-300, rgba(0, 0, 0, 0.18));
+}
+
+.dialog-env-form-checkbox:hover [data-slot="checkbox-checkbox-control"] {
+  border-color: var(--neutral-400, rgba(0, 0, 0, 0.28));
+}
+
+/* 禁用态（查看已是默认的环境）保持原本的弱化观感，不跟着加深 */
+.dialog-env-form-checkbox [data-slot="checkbox-checkbox-control"][data-disabled] {
+  border-color: var(--neutral-200, rgba(0, 0, 0, 0.12));
+}

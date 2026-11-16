@@ -1,0 +1,267 @@
+import "./render-card.css"
+import { Show, createSignal } from "solid-js"
+import { Dynamic } from "solid-js/web"
+import { useI18n, type UiI18nKey } from "../context/i18n"
+import { useRenderCardSlots } from "../context/render-card-slots"
+import { SKILL_RECOVERY_KIND } from "./skill-recovery"
+import { Icon } from "./icon"
+import { TextShimmer } from "./text-shimmer"
+import { renderCardIcons } from "../assets/render-card-icons"
+import { pickAvatar } from "../assets/avatars"
+
+export { split as splitRenderBlocks, type Segment, type TextSegment, type RenderSegment } from "./render-block"
+
+function isThenable(v: unknown): v is PromiseLike<unknown> {
+  return v != null && typeof (v as { then?: unknown }).then === "function"
+}
+
+const DESC_KEYS: Record<string, UiI18nKey> = {
+  kdform: "ui.renderCard.desc.kdform",
+  kwcform: "ui.renderCard.desc.kwcform",
+  "ai-partner": "ui.renderCard.desc.ai-partner",
+  kdskill: "ui.renderCard.desc.kdskill",
+  kdapp: "ui.renderCard.desc.kdform",
+  "kdapp-prototype": "ui.renderCard.desc.kdappPrototype",
+  kdapi: "ui.renderCard.desc.kdform",
+  "kdapp-artifact": "ui.renderCard.desc.kdappArtifact",
+  kdstandalone: "ui.renderCard.desc.kdstandalone",
+  "kd-digital-employee": "ui.renderCard.desc.kd-digital-employee",
+  "kd-expert-team": "ui.renderCard.desc.kd-expert-team",
+  // kdexpert: never reached (early return above), fallback only
+  kdexpert: "ui.renderCard.desc.kdform",
+}
+
+/** kind → icon 映射：不同技能产物使用不同图标，首页无技能时兜底 general */
+const KIND_ICON_MAP: Record<string, string> = {
+  kdskill: renderCardIcons.skillDev,
+  "ai-partner": renderCardIcons.agentDev,
+  "kdapp-prototype": renderCardIcons.prototype,
+  kdapp: renderCardIcons.appDev,
+  kdform: renderCardIcons.cosmicDev,
+  kwcform: renderCardIcons.cosmicDev,
+  kdapi: renderCardIcons.cosmicDev,
+  "kdapp-artifact": renderCardIcons.componentDev,
+  kdstandalone: renderCardIcons.general,
+  "kd-digital-employee": renderCardIcons.agentDev,
+  "kd-expert-team": renderCardIcons.agentDev,
+  // kdexpert: never reached (early return above), fallback only
+  kdexpert: renderCardIcons.agentDev,
+}
+
+function CardIcon(props: { kind: string }) {
+  const icon = () => KIND_ICON_MAP[props.kind] ?? renderCardIcons.general
+  return <img src={icon()} alt="" draggable={false} />
+}
+
+function ArrowIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path
+        d="M1.875 10.0123C1.8751 9.55216 2.24816 9.17898 2.70833 9.17898H15.2824L11.285 5.17179C10.9602 4.84597 10.9609 4.31839 11.2866 3.9934C11.6124 3.66861 12.14 3.66941 12.465 3.99503L17.8817 9.42312C18.0377 9.57953 18.1252 9.79218 18.125 10.0131C18.1247 10.2341 18.0364 10.4462 17.88 10.6023L12.4634 16.0068C12.1376 16.3317 11.61 16.3309 11.285 16.0052C10.9602 15.6794 10.9609 15.1518 11.2866 14.8268L15.2767 10.8457H2.70833C2.24817 10.8457 1.87511 10.4725 1.875 10.0123Z"
+        fill="currentColor"
+      />
+    </svg>
+  )
+}
+
+export function RenderCard(props: {
+  kind: string
+  config: Record<string, string>
+  localTestDisabled?: boolean
+  disabled?: boolean
+  onCardClick?: (kind: string, config: Record<string, string>) => unknown
+}) {
+  // Phase-only kdapp blocks only trigger the sidebar drawer, no chat card
+  if (props.kind === "kdapp" && props.config.phase && !props.config.content && !props.config.url) {
+    return null
+  }
+
+  // 宿主为该 kind 提供了渲染组件时交给宿主（技能恢复卡的「重新准备」要经宿主的发送链路发出消息）。
+  const slot = useRenderCardSlots()[props.kind]
+  if (slot) return <Dynamic component={slot} kind={props.kind} config={props.config} />
+  // 没有宿主处理器时不出恢复卡，保留工具原有的文字输出。
+  if (props.kind === SKILL_RECOVERY_KIND) return null
+
+  const i18n = useI18n()
+  const desc = () => props.config.desc || props.config.description || i18n.t(DESC_KEYS[props.kind] ?? DESC_KEYS.kdform!)
+  const url = () => props.config.url ?? ""
+
+  const isPreview = props.kind === "kdapp-artifact" && props.config.phase === "preview"
+
+  // 通用应用产物卡片：仅前端产物会带 url。预览按钮与卡片主体点击（定位工程）是两个都有效的
+  // 动作，因此不复用 kdapp-artifact 的 isPreview gate —— 后者会把右侧箭头隐藏掉。
+  const hasStandalonePreview = () => props.kind === "kdstandalone" && !!props.config.url
+
+  const [previewPending, setPreviewPending] = createSignal(false)
+  const PREVIEW_LOCK_FALLBACK_MS = 5000
+  const triggerPreview = () => {
+    if (previewPending()) return
+    const jid = props.config.jobId ?? props.config.serviceId
+    if (!jid) return
+    setPreviewPending(true)
+    const release = () => setPreviewPending(false)
+    const result = props.onCardClick?.("kdapp-preview-start", { jobId: jid, url: props.config.previewUrl ?? props.config.url ?? "", appCode: props.config.appCode ?? "" })
+    if (isThenable(result)) {
+      result.then(release, release)
+    } else {
+      setTimeout(release, PREVIEW_LOCK_FALLBACK_MS)
+    }
+  }
+
+  const open = () => {
+    console.info("[render-card] open clicked", {
+      kind: props.kind,
+      hasUrl: !!props.config.url,
+      hasMetadata: !!props.config.metadata,
+      hasPlugins: !!props.config.plugins,
+      hasApi: !!props.config.api,
+      disabled: props.disabled,
+      localTestDisabled: props.localTestDisabled,
+      isPreview,
+      hasOnCardClick: !!props.onCardClick,
+    })
+    if (props.disabled) return
+    if (isPreview) {
+      console.info("[render-card] → triggerPreview")
+      triggerPreview()
+      return
+    }
+    if (props.onCardClick) {
+      console.info("[render-card] → onCardClick", { kind: props.kind })
+      props.onCardClick(props.kind, props.config)
+      return
+    }
+    const href = url()
+    console.info("[render-card] → fallback, trying bridge", { href })
+    if (href) {
+      const lingeeBridge = (window as { lingeeBridge?: { previewBrowser?: { openUrl?: (input: { url: string }) => Promise<unknown>; openSurface?: (input: { tabId: string; url: string; partition: string }) => Promise<unknown> } } }).lingeeBridge
+      const previewBrowser = lingeeBridge?.previewBrowser
+      if (previewBrowser?.openUrl) {
+        // 生产环境 (lingee): openUrl → preview-browser:open 事件 → PreviewBrowserPanel
+        void previewBrowser.openUrl({ url: href })
+      } else if (previewBrowser?.openSurface) {
+        // 开发环境 (kwork-desktop): openSurface → IPC → PreviewBrowserDock
+        void previewBrowser.openSurface({ tabId: 'preview-card', url: href, partition: 'persist:lingee-preview-browser-card' })
+      } else {
+        window.open(href, "_blank", "noopener,noreferrer")
+      }
+    }
+  }
+
+  // 专家阶段卡：展示角色头像、阶段标题与运行状态，不走产物预览卡的点击逻辑。
+  if (props.kind === "kdexpert") {
+    const role = () => props.config.role ?? ""
+    const rawStatus = () => props.config.status ?? "start"
+    const sectionStatus = () => rawStatus() === "complete"
+      ? "completed"
+      : rawStatus() === "failed" || rawStatus() === "error"
+        ? "error"
+        : "running"
+    const statusLabel = () => rawStatus() === "complete"
+      ? i18n.t("ui.tool.task.status.completed")
+      : rawStatus() === "failed" || rawStatus() === "error"
+        ? i18n.t("ui.tool.task.status.error")
+        : i18n.t("ui.tool.task.status.running")
+    const isActive = () => rawStatus() === "start" || rawStatus() === "running"
+    const avatar = () => pickAvatar(role() || props.config.title || "expert")
+
+    return (
+      <div data-component="expert-card">
+        <div data-component="expert-card-header">
+          <span data-component="expert-card-avatar" data-tool-status={sectionStatus()} aria-hidden="true">
+            <img src={avatar()} alt="" data-component="expert-card-avatar-image" draggable={false} />
+          </span>
+          <span data-component="expert-card-role" title={role()}>{role()}</span>
+          <span data-component="expert-card-status" data-tool-status={sectionStatus()}>
+            <TextShimmer text={statusLabel()} active={isActive()} />
+          </span>
+        </div>
+        <Show when={props.config.title}>
+          <div data-component="expert-card-title" title={props.config.title}>{props.config.title}</div>
+        </Show>
+      </div>
+    )
+  }
+
+  return (
+    <div
+      data-component="render-card"
+      data-preview={isPreview ? "" : undefined}
+      data-disabled={props.disabled ? "" : undefined}
+      aria-disabled={props.disabled ? "true" : undefined}
+      onClick={open}
+    >
+      <div data-slot="render-card-icon">
+        <CardIcon kind={props.kind} />
+      </div>
+      <div data-slot="render-card-body">
+        <span data-slot="render-card-title">{props.config.title ?? props.config.displayName ?? ""}</span>
+        <span data-slot="render-card-desc">{desc()}</span>
+      </div>
+      <Show when={props.kind === "kdapp"}>
+        <span
+          data-slot="render-card-confirm"
+          onClick={(e) => {
+            e.stopPropagation()
+            props.onCardClick?.("kdapp-confirm", props.config)
+          }}
+        >
+          {i18n.t("ui.renderCard.confirm")}
+        </span>
+      </Show>
+      <Show when={isPreview}>
+        <span
+          data-slot="render-card-preview-toggle"
+          data-pending={previewPending() ? "" : undefined}
+          onClick={(e) => {
+            e.stopPropagation()
+            triggerPreview()
+          }}
+        >
+          {i18n.t("ui.renderCard.previewStart")}
+        </span>
+        <span
+          data-slot="render-card-detail"
+          onClick={(e) => {
+            e.stopPropagation()
+            props.onCardClick?.("kdapp-artifact", props.config)
+          }}
+        >
+          {i18n.t("ui.renderCard.detail")}
+        </span>
+      </Show>
+      <Show when={hasStandalonePreview()}>
+        <span
+          data-slot="render-card-preview-toggle"
+          onClick={(e) => {
+            e.stopPropagation()
+            props.onCardClick?.("kdstandalone-preview", props.config)
+          }}
+        >
+          {i18n.t("ui.renderCard.previewStart")}
+        </span>
+      </Show>
+      <Show when={props.kind === "ai-partner" || props.kind === "kdskill"}>
+        <span
+          data-slot="render-card-local-test"
+          data-disabled={props.localTestDisabled ? "" : undefined}
+          aria-disabled={props.localTestDisabled ? "true" : undefined}
+          onClick={(e) => {
+            e.preventDefault()
+            e.stopPropagation()
+            if (props.localTestDisabled) return
+            props.onCardClick?.(`${props.kind}-local-test`, props.config)
+          }}
+        >
+          <Icon name="monitor" size="small" />
+          {i18n.t("ui.renderCard.localTest")}
+        </span>
+      </Show>
+      <Show when={!isPreview}>
+        <div data-slot="render-card-arrow">
+          <ArrowIcon />
+        </div>
+      </Show>
+    </div>
+  )
+}

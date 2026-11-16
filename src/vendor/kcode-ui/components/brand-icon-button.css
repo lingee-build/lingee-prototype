@@ -1,0 +1,186 @@
+[data-component="brand-icon-button"] {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  text-decoration: none;
+  user-select: none;
+  cursor: pointer;
+  aspect-ratio: 1;
+  flex-shrink: 0;
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+
+  /* ── Primary: solid blue bg, white icon ── */
+  &[data-variant="primary"] {
+    background-color: var(--brand-button-primary-base);
+    border-color: var(--brand-button-primary-base);
+
+    [data-slot="icon-svg"] {
+      color: var(--brand-button-primary-text);
+    }
+
+    &:hover:not(:disabled) {
+      background-color: var(--brand-button-primary-hover);
+      border-color: var(--brand-button-primary-hover);
+    }
+    &:active:not(:disabled) {
+      background-color: var(--brand-button-primary-active);
+      border-color: var(--brand-button-primary-active);
+    }
+    &:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+  }
+
+  /* ── Secondary: outline, blue border/icon ── */
+  &[data-variant="secondary"] {
+    background-color: var(--brand-button-secondary-base);
+    border-color: var(--brand-button-secondary-border);
+
+    [data-slot="icon-svg"] {
+      color: var(--brand-button-secondary-text);
+    }
+
+    &:hover:not(:disabled) {
+      border-color: var(--brand-button-secondary-hover);
+
+      [data-slot="icon-svg"] {
+        color: var(--brand-button-secondary-hover);
+      }
+    }
+    &:active:not(:disabled) {
+      border-color: var(--brand-button-secondary-active);
+
+      [data-slot="icon-svg"] {
+        color: var(--brand-button-secondary-active);
+      }
+    }
+    &:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+  }
+
+  /* ── Ghost: light blue bg, blue icon ── */
+  &[data-variant="ghost"] {
+    background-color: var(--brand-button-ghost-base);
+
+    [data-slot="icon-svg"] {
+      color: var(--brand-button-ghost-text);
+    }
+
+    &:hover:not(:disabled) {
+      [data-slot="icon-svg"] {
+        color: var(--brand-button-ghost-hover);
+      }
+    }
+    &:active:not(:disabled) {
+      background-color: var(--brand-button-ghost-active);
+
+      [data-slot="icon-svg"] {
+        color: var(--brand-button-ghost-text);
+      }
+    }
+    &:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+  }
+
+  /* ── Auxiliary: neutral bg, neutral icon ── */
+  &[data-variant="auxiliary"] {
+    background-color: transparent;
+    border-color: var(--brand-button-auxiliary-border);
+
+    [data-slot="icon-svg"] {
+      color: var(--brand-button-auxiliary-text);
+    }
+
+    &:hover:not(:disabled) {
+      background-color: var(--brand-button-auxiliary-hover-bg);
+      border-color: var(--brand-button-auxiliary-hover-bg);
+
+      [data-slot="icon-svg"] {
+        color: var(--brand-button-auxiliary-hover-text);
+      }
+    }
+    &:active:not(:disabled) {
+      border-color: var(--brand-button-auxiliary-active-border);
+
+      [data-slot="icon-svg"] {
+        color: var(--brand-button-auxiliary-text);
+      }
+    }
+    &:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+  }
+
+  /* ── Text: transparent bg, dark icon ── */
+  &[data-variant="text"] {
+    background-color: transparent;
+
+    [data-slot="icon-svg"] {
+      color: var(--brand-button-text-color);
+    }
+
+    &:hover:not(:disabled) {
+      [data-slot="icon-svg"] {
+        color: var(--brand-button-text-hover);
+      }
+    }
+    &:active:not(:disabled) {
+      [data-slot="icon-svg"] {
+        color: var(--brand-button-text-color);
+      }
+    }
+    &:disabled {
+      cursor: not-allowed;
+
+      [data-slot="icon-svg"] {
+        color: var(--brand-button-text-disabled);
+      }
+    }
+  }
+
+  /* ── Sizes ── */
+  &[data-size="small"] {
+    width: 28px;
+    height: 28px;
+  }
+
+  &[data-size="normal"] {
+    width: 36px;
+    height: 36px;
+  }
+
+  &[data-size="large"] {
+    width: 40px;
+    height: 40px;
+  }
+
+  &:focus {
+    outline: none;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  [data-component="brand-icon-button"][data-icon="stop"] [data-slot="icon-svg"] rect {
+    transform-origin: center;
+    transform-box: fill-box;
+    animation: brand-stop-pulse 1.8s ease-in-out infinite;
+  }
+}
+
+@keyframes brand-stop-pulse {
+  0%,
+  100% {
+    transform: scale(0.95);
+  }
+  50% {
+    transform: scale(1.12);
+  }
+}

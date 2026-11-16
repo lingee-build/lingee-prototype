@@ -1,0 +1,65 @@
+/*
+ * 「添加 MCP」下拉菜单的自包含样式。
+ *
+ * 刻意不复用 dropdown-menu 的 data-component / data-slot：src/index.css 里有一整套
+ * 后加载的全局 dropdown 覆盖（面板 20px 圆角 / min-width 150px，菜单项 999px 胶囊圆角、
+ * 36px 高、12px 字号），挂通用属性会被它串掉，且将来新增全局规则还会再串一次。
+ * 这里用专属 class 把设计规范固定下来，不受那套覆盖影响。
+ *
+ * 颜色一律走 var(--token, 兜底值)：--neutral-* 这批变量在仓库里没有声明、由运行时注入，
+ * 不带 fallback 的引用会因 invalid at computed-value time 整条失效。
+ */
+
+.mcp-add-menu {
+  /* 设计规范：16px 圆角面板、0.5px 描边、4px 内边距、项间距 2px。 */
+  box-sizing: border-box;
+  min-width: 181px;
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  border-radius: 16px;
+  border: 0.5px solid var(--neutral-200, rgba(0, 0, 0, 0.12));
+  background: var(--neutral-0, var(--surface-raised-stronger-non-alpha, #fff));
+  background-clip: padding-box;
+  box-shadow: 0 4px 12px 0 var(--neutral-130, rgba(0, 0, 0, 0.08));
+}
+
+.mcp-add-menu-item {
+  /* 设计规范：32px 高、16px 圆角、14px 字号、图标与文字间距 4px。 */
+  box-sizing: border-box;
+  width: 100%;
+  height: 32px;
+  padding: 0 8px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+  border: none;
+  border-radius: 16px;
+  background: transparent;
+  cursor: pointer;
+  user-select: none;
+  text-align: left;
+  white-space: nowrap;
+
+  font-family: var(--font-family-sans);
+  font-size: 14px;
+  font-style: normal;
+  font-weight: 400;
+  line-height: 20px;
+  letter-spacing: var(--letter-spacing-normal);
+  color: var(--neutral-700, var(--text-strong, rgba(0, 0, 0, 0.82)));
+}
+
+/* 设计规范：悬停 3% 黑。中间垫一层 --surface-card-base（theme.css 里带暗色覆盖，
+   亮 3% 黑 / 暗 3% 白），避免没有注入 --neutral-* 的主题在暗色下退到黑色兜底、
+   悬停态看不出来。 */
+.mcp-add-menu-item:hover,
+.mcp-add-menu-item:focus-visible {
+  background: var(--neutral-50, var(--surface-card-base, rgba(0, 0, 0, 0.03)));
+}
+
+.mcp-add-menu-item:focus-visible {
+  outline: none;
+}

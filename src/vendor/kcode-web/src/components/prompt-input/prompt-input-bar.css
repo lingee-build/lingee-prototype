@@ -1,0 +1,8 @@
+/* Prompt input bar — container-level CSS to prevent button overlap.
+   Forces all non-shrink-0 descendants to be shrinkable (min-width: 0),
+   so text-bearing chips truncate instead of overflowing into neighbors.
+   Icon buttons with `shrink-0` class are excluded. */
+
+.prompt-input-bar :not(.shrink-0) {
+  min-width: 0;
+}

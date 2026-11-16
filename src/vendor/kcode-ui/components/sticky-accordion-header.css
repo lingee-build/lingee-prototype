@@ -1,0 +1,18 @@
+[data-component="sticky-accordion-header"] {
+  position: sticky;
+  top: calc(var(--sticky-accordion-top, 0px) + var(--sticky-accordion-offset, 0px));
+  z-index: 10;
+  background: var(--neutral-25);
+
+  /*
+   * contain: layout style（不含 will-change / translateZ）：
+   * 早期修复曾用 will-change: transform + translateZ(0) 将 sticky header 提升为独立
+   * 合成层，以期让吸顶位置变化走 GPU 重合成。但配合外层 accordion 的 overflow-x: auto
+   * 滚动容器，在 Windows Electron 下合成层位置与主线程 sticky 重算存在一帧时序错位，
+   * 表现为滚动越过视口边界时的偶现闪动。
+   * 根因修复（accordion 改用 overflow-x: clip 不再截断 sticky）后，sticky 位置变化已由
+   * 合成器线程直接处理，无需额外提升合成层；保留 contain: layout style 继续隔离子树
+   * layout/style 重算即可。will-change 长期驻留还有合成层过多 / 内存开销的副作用。
+   */
+  contain: layout style;
+}

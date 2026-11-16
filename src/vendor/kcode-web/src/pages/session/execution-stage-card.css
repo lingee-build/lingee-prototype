@@ -1,0 +1,256 @@
+/**
+ * 会话页「执行阶段」卡片。
+ *
+ * 几何与层级严格对齐原型 joe005.github.io/lingee/chat 的 .chat-current-stage 一族规则
+ * （尺寸、间距、圆角、字号字重、连线、展开高度上限全部照搬），只把原型的单色变量换成
+ * 本仓库的主题 token，使暗色模式自动成立：
+ *   原型 --brand(#495dff)      → --primary-600
+ *   原型 --brand-fill(#eef3ff) → --blue-50（#eef5ff / 暗色 #19276b）
+ *   原型 --bg(#ffffff)         → --background-stronger（#ffffff / 暗色 #212121）
+ *   原型 --border(#efefef)     → 卡片描边走 --neutral-100 外扩阴影（见 .esc-card 注释）；
+ *                                阶段圆圈描边与竖向连线走 --neutral-130
+ *   原型 --text(#2d2d2d)       → --text-strong
+ *   原型 --text-secondary      → --text-base
+ *   原型 --text-muted          → --neutral-600
+ *   原型 --success / is-review / --danger → --green-600 / --amber-700 / --red-600
+ *
+ * token 取值以 nova.json 运行时注入的 :root 为准（它晚于 theme.css 注入因而覆盖后者）：
+ * 不要用 --surface-interactive-base 做渐变起点和标签底色——theme.css 写的是 #ecf3ff，
+ * 但 nova 实际解析为 #d1e1fe，比原型深一个档次；--blue-50 才等于原型的 #eef3ff。
+ * 同理阶段圆圈与竖向连线都不用 --border-weak-base(#f3f4f6，与纯白只差 12 级)，
+ * 改用 --neutral-130(黑 8%)，与原型 #efefef 的可见度一致。
+ *
+ * 卡片在时间线滚动容器之外、标题行之下，与原型一样处于正常流：展开时挤压消息区而不是浮层覆盖。
+ */
+
+.esc-wrap {
+  flex: 0 0 auto;
+  width: 100%;
+  box-sizing: border-box;
+  /*
+   * 必须定位。描边是外扩 1px 阴影，会向上溢出到上方会话标题块的最后一行像素里；
+   * 而标题块（message-timeline.tsx 的 [data-session-title]）带 relative，
+   * 按 CSS 绘制顺序定位元素晚于非定位块级兄弟绘制，它的背景会盖掉这 1px，
+   * 表现为"只有上边框看不见"。把卡片也提到定位阶段并给 z-index 压过前后兄弟即可。
+   */
+  position: relative;
+  z-index: 1;
+}
+
+/* 与 [data-slot="session-turn-list"] 的 md:mx-auto max-w-[800px] 对齐，让卡片和消息列同宽同轴。 */
+.esc-wrap[data-centered="true"] {
+  max-width: 800px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.esc-card {
+  box-sizing: border-box;
+  margin-bottom: 12px;
+  border-radius: 12px;
+  background: linear-gradient(105deg, var(--blue-50), var(--background-stronger) 70%);
+  /*
+   * 描边用 1px 外扩阴影而不是 border。
+   *
+   * border 会画在卡片自身背景之上：本卡背景是蓝→白渐变，半透明描边在蓝端合成后比填充暗
+   * 约 19 级、在白端暗约 20 级，左右观感不一致（原型用的是不透明 #efefef，与蓝端只差 4 级，
+   * 靠外侧页面衬出轮廓）。外扩阴影落在页面底色上，四边恒定，且不受 .esc-toggle:hover 的
+   * inset 罩影响——border 方案下内部被压暗会把近白描边衬成一圈白线。
+   * --neutral-100(黑 6%) 压在页面底色 #F7F7FA 上约为亮度 232，与原型描边对白页的 16 级差一致。
+   */
+  box-shadow:
+    0 0 0 1px var(--neutral-100),
+    0 5px 18px rgba(29, 44, 83, 0.08);
+  overflow: hidden;
+}
+
+.esc-toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 52px;
+  padding: 10px 16px;
+  border: 0;
+  background: transparent;
+  color: var(--text-strong);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: box-shadow 0.15s;
+}
+
+/* 原型用 999px 的 inset 阴影做整条高亮，避免改 background 覆盖卡片渐变。 */
+.esc-toggle:hover {
+  box-shadow: inset 0 0 0 999px rgba(73, 93, 255, 0.04);
+}
+
+.esc-toggle:focus-visible {
+  outline: 2px solid var(--primary-600);
+  outline-offset: -3px;
+}
+
+.esc-tag {
+  flex: 0 0 auto;
+  padding: 4px 7px;
+  border-radius: 5px;
+  background: var(--blue-50);
+  color: var(--primary-600);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+/* 暗色下 --blue-50 是深蓝底，--primary-600 对比不足，改用更亮的品牌色阶。 */
+:root[data-color-scheme="dark"] .esc-tag {
+  color: var(--primary-400);
+}
+
+.esc-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.esc-count {
+  margin-left: auto;
+  flex: 0 0 auto;
+  color: var(--text-base);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.esc-chevron {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+  color: var(--text-base);
+  transition: transform 0.16s;
+}
+
+.esc-toggle[aria-expanded="true"] .esc-chevron {
+  transform: rotate(180deg);
+}
+
+.esc-details {
+  padding: 13px 16px 15px;
+  background: var(--background-stronger);
+  font-size: 13px;
+  max-height: 340px;
+  overflow: auto;
+}
+
+.esc-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.esc-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 8px;
+}
+
+.esc-index {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  box-sizing: border-box;
+  flex: 0 0 auto;
+  border: 1px solid var(--neutral-130);
+  border-radius: 50%;
+  color: var(--neutral-600);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+/* 相邻阶段之间的竖直连线；最后一行不画。颜色与圆圈描边同色，和原型一致。 */
+.esc-row:not(:last-child) .esc-index::after {
+  content: "";
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 50%;
+  width: 1px;
+  height: 16px;
+  background: var(--neutral-130);
+  transform: translateX(-50%);
+}
+
+.esc-index svg {
+  width: 14px;
+  height: 14px;
+}
+
+.esc-row.is-done .esc-index {
+  border-color: var(--blue-50);
+  background: var(--blue-50);
+  color: var(--primary-600);
+}
+
+:root[data-color-scheme="dark"] .esc-row.is-done .esc-index {
+  color: var(--primary-400);
+}
+
+.esc-row.is-current .esc-index {
+  border-color: var(--primary-600);
+  background: var(--primary-600);
+  color: var(--white-100, #ffffff);
+}
+
+.esc-row-main {
+  display: grid;
+  grid-template-columns: minmax(0, 118px) minmax(0, 1fr);
+  align-items: center;
+  flex: 1 1 0;
+  gap: 18px;
+  min-width: 0;
+  white-space: nowrap;
+}
+
+.esc-row-main strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-strong);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.esc-row-main small {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-strong);
+  font-size: 13px;
+}
+
+.esc-status {
+  flex: 0 0 auto;
+  color: var(--neutral-600);
+  font-size: 12px;
+}
+
+.esc-row.is-done .esc-status {
+  color: var(--green-600);
+}
+
+.esc-row.is-running .esc-status {
+  color: var(--primary-600);
+}
+
+.esc-row.is-review .esc-status {
+  color: var(--amber-700);
+}
+
+.esc-row.is-blocked .esc-status {
+  color: var(--red-600);
+}

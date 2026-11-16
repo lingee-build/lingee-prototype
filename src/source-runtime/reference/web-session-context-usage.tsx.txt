@@ -1,0 +1,330 @@
+import { For, Match, Show, Switch, createMemo, createSignal } from "solid-js"
+import type { JSX } from "solid-js"
+import { Popover as Kobalte } from "@kobalte/core/popover"
+import { Tooltip, type TooltipProps } from "@kcode/ui/tooltip"
+import { ProgressCircle } from "@kcode/ui/progress-circle"
+import { Button } from "@kcode/ui/button"
+
+import { useFile } from "@/context/file"
+import { useLayout } from "@/context/layout"
+import type { Message, Part, UserMessage } from "@opencode-ai/sdk/v2/client"
+import { useSync } from "@/context/sync"
+import { useLanguage } from "@/context/language"
+import { useProviders } from "@/hooks/use-providers"
+import { useModels } from "@/context/models"
+import { useCommand } from "@/context/command"
+import { useLocal } from "@/context/local"
+import { getSessionContextMetrics } from "@/components/session/session-context-metrics"
+import {
+  estimateSessionContextBreakdown,
+  DEFAULT_SYSTEM_PROMPT_CHARS,
+  SESSION_CONTEXT_BREAKDOWN_COLOR,
+  SESSION_CONTEXT_BREAKDOWN_TRACK,
+  type SessionContextBreakdownKey,
+} from "@/components/session/session-context-breakdown"
+import { useSessionLayout } from "@/pages/session/session-layout"
+import { createSessionTabs } from "@/pages/session/helpers"
+import { hidePreviewBrowserDock } from "@/pages/session/preview-controller"
+
+interface SessionContextUsageProps {
+  variant?: "button" | "indicator" | "popover"
+  placement?: TooltipProps["placement"]
+  shift?: number
+  icon?: JSX.Element
+}
+
+function openSessionContext(args: {
+  view: ReturnType<ReturnType<typeof useLayout>["view"]>
+  layout: ReturnType<typeof useLayout>
+  tabs: ReturnType<ReturnType<typeof useLayout>["tabs"]>
+}) {
+  // dock 与面板互斥：上下文入口会展开审查面板，先隐藏 dock
+  hidePreviewBrowserDock()
+  if (!args.view.reviewPanel.opened()) args.view.reviewPanel.open()
+  // opened 状态已迁移到 per-session (view.fileTree)，tab 仍为全局状态 (layout.fileTree)
+  if (args.view.fileTree.opened() && args.layout.fileTree.tab() !== "all") args.layout.fileTree.setTab("all")
+  args.tabs.open("context")
+  args.tabs.setActive("context")
+}
+
+export function SessionContextUsage(props: SessionContextUsageProps) {
+  const sync = useSync()
+  const file = useFile()
+  const layout = useLayout()
+  const language = useLanguage()
+  const providers = useProviders()
+  const models = useModels()
+  const command = useCommand()
+  const local = useLocal()
+  const { params, tabs, view } = useSessionLayout()
+
+  const variant = createMemo(() => props.variant ?? "button")
+  const tabState = createSessionTabs({
+    tabs,
+    pathFromTab: file.pathFromTab,
+    normalizeTab: (tab) => (tab.startsWith("file://") ? file.tab(tab) : tab),
+  })
+  const messages = createMemo(() => (params.id ? ((sync.data.message[params.id] ?? []) as Message[]) : []))
+
+  const metrics = createMemo(() => {
+    const current = local.model.current() ?? undefined
+    // 直接读 limitOverrides signal（getEffective 内部读 signal，建立响应式依赖），绕过 enrichedProviders memo
+    const customLimit = current ? models.limitOverrides.getEffective(current.lingeeModelId ?? current.id, (current as { capability?: unknown }).capability) : undefined
+    return getSessionContextMetrics(messages(), models.enrichedProviders(), (key) => language.t(key as Parameters<typeof language.t>[0]), current, customLimit)
+  })
+  const context = createMemo(() => metrics().context)
+  const compactDisabled = createMemo(() => command.options.find((item) => item.id === "session.compact")?.disabled ?? true)
+  const systemPrompt = createMemo(() => {
+    const message = messages()
+      .filter((item): item is UserMessage => item.role === "user")
+      .reverse()
+      .find((item) => !!item.system?.trim())
+    return message?.system?.trim()
+  })
+  const systemPromptChars = createMemo(() => {
+    const message = messages()
+      .filter((item): item is UserMessage => item.role === "user")
+      .at(-1)
+    if (!message) return 0
+    const agentPrompt = sync.data.agent.find((item) => item.name === message.agent)?.prompt?.trim()
+    return (agentPrompt?.length ?? DEFAULT_SYSTEM_PROMPT_CHARS) + (message.system?.trim().length ?? 0)
+  })
+  const breakdown = createMemo(() => {
+    const input = context()?.input
+    if (!input) return []
+    return estimateSessionContextBreakdown({
+      messages: messages(),
+      parts: sync.data.part as Record<string, Part[] | undefined>,
+      input,
+      systemPrompt: systemPrompt(),
+      systemPromptChars: systemPromptChars(),
+    })
+  })
+  const breakdownLabel = (key: SessionContextBreakdownKey) => {
+    if (key === "system") return language.t("context.systemPrompt.title")
+    if (key === "systemTool") return language.t("context.breakdown.systemTool")
+    if (key === "mcpTool") return language.t("context.breakdown.mcpTool")
+    if (key === "message") return language.t("context.breakdown.message")
+    return language.t("context.breakdown.other")
+  }
+  const formatThousands = (value: number | undefined) =>
+    value === undefined ? "—" : `${Math.round(value / 100) / 10}K`
+  const formatCacheHitRate = () => {
+    const value = metrics().averageCacheHitRate
+    if (value === null) return "—"
+    return `${value.toLocaleString(language.intl())}%`
+  }
+
+  const [popoverOpen, setPopoverOpen] = createSignal(false)
+
+  const openContext = () => {
+    if (!params.id) return
+
+    if (tabState.activeTab() === "context") {
+      tabs().close("context")
+      return
+    }
+    openSessionContext({
+      view: view(),
+      layout,
+      tabs: tabs(),
+    })
+  }
+
+  const circle = () => (
+    <div class="flex items-center justify-center">
+      <ProgressCircle size={16} strokeWidth={2} percentage={context()?.usage ?? 0} />
+    </div>
+  )
+
+  const tooltipValue = () => (
+    <div>
+      <Show
+        when={context()}
+        fallback={
+          <div class="w-[224px]" style={{ color: "var(--text-strong)" }}>
+            <div class="flex items-center justify-between gap-3">
+              <span class="text-[14px] leading-[22px]">{language.t("context.usage.empty")}</span>
+            </div>
+          </div>
+        }
+      >
+        {(ctx) => (
+          <div class="flex flex-col gap-3 w-[248px]" style={{ color: "var(--text-strong)" }}>
+            <div class="flex flex-col gap-2">
+              <div class="flex items-baseline justify-between gap-3">
+                <span class="text-[14px] font-medium leading-5 truncate" title={language.t("context.usage.contextLabel")}>
+                  {language.t("context.usage.contextLabel")}
+                </span>
+                <div class="flex items-baseline gap-1 shrink-0 tabular-nums">
+                  <span class="text-[16px] font-semibold">{ctx().usage ?? 0}%</span>
+                  <span class="text-[11px]" style={{ color: "var(--text-weak)" }}>
+                    {language.t("context.usage.used")}
+                  </span>
+                </div>
+              </div>
+              <div
+                class="h-2 w-full rounded-full overflow-hidden"
+                style={{ background: SESSION_CONTEXT_BREAKDOWN_TRACK }}
+              >
+                <div
+                  class="h-full flex overflow-hidden"
+                  style={{ width: `${Math.min(ctx().usage ?? 0, 100)}%` }}
+                >
+                  <For each={breakdown()}>
+                    {(segment) => (
+                      <div
+                        class="h-full"
+                        style={{
+                          width: `${segment.width}%`,
+                          "background-color": SESSION_CONTEXT_BREAKDOWN_COLOR[segment.key],
+                        }}
+                      />
+                    )}
+                  </For>
+                </div>
+              </div>
+              <div class="flex items-center justify-between text-[11px] leading-4" style={{ color: "var(--text-weak)" }}>
+                <span>{language.t("context.usage.breakdownLabel")}</span>
+                <span class="tabular-nums">
+                  {formatThousands(ctx().total)} / {formatThousands(ctx().limit)}
+                </span>
+              </div>
+            </div>
+            <Show when={breakdown().length > 0}>
+              <div class="flex flex-col gap-2">
+                <For each={breakdown()}>
+                  {(segment) => (
+                    <div class="flex items-center justify-between gap-3 text-[12px] leading-4">
+                      <div class="flex items-center gap-2 min-w-0">
+                        <span
+                          class="size-2 rounded-full shrink-0"
+                          style={{ "background-color": SESSION_CONTEXT_BREAKDOWN_COLOR[segment.key] }}
+                        />
+                        <span class="truncate" title={breakdownLabel(segment.key)}>{breakdownLabel(segment.key)}</span>
+                      </div>
+                      <span class="tabular-nums shrink-0" style={{ color: "var(--text-weak)" }}>
+                        {segment.percent.toLocaleString(language.intl())}%
+                      </span>
+                    </div>
+                  )}
+                </For>
+              </div>
+            </Show>
+            <div
+              class="flex items-center justify-between gap-3 border-t pt-3 text-[12px] leading-4"
+              style={{ "border-color": "var(--border-weak-base)" }}
+            >
+              <span class="truncate" title={language.t("context.usage.averageCacheHitRate")}>
+                {language.t("context.usage.averageCacheHitRate")}
+              </span>
+              <span class="tabular-nums shrink-0 font-medium">{formatCacheHitRate()}</span>
+            </div>
+          </div>
+        )}
+      </Show>
+    </div>
+  )
+
+  return (
+    <Show when={params.id}>
+      <Switch>
+        {/* 输入框内：点击展开的用量面板（非 hover、无小箭头），面板打开时图标高亮为选中背景色 */}
+        <Match when={variant() === "popover"}>
+          <Kobalte
+            open={popoverOpen()}
+            onOpenChange={setPopoverOpen}
+            placement={props.placement ?? "top"}
+            shift={props.shift}
+            gutter={4}
+            modal={false}
+          >
+            <Kobalte.Trigger
+              as="div"
+              data-slot="popover-trigger"
+              class="size-full flex items-center justify-center rounded-[8px] transition-colors cursor-pointer"
+              classList={{ "bg-[var(--neutral-50)]": popoverOpen() }}
+              aria-label={language.t("context.usage.view")}
+            >
+              {props.icon ?? circle()}
+            </Kobalte.Trigger>
+            <Kobalte.Portal>
+              <Kobalte.Content
+                data-component="popover-content"
+                class="!min-w-0 !max-w-70 p-4"
+                style={{
+                  "border-radius": "24px",
+                  border: "none",
+                  background: "var(--neutral-0, var(--surface-raised-stronger-non-alpha, #ffffff))",
+                  "box-shadow": "0 4px 12px 0 var(--session-context-shadow-color, rgba(0, 0, 0, 0.08))",
+                }}
+                onFocusOutside={(event) => event.preventDefault()}
+                onCloseAutoFocus={(event) => event.preventDefault()}
+              >
+                <div class="flex flex-col gap-3">
+                  {tooltipValue()}
+                  <div
+                    class="grid grid-cols-2 gap-2 border-t pt-3"
+                    style={{ "border-color": "var(--border-weak-base)" }}
+                  >
+                    <Button
+                      type="button"
+                      size="small"
+                      variant="secondary"
+                      class="min-w-0"
+                      disabled={compactDisabled()}
+                      title={language.t("context.usage.compactCurrentSession")}
+                      onClick={() => {
+                        setPopoverOpen(false)
+                        command.trigger("session.compact")
+                      }}
+                    >
+                      <span class="truncate">{language.t("context.usage.compactCurrentSession")}</span>
+                    </Button>
+                    <Button
+                      type="button"
+                      size="small"
+                      variant="secondary"
+                      class="min-w-0"
+                      title={language.t("command.session.new")}
+                      onClick={() => {
+                        setPopoverOpen(false)
+                        command.trigger("session.new")
+                      }}
+                    >
+                      <span class="truncate">{language.t("command.session.new")}</span>
+                    </Button>
+                  </div>
+                </div>
+              </Kobalte.Content>
+            </Kobalte.Portal>
+          </Kobalte>
+        </Match>
+        <Match when={true}>
+          <Tooltip
+            value={tooltipValue()}
+            placement={props.placement ?? "top"}
+            inactive={!context()}
+            contentClass="!max-w-70 !p-4 !rounded-[24px] !border-[var(--neutral)] !bg-[var(--surface-base)] !shadow-lg"
+            contentStyle={{ "font-weight": "400" }}
+          >
+            <Switch>
+              <Match when={variant() === "indicator"}>{props.icon ?? circle()}</Match>
+              <Match when={true}>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  class="size-6"
+                  onClick={openContext}
+                  aria-label={language.t("context.usage.view")}
+                >
+                  {props.icon ?? circle()}
+                </Button>
+              </Match>
+            </Switch>
+          </Tooltip>
+        </Match>
+      </Switch>
+    </Show>
+  )
+}

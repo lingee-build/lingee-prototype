@@ -1,0 +1,30 @@
+/* Prompt input bar — container-level CSS to prevent button overlap.
+   Forces all non-shrink-0 descendants to be shrinkable (min-width: 0),
+   so text-bearing chips truncate instead of overflowing into neighbors.
+   Icon buttons with `shrink-0` class are excluded. */
+
+.prompt-input-bar :not(.shrink-0) {
+  min-width: 0;
+}
+
+/* 窄会话面板（≤420px，session panel 容器）下隐藏文字 label 仅留图标——避免左侧 flex-nowrap
+   行在极窄会话区被挤压溢出。覆盖：hood 行（会话视图）的项目/分支名称（hover 全名由 Tooltip
+   提供）、Spec/目标模式 chip（prompt-mode-label，前置图标 hover 切换为关闭按钮的既有交互
+   不受影响）。断点与 model-selector.css / expert-team-picker.css 保持一致——共同查询最近
+   的容器祖先（session panel 的 @container class）。 */
+@container (max-width: 420px) {
+  .prompt-hood-name,
+  .prompt-mode-label {
+    display: none;
+  }
+}
+
+/* 新会话首页 hood 的项目/分支选择器 label（prompt-new-session-name）不用固定 420px 断点：
+   分支块 shrink-0 不可压缩，分支名较长时容器远未到 420px 就已 flex-wrap 换行。由
+   prompt-input.tsx 的 evaluateNewSessionHeader 在换行实际发生（或低于 420 下限）时给容器
+   （data-component="prompt-new-session-header"）挂 .collapsed 收起 label；恢复条件取
+   max(420, 单行实际需要宽)。注意选择器用 data-component 属性匹配——容器上没有同名
+   class。项目名 hover 全名走原生 title、分支名同加 title（worktree-toggle.tsx）。 */
+[data-component="prompt-new-session-header"].collapsed .prompt-new-session-name {
+  display: none;
+}

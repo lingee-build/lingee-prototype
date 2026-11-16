@@ -1,0 +1,257 @@
+{
+  "source": "/Users/kingdee/Documents/codex_workspace/Build的源码/lingee-build-feature_sit",
+  "files": [
+    {
+      "source": "packages/kcode-ui/src/components/card.css",
+      "copy": "styles/card.css",
+      "sha256": "a441beedd4c020218061e77ac334b3eab8233e55332a42f938ced68dd90fac77"
+    },
+    {
+      "source": "packages/kcode-ui/src/components/tool-error-card.css",
+      "copy": "styles/tool-error-card.css",
+      "sha256": "e97157516a0b9ca39b706927e6425baa1cb638cabe83f72fb0b35be156eefd30"
+    },
+    {
+      "source": "packages/kcode-ui/src/components/basic-tool.css",
+      "copy": "styles/basic-tool.css",
+      "sha256": "f41f40e56fc87921911da3715fc7002004835ad103e827d515dc6e0cb735765c"
+    },
+    {
+      "source": "packages/kcode-ui/src/components/collapsible.css",
+      "copy": "styles/collapsible.css",
+      "sha256": "dfbe4ccc26bdeab1473f822fcff144ba799134c916c977aa11debd2b51a85b41"
+    },
+    {
+      "source": "packages/kcode-ui/src/components/session-turn.css",
+      "copy": "styles/session-turn.css",
+      "sha256": "611fae37d93d62902a345b2fa55b61dadfc21ee8e6c591e7c0e4913fc6009602"
+    },
+    {
+      "source": "packages/kcode-ui/src/components/message-part.css",
+      "copy": "styles/message-part.css",
+      "sha256": "6985e4892705f0bd92af4651e6c7369a530a9116798ffec27a046a1499cd2e12"
+    },
+    {
+      "source": "packages/kcode-ui/src/components/shell-submessage.css",
+      "copy": "styles/shell-submessage.css",
+      "sha256": "9b0bfeeb3e77c8685d4c81f8435ace000c964820e3ad6527bba493cc8334d791"
+    },
+    {
+      "source": "packages/kcode-ui/src/components/tool-count-label.css",
+      "copy": "styles/tool-count-label.css",
+      "sha256": "103714acba87d3ac47ab18e3c9010de1a86d1d2b09d2d11fde8995243767bf82"
+    },
+    {
+      "source": "packages/kcode-ui/src/components/tool-count-summary.css",
+      "copy": "styles/tool-count-summary.css",
+      "sha256": "38768432221f495be3f88150d82cd4aba1f453d5a221a1eec34cc46a20b4dab9"
+    },
+    {
+      "source": "packages/kcode-ui/src/components/tool-status-title.css",
+      "copy": "styles/tool-status-title.css",
+      "sha256": "fab9fc42c422ce37745ce63890cef02adff8d61f4c2bfb35a5f73534eb8ecadd"
+    },
+    {
+      "source": "packages/kcode-ui/src/components/text-shimmer.css",
+      "copy": "styles/text-shimmer.css",
+      "sha256": "f1ad3c9a3baafe1efd0805efa9d918057c40472d7a8f18c2366129a94ca84bbd"
+    },
+    {
+      "source": "packages/kcode-ui/src/components/dock-surface.css",
+      "copy": "styles/dock-surface.css",
+      "sha256": "c4ac458acd5511bafe51cb4e11bed6c716bd825d5a7046a4c870852a3dcac0be"
+    },
+    {
+      "source": "packages/kcode-ui/src/components/render-card.css",
+      "copy": "styles/render-card.css",
+      "sha256": "800d7da72f3c9bd2228c0e9c7403f43ba978e70f0cbdedba9e953d0179685c0c"
+    },
+    {
+      "source": "packages/kcode-ui/src/components/button.css",
+      "copy": "styles/button.css",
+      "sha256": "0d51942a4a57c61930cc71bd67a9dbbcc2dec4af855126fafd78845f527bea12"
+    },
+    {
+      "source": "packages/kcode-ui/src/components/icon-button.css",
+      "copy": "styles/icon-button.css",
+      "sha256": "7d70be679c1dc37e96d042766e8c4b535f7b6e71392d24984045f8c8c37e87fc"
+    },
+    {
+      "source": "packages/kcode-ui/src/components/markdown.css",
+      "copy": "styles/markdown.css",
+      "sha256": "fedc1ca88359cdba19b9854c2a25dbc6eef5405902b6d3e9d1ef9bb4ab71024e"
+    },
+    {
+      "source": "packages/kcode-ui/src/components/segmented-control.css",
+      "copy": "styles/segmented-control.css",
+      "sha256": "0214d93958974df6985e5db1b852793a2749a0afca1104be5392779e0c87d6fb"
+    },
+    {
+      "source": "packages/kcode-ui/src/components/progress-circle.css",
+      "copy": "styles/progress-circle.css",
+      "sha256": "8c6ba411574c077f994503c78f549bd12535270bc4714a8f4bdee4ab0086c873"
+    },
+    {
+      "source": "packages/kcode-ui/src/components/icon.css",
+      "copy": "styles/icon.css",
+      "sha256": "30d2976acbc5f5683f6f2f227d7e975844b18db1ca59031ca9c3768f33060e76"
+    },
+    {
+      "source": "packages/kcode-ui/src/components/dropdown-menu.css",
+      "copy": "styles/dropdown-menu.css",
+      "sha256": "c07a79e23090a7c6739e2a2384d5f869d621c51d00f2fe93a597193f35d20934"
+    },
+    {
+      "source": "packages/kcode-ui/src/components/popover.css",
+      "copy": "styles/popover.css",
+      "sha256": "d8555f772660faa109d60c42ab35e2570c6da57f1e32b0953e850d149010e777"
+    },
+    {
+      "source": "packages/kcode-ui/src/components/tooltip.css",
+      "copy": "styles/tooltip.css",
+      "sha256": "529608223129436a7ead41171d3f7abcd90ec162104ccb4354c52ef50221b8d4"
+    },
+    {
+      "source": "packages/kcode-web/src/components/prompt-input/prompt-input-bar.css",
+      "copy": "styles/web-prompt-input-bar.css",
+      "sha256": "8932f45a0f5045b42f633722fc06ed11f088b64039fc87e27f5e714f8864497c"
+    },
+    {
+      "source": "packages/kcode-web/src/components/prompt-input/model-selector.css",
+      "copy": "styles/web-model-selector.css",
+      "sha256": "5977cd74f31129ae0e07e4def494e08c2005afbde495461bbac3cf4bafc1dd17"
+    },
+    {
+      "source": "packages/kcode-web/src/components/prompt-input/slash-popover.css",
+      "copy": "styles/web-slash-popover.css",
+      "sha256": "52bcf1c93588723c990b028adcf8c7972f4619c3ef51d77d2386dac202b9b15b"
+    },
+    {
+      "source": "packages/kcode-web/src/pages/session/message-timeline.css",
+      "copy": "styles/web-message-timeline.css",
+      "sha256": "235b3a4003c738e1ca1dbb9cb18d933657d92aaf4f41e6d5de207f4f2030da72"
+    },
+    {
+      "source": "packages/kcode-ui/src/components/tool-error-card.tsx",
+      "copy": "reference/tool-error-card.tsx.txt",
+      "sha256": "77eda2117a78d35e1e1bb27b75805a6afe29eb4df6ee5563ac4abc04b766e315"
+    },
+    {
+      "source": "packages/kcode-ui/src/components/message-part.tsx",
+      "copy": "reference/message-part.tsx.txt",
+      "sha256": "cc9dd45ac24a1580333e622cf3e5a303db80c6188bb2311ba4c20be22ed408c5"
+    },
+    {
+      "source": "packages/kcode-ui/src/components/session-turn.tsx",
+      "copy": "reference/session-turn.tsx.txt",
+      "sha256": "6402df83b4d27db7ac0d071a8f04dc540481405a35f4d03e40830482bfe9f4f4"
+    },
+    {
+      "source": "packages/kcode-ui/src/components/basic-tool.tsx",
+      "copy": "reference/basic-tool.tsx.txt",
+      "sha256": "04d9a03f5eb89c019e1cfcad3ef327c164ecae82c46e05fa85b97847810459f8"
+    },
+    {
+      "source": "packages/kcode-ui/src/components/collapsible.tsx",
+      "copy": "reference/collapsible.tsx.txt",
+      "sha256": "5e7439bb3156f71dc51e5f5b472987a95c09606e2a8b4dc09dc85d279cc83680"
+    },
+    {
+      "source": "packages/kcode-ui/src/components/tool-count-summary.tsx",
+      "copy": "reference/tool-count-summary.tsx.txt",
+      "sha256": "33297eeee30d967836499d7c40884d89fff2bd00ee1ba6e2a3020cf7f2e62f45"
+    },
+    {
+      "source": "packages/kcode-ui/src/components/tool-status-title.tsx",
+      "copy": "reference/tool-status-title.tsx.txt",
+      "sha256": "6c687bddfc872c4740a8002da41a618cf430492f1a8a4f6283caf00e2f7f4c84"
+    },
+    {
+      "source": "packages/kcode-ui/src/components/dock-prompt.tsx",
+      "copy": "reference/dock-prompt.tsx.txt",
+      "sha256": "d414011f90c10fab3e829b7ccb2a3a11767e368aabadb33a1ba97c886cd93cea"
+    },
+    {
+      "source": "packages/kcode-ui/src/components/dock-surface.tsx",
+      "copy": "reference/dock-surface.tsx.txt",
+      "sha256": "47619e2844b2b5aeb66c6f2cf9450135d7f67facf3bcfb3b27c1f34fa6c33342"
+    },
+    {
+      "source": "packages/kcode-ui/src/components/render-card.tsx",
+      "copy": "reference/render-card.tsx.txt",
+      "sha256": "d7626b3b404a0df6bff47f0f9779dd02464f07ea893c5c9fd7e4643ee4970554"
+    },
+    {
+      "source": "packages/kcode-ui/src/components/text-shimmer.tsx",
+      "copy": "reference/text-shimmer.tsx.txt",
+      "sha256": "85d6727f2344650061c30a8ad60eb09950ef71bcca6a8e7462ea9a5517e49cb8"
+    },
+    {
+      "source": "packages/kcode-web/src/pages/session/composer/session-composer-region.tsx",
+      "copy": "reference/web-session-composer-region.tsx.txt",
+      "sha256": "d3cf779fc5528d4b616b9e00bda0f1cf91de4ca9e61c1e3fc16c772cc0947fd3"
+    },
+    {
+      "source": "packages/kcode-web/src/pages/session/composer/session-todo-dock.tsx",
+      "copy": "reference/web-session-todo-dock.tsx.txt",
+      "sha256": "7c0537111e1b197fcdcea926efabd5c0ff49a68cb9493db54c6c1e25a0d718c4"
+    },
+    {
+      "source": "packages/kcode-web/src/pages/session/composer/session-question-dock.tsx",
+      "copy": "reference/web-session-question-dock.tsx.txt",
+      "sha256": "e90edb331267f8ffda7aff55609b4d5cd4b93692fe40f37137848de1e0cff726"
+    },
+    {
+      "source": "packages/kcode-web/src/pages/session/composer/session-permission-dock.tsx",
+      "copy": "reference/web-session-permission-dock.tsx.txt",
+      "sha256": "2e1ea96c22a928cafd3ba08c04cfdd0c893aac9285dfbc7ef1e7988c43e052ea"
+    },
+    {
+      "source": "packages/kcode-web/src/components/prompt-input.tsx",
+      "copy": "reference/web-prompt-input.tsx.txt",
+      "sha256": "f9a9a2a2ac1a23861bd9b285617b0a1ffed563c2a2f57e28834707d95f4b51cb"
+    },
+    {
+      "source": "packages/kcode-web/src/components/icon.tsx",
+      "copy": "reference/web-icon.tsx.txt",
+      "sha256": "382fd99783a5ce9c605725408894a47882baf584165d71fabe355c16fc83035e"
+    },
+    {
+      "source": "packages/kcode-web/src/components/prompt-input/enhance-button.tsx",
+      "copy": "reference/web-enhance-button.tsx.txt",
+      "sha256": "7a42537f844cd57331873d76229533bf27421fe1534eff2e86d317e94af9f54f"
+    },
+    {
+      "source": "packages/kcode-web/src/components/prompt-input/model-selector.tsx",
+      "copy": "reference/web-model-selector.tsx.txt",
+      "sha256": "4c21f11f5472f0a1fd91f3d4ec22b4fbce7962f11a27b7e9a6b16c00a83fb322"
+    },
+    {
+      "source": "packages/kcode-web/src/components/prompt-input/image-attachments.tsx",
+      "copy": "reference/web-image-attachments.tsx.txt",
+      "sha256": "b683928316bd874ac1e3bcea04e424f6eccd81521efb74727a8f4c8354acc313"
+    },
+    {
+      "source": "packages/kcode-web/src/components/prompt-input/slash-popover.tsx",
+      "copy": "reference/web-slash-popover.tsx.txt",
+      "sha256": "067429ebed9e0d635c2c6bb22d785d0c853538933db2d720ba44187f88409dda"
+    },
+    {
+      "source": "packages/kcode-web/src/components/session-context-usage.tsx",
+      "copy": "reference/web-session-context-usage.tsx.txt",
+      "sha256": "379055032bb6c62ed422815f725441bdc32a47f19d42ecb693bfce7ba41aa226"
+    },
+    {
+      "source": "packages/kcode-web/src/index.css",
+      "copy": "styles/web-runtime.css",
+      "sha256": "f01a982661ead4832747513335526365fc55ae250616b2e3c14303eddb56856c",
+      "extracted": true
+    }
+  ],
+  "reactPorts": [
+    "src/pages/session/timeline/",
+    "src/pages/session/composer/",
+    "src/features/prompt-input/",
+    "src/ui/"
+  ]
+}

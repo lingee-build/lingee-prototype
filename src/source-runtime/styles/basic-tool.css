@@ -1,0 +1,367 @@
+[data-component="tool-trigger"] {
+  /*
+   * 移除 content-visibility: auto：
+   * trigger 本身高度很小（~24px），虚拟化收益可忽略；
+   * 但无 contain-intrinsic-size 时默认占位 0，会在滚动进出视口边界时产生
+   * "0 ↔ 实际高度"切换抽动，叠加在外层 turn 容器的 cv:auto 上，会放大上下闪烁。
+   * 外层 turn 的 content-visibility 管理交给 message-timeline.css 统一负责。
+   */
+  width: 100%;
+  display: flex;
+  align-items: center;
+  align-self: stretch;
+  gap: 0px;
+  justify-content: flex-start;
+
+  &[data-clickable="true"] {
+    cursor: pointer;
+  }
+
+  &[data-hide-details="true"] {
+    [data-slot="basic-tool-tool-trigger-content"] {
+      flex: 1 1 auto;
+      max-width: 100%;
+    }
+
+    [data-slot="basic-tool-tool-info"] {
+      flex: 1 1 auto;
+    }
+  }
+
+  [data-slot="basic-tool-tool-trigger-content"] {
+    flex: 0 1 auto;
+    width: auto;
+    max-width: calc(100% - 24px);
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    align-self: stretch;
+    gap: 4px;
+  }
+
+  [data-slot="basic-tool-tool-indicator"] {
+    width: 14px;
+    height: 14px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+
+    [data-component="spinner"] {
+      width: 14px;
+      height: 14px;
+    }
+  }
+
+  [data-slot="basic-tool-tool-indicator"] [data-component="icon"] {
+    width: 14px;
+    height: 14px;
+    color: var(--neutral-500);
+  }
+
+  [data-slot="basic-tool-tool-indicator"][data-tool-status="error"] [data-component="icon"] {
+    color: var(--danger-600);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    [data-slot="basic-tool-tool-indicator"][data-tool-status="running"] [data-component="icon"],
+    [data-slot="basic-tool-tool-indicator"][data-tool-status="pending"] [data-component="icon"] {
+      color: var(--neutral-600);
+    }
+  }
+
+  [data-slot="basic-tool-tool-spinner"] {
+    width: 16px;
+    height: 16px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    color: var(--text-weak);
+
+    [data-component="spinner"] {
+      width: 16px;
+      height: 16px;
+    }
+  }
+
+  [data-slot="icon-svg"] {
+    flex-shrink: 0;
+  }
+
+  [data-slot="basic-tool-tool-info"] {
+    flex: 0 1 auto;
+    min-width: 0;
+    max-width: 100%;
+    font-size: 12px;
+    height: 22px;
+  }
+
+  [data-slot="basic-tool-tool-info-structured"] {
+    flex: 0 1 auto;
+    width: auto;
+    max-width: 100%;
+    min-width: 0;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    justify-content: flex-start;
+  }
+
+  [data-slot="basic-tool-tool-info-main"] {
+    display: flex;
+    align-items: baseline;
+    gap: 16px;
+    min-width: 0;
+    overflow: hidden;
+    /* 外层 collapsible-trigger 设有 user-select: none，
+     * 此容器覆盖为 text 使子元素间的 flex gap 间隙也支持拖拽起始，
+     * 便于从标题（user-select: none）前后的空隙开始拖选文件名等可复制文本。
+     * 标题自身仍保持 none，不会被包含进选中范围。 */
+    -webkit-user-select: text;
+    user-select: text;
+  }
+
+  [data-slot="basic-tool-tool-title"] {
+    flex-shrink: 0;
+    font-family: var(--font-family-sans);
+    font-size: 14px;
+    font-style: normal;
+    font-weight: var(--font-weight-medium);
+    line-height: var(--line-height-normal);
+    letter-spacing: var(--letter-spacing-normal);
+    color: var(--text-base);
+    /* 外层 collapsible-trigger 设有 user-select: none，
+     * 标题前缀（如"调用了"、"Grep"）不需要选中复制，保持 none。 */
+
+    &.capitalize {
+      text-transform: capitalize;
+    }
+
+    &.agent-title {
+      color: var(--text-strong);
+      font-weight: var(--font-weight-medium);
+    }
+  }
+
+  [data-slot="basic-tool-copyable-title"] {
+    -webkit-user-select: text;
+    user-select: text;
+    cursor: text;
+  }
+
+  [data-slot="basic-tool-tool-subtitle"] {
+    flex-shrink: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-family: var(--font-family-sans);
+    font-variant-numeric: tabular-nums;
+    font-size: 14px;
+    font-weight: 400;
+    line-height: 20px;
+    letter-spacing: var(--letter-spacing-normal);
+    color: var(--text-weak);
+    /* 外层 collapsible-trigger 设有 user-select: none + cursor: pointer，
+     * 此处显式覆盖为可选中文本，使工具步骤的对象名（文件路径、搜索 pattern 等）支持鼠标拖拽选中/复制。 */
+    -webkit-user-select: text;
+    user-select: text;
+    cursor: text;
+
+    &.file-path:hover {
+      text-decoration: underline;
+      text-underline-offset: 2px;
+    }
+
+    &.clickable {
+      cursor: pointer;
+      transition: color 0.15s ease;
+
+      &:hover {
+        color: var(--text-base);
+        text-decoration: underline;
+        text-underline-offset: 2px;
+      }
+    }
+
+    &.subagent-link {
+      color: var(--text-interactive-base);
+      text-decoration: none;
+      text-underline-offset: 2px;
+      font-weight: var(--font-weight-regular);
+
+      &:hover {
+        color: var(--text-interactive-base);
+        text-decoration: underline;
+      }
+
+      &:active {
+        color: var(--text-interactive-base);
+      }
+
+      &:visited {
+        color: var(--text-interactive-base);
+      }
+    }
+  }
+
+  [data-slot="basic-tool-tool-arg"] {
+    flex-shrink: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-family: var(--font-family-sans);
+    font-variant-numeric: tabular-nums;
+    font-size: 12px;
+    font-style: normal;
+    font-weight: 400;
+    line-height: 20px;
+    letter-spacing: var(--letter-spacing-normal);
+    color: var(--text-weaker);
+    /* 外层 collapsible-trigger 设有 user-select: none，
+     * 参数（如 offset=1、limit=100、include=*.ts）需支持鼠标拖拽选中/复制。 */
+    -webkit-user-select: text;
+    user-select: text;
+    cursor: text;
+  }
+
+  [data-slot="basic-tool-tool-action"] {
+    display: inline-flex;
+    align-items: center;
+    flex-shrink: 0;
+  }
+}
+
+/* Task 工具卡片：头像 + 角色名 + 状态（首行），任务描述作为大标题（第二行） */
+[data-tool-kind="task"] [data-slot="basic-tool-tool-indicator"] {
+  display: none;
+}
+
+/* 基础样式中 [data-slot="basic-tool-tool-info"] 固定 height: 22px，
+ * 导致两行的 task-tool-card 内容溢出该 22px 容器而与后面的消息文本重叠。
+ * 这里针对 task 卡片场景改为自适应高度。
+ */
+[data-tool-kind="task"] [data-slot="basic-tool-tool-info"],
+[data-tool-kind="task"] [data-slot="basic-tool-tool-info-structured"],
+[data-tool-kind="task"] [data-slot="basic-tool-tool-info-main"] {
+  height: auto;
+  align-items: stretch;
+  display: block;
+}
+
+[data-component="task-tool-card"] {
+  width: 100%;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  /* 副标题（task-tool-card-title）与上方头像行的间距 10px = var(--spacing) * 2.5 */
+  gap: calc(var(--spacing) * 2.5);
+  /* padding: 12px 20px，使用 --spacing(0.25rem/4px) 换算：3 * 4px / 5 * 4px */
+  padding: calc(var(--spacing) * 3) calc(var(--spacing) * 5);
+  border-radius: 16px;
+  /* 使用 --neutral-50 设计 token（与 message-part.css/session-turn.css/markdown.css 中其他淡灰卡片背景保持一致），
+   * fallback 固定为 #FAFAFA，避免引用不存在的 --color-surface-weak-base。 */
+   background-color: var(--surface-raised-strong);
+  transition:
+    border-color 0.15s ease,
+    background-color 0.15s ease,
+    color 0.15s ease;
+
+  &[data-clickable="true"] {
+    cursor: pointer;
+  }
+
+  [data-component="task-tool-card-header"] {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+  }
+
+  [data-component="task-tool-card-avatar"] {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    overflow: hidden;
+    /* 头像 24*24px = var(--spacing) * 6 */
+    width: calc(var(--spacing) * 6);
+    height: calc(var(--spacing) * 6);
+    border-radius: 50%;
+    background-color: var(--neutral-300);
+    color: var(--neutral-0, #fff);
+
+    [data-component="icon"] {
+      width: 14px;
+      height: 14px;
+    }
+
+    [data-component="task-tool-card-avatar-image"] {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      border-radius: 50%;
+    }
+  }
+
+  [data-component="task-tool-card-role"] {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    /* 主标题：12px/400/18px 使用 token：--font-size-xs(12px) 与 --line-height-large(1.5) 相乘等于 18px */
+    font-size: var(--font-size-xs);
+    font-weight: var(--font-weight-regular);
+    line-height: var(--line-height-large);
+    color: var(--neutral-500, rgba(0, 0, 0, 0.46));
+  }
+
+  [data-component="task-tool-card-status"] {
+    flex-shrink: 0;
+    font-size: 12px;
+    font-weight: 400;
+    line-height: 20px;
+    color: var(--neutral-500);
+
+    &[data-tool-status="error"] {
+      color: var(--danger-600);
+    }
+  }
+
+  [data-component="task-tool-card-title"] {
+    width: 100%;
+    color: var(--neutral-900, var(--text-base));
+    /* 字体 16px 行高 24px 使用 token：--font-size-base(16px) 与 --line-height-large(1.5) 相乘等于 24px */
+    font-size: var(--font-size-base);
+    font-weight: var(--font-weight-regular);
+    line-height: var(--line-height-large);
+    word-break: break-word;
+    /* 卡片外层触发器为 <button>/<a>，浏览器默认禁止其内部文字被选中；
+     * 副标题（任务描述）需支持鼠标拖拽选中/复制，故显式覆盖为可选中。 */
+    -webkit-user-select: text;
+    user-select: text;
+  }
+}
+
+/* 子agent 卡片“进行中”时的头像呈呼吸脉冲动效，强化任务正在执行中的感知 */
+@media (prefers-reduced-motion: no-preference) {
+  [data-component="task-tool-card-avatar"][data-tool-status="pending"],
+  [data-component="task-tool-card-avatar"][data-tool-status="running"] {
+    animation: task-avatar-pulse 1.6s ease-in-out infinite;
+  }
+}
+
+@keyframes task-avatar-pulse {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.6;
+    transform: scale(0.92);
+  }
+}

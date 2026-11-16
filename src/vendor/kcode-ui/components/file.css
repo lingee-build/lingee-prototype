@@ -1,0 +1,50 @@
+[data-component="file"] {
+  /*
+   * 移除 content-visibility: auto：
+   * 1. file 内部已使用 Pierre/VirtualizedFile 行级虚拟化，cv:auto 的 element 级跳过 paint 是重复虚拟化，收益边际很小；
+   * 2. 无 contain-intrinsic-size 时默认占位 0，在 ToolStageGroup/ToolFileAccordion 展开后
+   *    滚动到视口边界附近会形成"0 ↔ 实际高度"自激回流，叠加在外层 turn 容器的 cv:auto 上
+   *    会造成 stage group 视觉上反复折叠/展开的闪动；
+   * 3. 外层 [data-message-turn] 已统一管理 cv:auto（见 kcode-web/.../message-timeline.css），
+   *    未展开 turn 的整体 paint 跳过收益已经覆盖；展开 turn 时本就需要完整渲染。
+   */
+}
+
+[data-component="file"][data-mode="text"] {
+  overflow: hidden;
+}
+
+[data-component="file"][data-mode="diff"] {
+  [data-slot="diff-hunk-separator-line-number"] {
+    position: sticky;
+    left: 0;
+    background-color: var(--surface-diff-hidden-strong);
+    z-index: 2;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    [data-slot="diff-hunk-separator-line-number-icon"] {
+      aspect-ratio: 1;
+      width: 24px;
+      height: 24px;
+      color: var(--icon-strong-base);
+    }
+  }
+
+  [data-slot="diff-hunk-separator-content"] {
+    position: sticky;
+    background-color: var(--surface-diff-hidden-base);
+    color: var(--text-base);
+    width: var(--diffs-column-content-width);
+    left: var(--diffs-column-number-width);
+    padding-left: 8px;
+    user-select: none;
+    cursor: default;
+    text-align: left;
+
+    [data-slot="diff-hunk-separator-content-span"] {
+      mix-blend-mode: var(--text-mix-blend-mode);
+    }
+  }
+}

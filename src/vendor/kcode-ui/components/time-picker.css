@@ -1,0 +1,98 @@
+.time-picker-panel {
+  /* Compound with the popover-content attribute so these win over popover.css's
+     defaults (equal-specificity rules imported later would otherwise take over). */
+  &[data-component="popover-content"] {
+    width: 292px;
+    min-width: unset;
+    max-width: unset;
+    border-radius: 20px;
+    /* Dark-aware fallbacks (see date-picker.css): white/light border in light mode,
+       #1c1c1c/light-alpha border in dark mode. */
+    border: 0.5px solid var(--timepicker-border-color-default, var(--border-base));
+    background: var(--timepicker-bg-color-default, var(--surface-raised-stronger-non-alpha));
+    box-shadow: 0 4px 12px 0 var(--datepicker-rangepicker-shadow-color-default, rgba(0, 0, 0, 0.08));
+
+    [data-slot="popover-body"] {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+      padding: 12px 12px 0 12px;
+    }
+  }
+}
+
+[data-component="time-picker"] {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+  width: 100%;
+  height: 280px;
+
+  [data-slot="time-picker-column"] {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    overflow-y: auto;
+
+    /* Thin rounded scrollbar matching the session/conversation area. Dark-aware:
+       --border-base / --text-weaker both flip with the theme. */
+    scrollbar-width: thin;
+    scrollbar-color: var(--border-base) transparent;
+
+    &::-webkit-scrollbar {
+      width: 6px;
+    }
+    &::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    /* Transparent border + padding-box clip keeps the visible thumb at 4px (like the
+       session area) while the 6px track stays as the hover target. */
+    &::-webkit-scrollbar-thumb {
+      background: var(--border-base);
+      border-radius: 9999px;
+      border: 1px solid transparent;
+      background-clip: padding-box;
+    }
+    &::-webkit-scrollbar-thumb:hover {
+      background: var(--text-weaker);
+      background-clip: padding-box;
+    }
+  }
+
+  [data-slot="time-picker-cell"] {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 32px;
+    border-radius: 8px;
+    color: var(--text-base);
+    cursor: pointer;
+
+    font-family: var(--font-family-sans);
+    font-size: var(--font-size-base);
+    font-weight: var(--font-weight-regular);
+    font-variant-numeric: tabular-nums;
+
+    transition:
+      background-color 0.12s ease-in-out,
+      color 0.12s ease-in-out;
+
+    &:hover:not([data-selected]) {
+      background: var(--timepicker-bg-color-hover, var(--surface-base-hover));
+    }
+    &[data-selected] {
+      background: var(--timepicker-bg-color-selected, rgba(109, 128, 255, 0.12));
+      color: #6d80ff;
+      font-weight: var(--font-weight-medium);
+    }
+    &:disabled {
+      color: var(--text-weaker);
+      opacity: 0.45;
+      cursor: not-allowed;
+      background: transparent;
+    }
+  }
+}

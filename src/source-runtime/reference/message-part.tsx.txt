@@ -1,0 +1,4583 @@
+import {
+  Component,
+  createEffect,
+  createMemo,
+  createSignal,
+  For,
+  Match,
+  on,
+  onMount,
+  Show,
+  Switch,
+  onCleanup,
+  Index,
+  type JSX,
+} from "solid-js"
+import { createStore } from "solid-js/store"
+import stripAnsi from "strip-ansi"
+import { Dynamic } from "solid-js/web"
+import {
+  AgentPart,
+  AssistantMessage,
+  FilePart,
+  RulePart,
+  Message as MessageType,
+  Part as PartType,
+  ReasoningPart,
+  TextPart,
+  ToolPart,
+  UserMessage,
+  Todo,
+  QuestionAnswer,
+  QuestionInfo,
+} from "@opencode-ai/sdk/v2"
+import { useData } from "../context"
+import { useFileComponent } from "../context/file"
+import { useDialog } from "../context/dialog"
+import { useI18n } from "../context/i18n"
+import { BasicTool, GenericTool } from "./basic-tool"
+import { Accordion } from "./accordion"
+import { StickyAccordionHeader } from "./sticky-accordion-header"
+import { Card } from "./card"
+import { Collapsible } from "./collapsible"
+import { FileIcon } from "./file-icon"
+import { Icon } from "./icon"
+import { ToolErrorCard } from "./tool-error-card"
+import { Checkbox } from "./checkbox"
+import { DiffChanges } from "./diff-changes"
+import { Markdown } from "./markdown"
+import { ImagePreview } from "./image-preview"
+import { getDirectory as _getDirectory, getFilename } from "@opencode-ai/core/util/path"
+import { toAbsolutePath } from "../util/path"
+import { checksum } from "@opencode-ai/core/util/encode"
+import { Tooltip } from "./tooltip"
+
+import { IconButton } from "./icon-button"
+import { Button } from "./button"
+import { TextShimmer } from "./text-shimmer"
+
+import { ToolStatusTitle } from "./tool-status-title"
+import { patchFiles } from "./apply-patch-file"
+import { useLocation } from "@solidjs/router"
+import { attached, attachmentSize, attachmentType, inline, kind } from "./message-file"
+import { split as splitRenderBlocks } from "./render-block"
+import { RenderCard } from "./render-card"
+import { inlineToolPartCards, projectToolPresentationCards, tailDeliveryCards } from "./tool-presentation"
+import {
+  agentTitle,
+  segmentedFinalResponseTextPartIDs,
+  getDocumentTitle,
+  hasAsyncTaskPart,
+  hasRenderCardPresentation,
+  hasRunningTool,
+  isAgentToolPart,
+  stageToolStatus,
+  summarizeToolError,
+  taskSession,
+  taskSessionDisplay,
+  taskAgentType,
+  taskSessionID,
+  taskRole,
+  taskToolStatus,
+  resolveMessageParts
+} from "./message-part-helpers"
+import { pickAvatar } from "../assets/avatars"
+
+/** MaaS 模型显示名称 i18n key 前缀，与 kcode-web maas-display-name.ts 保持同步 */
+const MODEL_DISPLAY_NAME_PREFIX = "ui.model.displayName."
+
+const getModelDisplayName = (modelId: string, fallback: string, t: (key: string) => string, index = 0, modelLevel?: string) => {
+  if (modelLevel) {
+    const i18nKey = `${MODEL_DISPLAY_NAME_PREFIX}${modelLevel}`
+    const translated = t(i18nKey)
+    // t()（@solid-primitives/i18n translator）对缺失 key 返回 undefined 而非 key 本身；
+    // 字典外 modelLevel 回退到 fallback（模型名）：档位显示档位名，其余显示模型名
+    const base = translated == null || translated === i18nKey ? fallback : translated
+    return index === 0 ? base : `${base} ${index}`
+  }
+  return fallback
+}
+
+function ShellSubmessage(props: { text: string }) {
+  return (
+    <span data-component="shell-submessage">
+      <span data-slot="shell-submessage-width">
+        <span data-slot="basic-tool-tool-subtitle">
+          <span data-slot="shell-submessage-value" title={props.text}>
+            {props.text}
+          </span>
+        </span>
+      </span>
+    </span>
+  )
+}
+
+interface Diagnostic {
+  range: {
+    start: { line: number; character: number }
+    end: { line: number; character: number }
+  }
+  message: string
+  severity?: number
+}
+
+function getDiagnostics(
+  diagnosticsByFile: Record<string, Diagnostic[]> | undefined,
+  filePath: string | undefined,
+): Diagnostic[] {
+  if (!diagnosticsByFile || !filePath) return []
+  const diagnostics = diagnosticsByFile[filePath] ?? []
+  return diagnostics.filter((d) => d.severity === 1).slice(0, 3)
+}
+
+function DiagnosticsDisplay(props: { diagnostics: Diagnostic[] }): JSX.Element {
+  const i18n = useI18n()
+  return (
+    <Show when={props.diagnostics.length > 0}>
+      <div data-component="diagnostics">
+        <For each={props.diagnostics}>
+          {(diagnostic) => (
+            <div data-slot="diagnostic">
+              <span data-slot="diagnostic-label">{i18n.t("ui.messagePart.diagnostic.error")}</span>
+              <span data-slot="diagnostic-location">
+                [{diagnostic.range.start.line + 1}:{diagnostic.range.start.character + 1}]
+              </span>
+              <span data-slot="diagnostic-message">{diagnostic.message}</span>
+            </div>
+          )}
+        </For>
+      </div>
+    </Show>
+  )
+}
+
+export interface MessageProps {
+  message: MessageType
+  parts: PartType[]
+  actions?: UserActions
+  showAssistantCopyPartID?: string | null
+  showReasoningSummaries?: boolean
+  onShare?: () => void
+  onCardClick?: (kind: string, config: Record<string, string>) => void
+  isLocalTestCardDisabled?: (kind: string, config: Record<string, string>) => boolean
+}
+
+export type SessionAction = (input: { sessionID: string; messageID: string }) => Promise<void> | void
+export type SessionFileAction = (input: { sessionID: string; messageID: string; file: string }) => Promise<void> | void
+
+export type UserActions = {
+  fork?: SessionAction
+  revert?: SessionAction
+  regenerate?: SessionAction
+  /**
+   * 超时中断后的"继续"动作：不删除已产出的 assistant 内容，仅发送一条提示"继续"的
+   * 新轮，让模型接着上次处推进，避免"重试"重跑同样超时。
+   */
+  continue?: SessionAction
+  /** 标题「已编辑 个文件」入口：展开审查面板并查看本轮全部变更（不指定具体文件）。 */
+  openReview?: SessionAction
+  /** 单个文件行入口：展开审查面板并打开该文件。 */
+  openReviewFile?: SessionFileAction
+  /** 单个文件行的打开文件按钮：在文件树中定位并打开该文件。 */
+  openFileInTree?: SessionFileAction
+  /** 进入分享选择模式，并预选该轮对话。 */
+  share?: (input: { sessionID: string; messageID: string; part?: "user" | "assistant" }) => Promise<void> | void
+}
+
+export interface MessagePartProps {
+  part: PartType
+  message: MessageType
+  footerOnly?: boolean
+  hideDetails?: boolean
+  compactToolRow?: boolean
+  defaultOpen?: boolean
+  processView?: boolean
+  singleStep?: boolean
+  autoOpenWhenSingle?: boolean
+  showAssistantCopyPartID?: string | null
+  turnDurationMs?: number
+  turnCredits?: number | null
+  turnCreditsLoading?: boolean
+  onFork?: () => Promise<void> | void
+  onRegenerate?: () => void
+  onShare?: () => void
+  onCardClick?: (kind: string, config: Record<string, string>) => void
+  isLocalTestCardDisabled?: (kind: string, config: Record<string, string>) => boolean
+  imageAttachments?: ToolAttachment[]
+  // 工具结构化展示投影出的卡片（例如专家阶段卡），键为 `${messageID}:${partID}`；null 表示被合并到更早的卡片。
+  toolPresentationCards?: ReadonlyMap<string, Record<string, string> | null>
+  // 轮次尾部交付卡（§6.1 折叠修复）：由 AssistantParts 传入，在 finalTextParts 最后一个
+  // text part 内渲染——跟总结文本同属一个 text-part 容器，不单独浮在 final 之后、也不折叠在处理块中。
+  tailCards?: Record<string, string>[]
+}
+
+export type TurnDisplayMode = "inline_single" | "grouped" | "context_grouped"
+
+export type PartComponent = Component<MessagePartProps>
+
+export const PART_MAPPING: Record<string, PartComponent | undefined> = {}
+
+const TEXT_RENDER_PACE_MS = 24
+// 单次渲染间隔的封顶：超过它意味着单次 lexer 成本已高于间隔（约 110KB 起，
+// 实测纯中文 100KB lexer≈6s），继续周期性渲染只会反复冻结主线程
+const PACE_CAP_MS = 5000
+// marked 的 lexer 是 O(n²)（实测：8KB=13ms、32KB=196ms、64KB=775ms、100KB≈1.7s，
+// 纯中文段落更差，见 markdown-stream.ts 头注释）。间隔按"预估单次 lexer 成本的
+// 2 倍"等比放大，把主线程占用率约束在 ~50%：32KB≈400ms、64KB≈1.5s、100KB≈3.4s。
+// 这是"流式观感 vs 主线程占用"的显式权衡：长回复会退化为
+// 数秒一次的整段追平，接受此代价直到根治落地（增量 lexer / Worker 化，
+// 含 sanitize 的 DOM 依赖方案——follow-up）。
+function paceForText(length: number) {
+  const kb = length / 1024
+  return Math.min(PACE_CAP_MS, Math.max(TEXT_RENDER_PACE_MS, Math.round(kb * kb * 0.42)))
+}
+const TEXT_RENDER_SNAP = /[\s.,!?;:)\]]/
+
+function step(size: number) {
+  if (size <= 12) return 2
+  if (size <= 48) return 4
+  if (size <= 96) return 8
+  return Math.min(24, Math.ceil(size / 8))
+}
+
+function next(text: string, start: number) {
+  const end = Math.min(text.length, start + step(text.length - start))
+  const max = Math.min(text.length, end + 8)
+  for (let i = end; i < max; i++) {
+    if (TEXT_RENDER_SNAP.test(text[i] ?? "")) return i + 1
+  }
+  return end
+}
+
+function cleanReasoningLabel(value: string) {
+  return value
+    .replace(/`([^`]+)`/g, "$1")
+    .replace(/\[([^\]]+)\]\([^\)]+\)/g, "$1")
+    .replace(/[*_~]+/g, "")
+    .trim()
+}
+
+function reasoningLabel(text: string) {
+  const markdown = text.replace(/\r\n?/g, "\n")
+
+  const html = markdown.match(/<h[1-6][^>]*>([\s\S]*?)<\/h[1-6]>/i)
+  if (html?.[1]) {
+    const value = cleanReasoningLabel(html[1].replace(/<[^>]+>/g, " "))
+    if (value) return value
+  }
+
+  const atx = markdown.match(/^\s{0,3}#{1,6}[ \t]+(.+?)(?:[ \t]+#+[ \t]*)?$/m)
+  if (atx?.[1]) {
+    const value = cleanReasoningLabel(atx[1])
+    if (value) return value
+  }
+
+  const setext = markdown.match(/^([^\n]+)\n(?:=+|-+)\s*$/m)
+  if (setext?.[1]) {
+    const value = cleanReasoningLabel(setext[1])
+    if (value) return value
+  }
+
+  const strong = markdown.match(/^\s*(?:\*\*|__)(.+?)(?:\*\*|__)\s*$/m)
+  if (strong?.[1]) {
+    const value = cleanReasoningLabel(strong[1])
+    if (value) return value
+  }
+
+}
+
+function createPacedValue(getValue: () => string, live?: () => boolean) {
+  const [value, setValue] = createSignal(getValue())
+  let shown = getValue()
+  let timeout: ReturnType<typeof setTimeout> | undefined
+
+  const clear = () => {
+    if (!timeout) return
+    clearTimeout(timeout)
+    timeout = undefined
+  }
+
+  const sync = (text: string) => {
+    shown = text
+    setValue(text)
+  }
+
+  const run = () => {
+    timeout = undefined
+    const text = getValue()
+    if (!live?.()) {
+      sync(text)
+      return
+    }
+    if (!text.startsWith(shown) || text.length <= shown.length) {
+      sync(text)
+      return
+    }
+    const pace = paceForText(text.length)
+    // 超长文本（单次 lexer 成本已超封顶，约 110KB 起）：与其反复冻结主线程，
+    // 不如冻结显示——停止周期性渲染（主线程零占用），等流结束（live=false）
+    // 一次性全量渲染
+    if (pace >= PACE_CAP_MS) return
+    // 大文本已降频（间隔 ≥ 数百 ms）：reveal 追赶速率必须跟上生成速率，否则显示
+    // 持续落后、结束时猛跳全文——每次直接追平最新文本，靠间隔而非步长控制成本
+    if (pace > TEXT_RENDER_PACE_MS) {
+      sync(text)
+      timeout = setTimeout(run, pace)
+      return
+    }
+    const end = next(text, shown.length)
+    sync(text.slice(0, end))
+    if (end < text.length) timeout = setTimeout(run, pace)
+  }
+
+  createEffect(() => {
+    const text = getValue()
+    if (!live?.()) {
+      clear()
+      sync(text)
+      return
+    }
+    if (!text.startsWith(shown) || text.length < shown.length) {
+      clear()
+      sync(text)
+      return
+    }
+    // 超长文本冻结：不调度周期性渲染（见 run 内注释），直到流结束
+    if (paceForText(text.length) >= PACE_CAP_MS) {
+      clear()
+      return
+    }
+    if (text.length === shown.length || timeout) return
+    timeout = setTimeout(run, paceForText(text.length))
+  })
+
+  onCleanup(() => {
+    clear()
+  })
+
+  return value
+}
+
+function PacedMarkdown(props: {
+  text: string
+  cacheKey: string
+  streaming: boolean
+  onFilePath?: (path: string) => void
+}) {
+  const value = createPacedValue(
+    () => props.text,
+    () => props.streaming,
+  )
+
+  return (
+    <Show when={value()}>
+      <Markdown text={value()} cacheKey={props.cacheKey} streaming={props.streaming} onFilePath={props.onFilePath} />
+    </Show>
+  )
+}
+
+function relativizeProjectPath(path: string, directory?: string) {
+  if (!path) return ""
+  const normalize = (value: string) => value.replace(/\\/g, "/")
+  const slash = normalize(path)
+  const root = directory ? normalize(directory) : ""
+  if (root && root !== "/" && slash === root) return ""
+  if (root && root !== "/") {
+    const prefix = root.endsWith("/") ? root : `${root}/`
+    if (slash.startsWith(prefix)) return slash.slice(root.length)
+  }
+  const absolute = slash.startsWith("/") || /^[A-Za-z]:\//.test(slash)
+  if (!absolute) return path
+  // Abbreviate home directory paths with ~ (macOS /Users/x, Linux /home/x, Windows C:/Users/x)
+  const homeMatch = slash.match(/^(?:\/(?:Users|home)\/[^/]+|[A-Za-z]:\/Users\/[^/]+)/)
+  if (homeMatch) {
+    const rest = slash.slice(homeMatch[0].length)
+    return rest ? `~${rest}` : "~/"
+  }
+  const parts = slash.split("/").filter(Boolean)
+  if (parts.length === 0) return "..."
+  return parts.length <= 3 ? `.../${parts.join("/")}` : `.../${parts.slice(-3).join("/")}`
+}
+
+function maskAbsolutePaths(text: string, directory?: string) {
+  if (!text) return ""
+  return text.replace(/(^|[\s"'`(=])((?:\/|[A-Za-z]:\\)[^\s"'`]+)/g, (all, prefix: string, raw: string) => {
+    const safe = relativizeProjectPath(raw, directory)
+    return `${prefix}${safe}`
+  })
+}
+
+function getDirectory(path: string | undefined) {
+  const data = useData()
+  return relativizeProjectPath(_getDirectory(path), data.directory)
+}
+
+function getRelative(raw: string | undefined) {
+  const data = useData()
+  if (!raw) return ""
+  return relativizeProjectPath(raw, data.directory)
+}
+
+import type { IconProps } from "./icon"
+
+export type ToolInfo = {
+  icon: IconProps["name"]
+  title: string
+  subtitle?: string
+}
+
+const agentTones: Record<string, string> = {
+  ask: "var(--icon-agent-ask-base)",
+  build: "var(--icon-agent-build-base)",
+  docs: "var(--icon-agent-docs-base)",
+  plan: "var(--icon-agent-plan-base)",
+}
+
+const agentPalette = [
+  "var(--icon-agent-ask-base)",
+  "var(--icon-agent-build-base)",
+  "var(--icon-agent-docs-base)",
+  "var(--icon-agent-plan-base)",
+  "var(--syntax-info)",
+  "var(--syntax-success)",
+  "var(--syntax-warning)",
+  "var(--syntax-property)",
+  "var(--syntax-constant)",
+  "var(--text-diff-add-base)",
+  "var(--text-diff-delete-base)",
+  "var(--icon-warning-base)",
+]
+
+function tone(name: string) {
+  let hash = 0
+  for (const char of name) hash = (hash * 31 + char.charCodeAt(0)) >>> 0
+  return agentPalette[hash % agentPalette.length]
+}
+
+function taskAgent(
+  raw: unknown,
+  list?: readonly { name: string; color?: string }[],
+): { name?: string; color?: string } {
+  if (typeof raw !== "string" || !raw) return {}
+  const key = raw.toLowerCase()
+  const item = list?.find((entry) => entry.name === raw || entry.name.toLowerCase() === key)
+  return {
+    name: item?.name ?? `${raw[0]!.toUpperCase()}${raw.slice(1)}`,
+    color: item?.color ?? agentTones[key] ?? tone(key),
+  }
+}
+
+export function getToolInfo(tool: string, input: any = {}): ToolInfo {
+  const i18n = useI18n()
+  switch (tool) {
+    case "read":
+      return {
+        icon: "book-open-24",
+        title: i18n.t("ui.tool.read"),
+        subtitle: input.filePath ? getFilename(input.filePath) : undefined,
+      }
+    case "list":
+      return {
+        icon: "bullet-list",
+        title: i18n.t("ui.tool.list"),
+        subtitle: input.path ? getFilename(input.path) : undefined,
+      }
+    case "glob":
+      return {
+        icon: "find-catalog-24",
+        title: i18n.t("ui.tool.glob"),
+        subtitle: input.pattern ? getFilename(input.pattern) : undefined,
+      }
+    case "grep":
+      return {
+        icon: "find-catalog-24",
+        title: i18n.t("ui.tool.grep"),
+        subtitle: input.pattern,
+      }
+    case "webfetch":
+      return {
+        icon: "web-search-24",
+        title: i18n.t("ui.tool.webfetch"),
+        subtitle: input.url,
+      }
+    case "websearch":
+      return {
+        icon: "web-search-24",
+        title: i18n.t("ui.tool.websearch"),
+        subtitle: input.query,
+      }
+    case "codesearch":
+      return {
+        icon: "code",
+        title: i18n.t("ui.tool.codesearch"),
+        subtitle: input.query,
+      }
+    case "task":
+    case "agent":
+    case "spawn_task":
+    case "spawn_agent": {
+      const agent = taskAgentType(input, {})
+      const type = agent ? agent[0]!.toUpperCase() + agent.slice(1) : undefined
+      return {
+        icon: "task",
+        title: agentTitle(i18n, type),
+        subtitle: input.description,
+      }
+    }
+    case "bash":
+      return {
+        icon: "square-code-24",
+        title: i18n.t("ui.tool.shell"),
+        subtitle: input.description,
+      }
+    case "edit":
+      return {
+        icon: "edit-24",
+        title: i18n.t("ui.messagePart.title.edit"),
+        subtitle: input.filePath ? getFilename(input.filePath) : undefined,
+      }
+    case "write":
+      return {
+        icon: "edit-24",
+        title: i18n.t("ui.messagePart.title.write"),
+        subtitle: input.filePath ? getFilename(input.filePath) : undefined,
+      }
+    case "apply_patch":
+      return {
+        icon: "edit-24",
+        title: i18n.t("ui.tool.patch"),
+        subtitle: input.files?.length
+          ? `${input.files.length} ${i18n.t(input.files.length > 1 ? "ui.common.file.other" : "ui.common.file.one")}`
+          : undefined,
+      }
+    case "todowrite":
+      return {
+        icon: "checklist",
+        title: i18n.t("ui.tool.todos"),
+      }
+    case "question":
+      return {
+        icon: "dialog-box-24",
+        title: i18n.t("ui.tool.questions"),
+      }
+    case "skill":
+      return {
+        icon: "plugin-24",
+        title: input.name || i18n.t("ui.tool.skill"),
+      }
+    default:
+      return {
+        icon: "mcp",
+        title: tool,
+      }
+  }
+}
+
+function urls(text: string | undefined) {
+  if (!text) return []
+  const seen = new Set<string>()
+  return [...text.matchAll(/https?:\/\/[^\s<>"'`)\]]+/g)]
+    .map((item) => item[0].replace(/[),.;:!?]+$/g, ""))
+    .filter((item) => {
+      if (seen.has(item)) return false
+      seen.add(item)
+      return true
+    })
+}
+
+function sessionLink(id: string | undefined, path: string, href?: (id: string) => string | undefined) {
+  if (!id) return
+
+  const direct = href?.(id)
+  if (direct) return direct
+
+  const idx = path.indexOf("/session")
+  if (idx === -1) return
+  return `${path.slice(0, idx)}/session/${id}`
+}
+
+const CONTEXT_GROUP_TOOLS = new Set(["read", "glob", "grep", "list"])
+const HIDDEN_TOOLS = new Set(["todowrite", "list_tasks", "wait_tasks", "list_agents", "wait_agents"])
+
+function list<T>(value: T[] | undefined | null, fallback: T[]) {
+  if (Array.isArray(value)) return value
+  return fallback
+}
+
+function same<T>(a: readonly T[] | undefined, b: readonly T[] | undefined) {
+  if (a === b) return true
+  if (!a || !b) return false
+  if (a.length !== b.length) return false
+  return a.every((x, i) => x === b[i])
+}
+
+type PartRef = {
+  messageID: string
+  partID: string
+}
+
+type PartGroup =
+  | {
+      key: string
+      type: "part"
+      ref: PartRef
+    }
+  | {
+      key: string
+      type: "context"
+      refs: PartRef[]
+    }
+  | {
+      key: string
+      type: "tool_stage"
+      refs: PartRef[]
+    }
+  | {
+      key: string
+      type: "reasoning"
+      refs: PartRef[]
+    }
+
+function sameRef(a: PartRef, b: PartRef) {
+  return a.messageID === b.messageID && a.partID === b.partID
+}
+
+function sameGroup(a: PartGroup, b: PartGroup) {
+  if (a === b) return true
+  if (a.key !== b.key) return false
+  if (a.type !== b.type) return false
+  if (a.type === "part") {
+    if (b.type !== "part") return false
+    return sameRef(a.ref, b.ref)
+  }
+  if (b.type !== "context" && b.type !== "tool_stage" && b.type !== "reasoning") return false
+  if (a.refs.length !== b.refs.length) return false
+  return a.refs.every((ref, i) => sameRef(ref, b.refs[i]!))
+}
+
+function sameGroups(a: readonly PartGroup[] | undefined, b: readonly PartGroup[] | undefined) {
+  if (a === b) return true
+  if (!a || !b) return false
+  if (a.length !== b.length) return false
+  return a.every((item, i) => sameGroup(item, b[i]!))
+}
+
+function groupParts(parts: { messageID: string; part: PartType }[]) {
+  const result: PartGroup[] = []
+  let start = -1
+
+  const flush = (end: number) => {
+    if (start < 0) return
+    const first = parts[start]
+    const last = parts[end]
+    if (!first || !last) {
+      start = -1
+      return
+    }
+    if (end === start) {
+      result.push({
+        key: `part:${first.messageID}:${first.part.id}`,
+        type: "part",
+        ref: {
+          messageID: first.messageID,
+          partID: first.part.id,
+        },
+      })
+      start = -1
+      return
+    }
+    result.push({
+      key: `context:${first.part.id}`,
+      type: "context",
+      refs: parts.slice(start, end + 1).map((item) => ({
+        messageID: item.messageID,
+        partID: item.part.id,
+      })),
+    })
+    start = -1
+  }
+
+  parts.forEach((item, index) => {
+    if (isContextGroupTool(item.part)) {
+      if (start < 0) start = index
+      return
+    }
+
+    flush(index - 1)
+    result.push({
+      key: `part:${item.messageID}:${item.part.id}`,
+      type: "part",
+      ref: {
+        messageID: item.messageID,
+        partID: item.part.id,
+      },
+    })
+  })
+
+  flush(parts.length - 1)
+  return result
+}
+
+function stageParts(parts: { messageID: string; part: PartType }[]) {
+  const result: PartGroup[] = []
+  let refs: PartRef[] = []
+  let key = ""
+  // 连续的 reasoning 先缓存：随其后的工具一起入组（不打断工具连跑），
+  // 没等到工具（如最终回答前的收尾思考）则独立成 reasoning 组合并为一行。
+  let thinking: PartRef[] = []
+
+  const flushThinking = () => {
+    if (thinking.length === 0) return
+    const first = thinking[0]!
+    result.push({
+      key: `reasoning:${first.messageID}:${first.partID}`,
+      type: "reasoning",
+      refs: thinking,
+    })
+    thinking = []
+  }
+
+  const flush = () => {
+    if (refs.length === 0) return
+    if (refs.length === 1) {
+      const first = refs[0]
+      if (!first) return
+      result.push({
+        key: `part:${first.messageID}:${first.partID}`,
+        type: "part",
+        ref: first,
+      })
+      refs = []
+      key = ""
+      return
+    }
+    result.push({
+      key,
+      type: "tool_stage",
+      refs,
+    })
+    refs = []
+    key = ""
+  }
+
+  parts.forEach((item) => {
+    if (item.part.type === "reasoning") {
+      thinking.push({
+        messageID: item.messageID,
+        partID: item.part.id,
+      })
+      return
+    }
+
+    // 子 Agent 使用独立卡片展示，不能并入普通工具阶段。
+    if (item.part.type === "tool" && !isAgentToolPart(item.part)) {
+      if (refs.length === 0) key = `tool_stage:${item.messageID}:${item.part.id}`
+      refs.push(...thinking)
+      thinking = []
+      refs.push({
+        messageID: item.messageID,
+        partID: item.part.id,
+      })
+      return
+    }
+
+    // 思考紧随工具阶段（后接文本等非工具内容）：并入刚结束的阶段组随组折叠，
+    // 不在时间线上单独成行——否则"工具→思考→文本"循环下每步都会有一条"思考完成"。
+    // 前面没有阶段时（轮首思考、两段文本之间）仍独立成行。
+    if (refs.length > 0) {
+      refs.push(...thinking)
+      thinking = []
+    }
+    flush()
+    flushThinking()
+    result.push({
+      key: `part:${item.messageID}:${item.part.id}`,
+      type: "part",
+      ref: {
+        messageID: item.messageID,
+        partID: item.part.id,
+      },
+    })
+  })
+
+  flush()
+  flushThinking()
+  return result
+}
+
+// 组内相邻的 reasoning part 合并为一行，避免展开阶段后仍出现多行"思考完成"。
+function mergeReasoningRuns(groups: PartGroup[], resolve: (ref: PartRef) => PartType | undefined) {
+  const result: PartGroup[] = []
+  let run: PartRef[] = []
+
+  const flush = () => {
+    if (run.length === 0) return
+    const first = run[0]!
+    result.push({
+      key: `reasoning:${first.messageID}:${first.partID}`,
+      type: "reasoning",
+      refs: run,
+    })
+    run = []
+  }
+
+  for (const group of groups) {
+    if (group.type === "part" && resolve(group.ref)?.type === "reasoning") {
+      run.push(group.ref)
+      continue
+    }
+    flush()
+    result.push(group)
+  }
+  flush()
+  return result
+}
+
+// 合并连续 reasoning part 为单个展示对象：文本拼接，时长取 first.start → last.end；
+// 任一段未结束（streaming）时 end 保持 undefined，沿用"思考中"的展开态。
+function mergeReasoningParts(parts: (PartType | undefined)[]) {
+  const list = parts.filter((part): part is ReasoningPart => part?.type === "reasoning" && !!part.text?.trim())
+  const first = list[0]
+  if (!first) return
+  const last = list.at(-1)!
+  return {
+    ...first,
+    text: list.map((part) => part.text.trim()).join("\n\n"),
+    time: {
+      start: first.time?.start ?? Date.now(),
+      end: last.time?.end,
+    },
+  }
+}
+
+// reasoning 组的合并行：连续多段思考渲染为一行，点击展开回看拼接后的完整内容。
+function ReasoningRunDisplay(props: {
+  parts: (PartType | undefined)[]
+  message: AssistantMessage
+  showAssistantCopyPartID?: string | null
+  onCardClick?: (kind: string, config: Record<string, string>) => void
+  isLocalTestCardDisabled?: (kind: string, config: Record<string, string>) => boolean
+}) {
+  const merged = createMemo(
+    () => mergeReasoningParts(props.parts),
+    undefined,
+    // 流式期间上游数组每次重算都是新引用，按内容比较避免下游无谓重建
+    { equals: (a, b) => a?.text === b?.text && a?.time.start === b?.time.start && a?.time.end === b?.time.end },
+  )
+  return (
+    <Show when={merged()}>
+      <Part
+        part={merged()!}
+        message={props.message}
+        showAssistantCopyPartID={props.showAssistantCopyPartID}
+        onCardClick={props.onCardClick}
+        isLocalTestCardDisabled={props.isLocalTestCardDisabled}
+      />
+    </Show>
+  )
+}
+
+function index<T extends { id: string }>(items: readonly T[]) {
+  return new Map(items.map((item) => [item.id, item] as const))
+}
+
+function renderable(part: PartType, showReasoningSummaries = true) {
+  if (part.type === "tool") {
+    if (HIDDEN_TOOLS.has(part.tool)) return false
+    if (part.tool === "question") return true
+    return true
+  }
+  if (part.type === "text") return !!part.text?.trim()
+  if (part.type === "reasoning") return showReasoningSummaries && !!part.text?.trim()
+  return !!PART_MAPPING[part.type]
+}
+
+function toolDefaultOpen(tool: string, shell = false, edit = false) {
+  if (tool === "bash") return shell
+  if (tool === "edit" || tool === "write" || tool === "apply_patch") return edit
+}
+
+function partDefaultOpen(part: PartType | undefined, shell = false, edit = false) {
+  if (!part || part.type !== "tool") return
+  return toolDefaultOpen(part.tool, shell, edit)
+}
+
+function largeOutput(part: ToolPart) {
+  if (part.tool !== "bash") return false
+  const output = (part.state as { output?: unknown } | undefined)?.output
+  if (typeof output !== "string") return false
+  return stripAnsi(output).length > 400
+}
+
+function canInlineSingle(part: PartType | undefined) {
+  if (!part) return false
+  if (part.type !== "tool") return true
+  if (part.tool === "apply_patch") return false
+  if (largeOutput(part)) return false
+  return true
+}
+
+function bashOutputWithoutRender(part: ToolPart) {
+  const raw = (part.state as { output?: unknown } | undefined)?.output
+  if (typeof raw !== "string" || !raw) return ""
+  return splitRenderBlocks(stripAnsi(raw))
+    .filter((item): item is { type: "text"; content: string } => item.type === "text")
+    .map((item) => item.content)
+    .join("")
+    .trim()
+}
+
+export function computeTurnDisplayMode(
+  parts: { messageID: string; part: PartType }[],
+  showReasoningSummaries = true,
+): TurnDisplayMode {
+  const renderableParts = parts.filter((item) => renderable(item.part, showReasoningSummaries))
+  if (renderableParts.length === 1) {
+    const single = renderableParts[0]?.part
+    if (single && canInlineSingle(single)) return "inline_single"
+    return "grouped"
+  }
+  const grouped = groupParts(renderableParts)
+  if (grouped.some((item) => item.type === "context")) return "context_grouped"
+  return "grouped"
+}
+
+function TurnProcessGroup(props: {
+  working?: boolean
+  completed?: boolean
+  failed?: boolean
+  turnDurationMs?: number
+  blockStartMs?: number
+  blockEndMs?: number
+  children: JSX.Element
+}) {
+  const i18n = useI18n()
+  const [open, setOpen] = createSignal(!props.completed)
+  const handleOpenChange = (value: boolean) => {
+    if (!props.completed) return
+    setOpen(value)
+  }
+  createEffect(
+    on(
+      () => !!props.completed,
+      (completed, previous) => {
+        if (!completed) {
+          setOpen(true)
+          return
+        }
+        if (previous === false) setOpen(false)
+      },
+    ),
+  )
+  const [tick, setTick] = createSignal(0)
+  const [finalMs, setFinalMs] = createSignal<number | undefined>(undefined)
+  createEffect(() => {
+    if (!props.working) {
+      if (finalMs() === undefined && typeof props.blockStartMs === "number") {
+        setFinalMs(Math.max(0, Date.now() - props.blockStartMs))
+      }
+      return
+    }
+    const timer = setInterval(() => setTick((t) => t + 1), 1000)
+    onCleanup(() => clearInterval(timer))
+  })
+  const duration = createMemo(() => {
+    let totalMs: number | undefined
+    if (typeof props.turnDurationMs === "number") {
+      totalMs = props.turnDurationMs
+    } else if (props.working) {
+      tick()
+      if (typeof props.blockStartMs === "number") totalMs = Math.max(0, Date.now() - props.blockStartMs)
+    } else {
+      const final = finalMs()
+      if (final !== undefined) totalMs = final
+    }
+    if (totalMs === undefined) return
+    const total = Math.max(0, Math.round(totalMs / 1000))
+    if (total < 60) return i18n.t("ui.message.duration.seconds", { count: total })
+    return i18n.t("ui.message.duration.minutesSeconds", { minutes: Math.floor(total / 60), seconds: total % 60 })
+  })
+  const label = createMemo(() =>
+    i18n.t(!props.completed ? "ui.process.working" : props.failed ? "ui.process.aborted" : "ui.process.completed"),
+  )
+
+  return (
+    <Collapsible
+      open={open()}
+      onOpenChange={handleOpenChange}
+      disabled={!props.completed}
+      variant="ghost"
+      class="tool-collapsible turn-process-collapsible"
+    >
+      <Collapsible.Trigger>
+        <div data-slot="turn-process-header" data-status={props.completed ? "completed" : "running"}>
+          <span data-slot="turn-process-label">
+            <TextShimmer text={label()} active={!props.completed} />
+          </span>
+          <Show when={props.completed}>
+            <span data-slot="turn-process-chevron" aria-hidden="true">
+              <Icon name="tool-arrow-right" class="size-[14px]" containerClass="size-[14px]" />
+            </span>
+          </Show>
+          <Show when={duration()}>
+            {(value) => <span data-slot="turn-process-summary" title={value()}>{value()}</span>}
+          </Show>
+        </div>
+      </Collapsible.Trigger>
+      <div data-slot="turn-process-divider" aria-hidden="true" />
+      <Collapsible.Content forceMount>
+        <div data-slot="turn-process-inner">{props.children}</div>
+      </Collapsible.Content>
+    </Collapsible>
+  )
+}
+
+export function AssistantParts(props: {
+  messages: AssistantMessage[]
+  showAssistantCopyPartID?: string | null
+  turnDurationMs?: number
+  turnCredits?: number | null
+  turnCreditsLoading?: boolean
+  working?: boolean
+  turnDisplayMode?: TurnDisplayMode
+  showReasoningSummaries?: boolean
+  shellToolDefaultOpen?: boolean
+  editToolDefaultOpen?: boolean
+  onFork?: () => Promise<void> | void
+  onRegenerate?: () => void
+  onShare?: () => void
+  onCardClick?: (kind: string, config: Record<string, string>) => void
+  isLocalTestCardDisabled?: (kind: string, config: Record<string, string>) => boolean
+  getParts?: (messageID: string) => PartType[] | undefined
+}) {
+  const data = useData()
+  const i18n = useI18n()
+  const emptyParts: PartType[] = []
+  const msgs = createMemo(() => index(props.messages))
+  const part = createMemo(
+    () =>
+      new Map(
+        props.messages.map((message) => [message.id, index(list(data.store.part?.[message.id], emptyParts))] as const),
+      ),
+  )
+
+  const flattened = createMemo(() => {
+    const parts = props.messages.flatMap((message) =>
+      list(data.store.part?.[message.id], emptyParts).map((part) => ({
+          messageID: message.id,
+          part,
+        })),
+    )
+    return parts.filter((item) => renderable(item.part, props.showReasoningSummaries ?? true))
+  })
+  // 整轮所有消息一起投影，同一阶段的专家卡跨消息合并为一张。
+  const toolPresentationCards = createMemo(() =>
+    projectToolPresentationCards(props.messages.flatMap((message) => list(resolveMessageParts(message.id, props.getParts, data.store.part?.[message.id]), emptyParts))),
+  )
+  // 交付卡提升到轮次尾部常驻（§6.1 折叠修复）：位于过程折叠区与最终文本之后，
+  // 回合收起后卡片仍在折叠头外可见；kdexpert 阶段卡不在其中（仍内联在所属工具 part）。
+  const tailCards = createMemo(() => tailDeliveryCards(toolPresentationCards()))
+  const allParts = createMemo(() => flattened().map((item) => item.part))
+  const turnImageAttachments = createMemo(() =>
+    allParts()
+      .filter((p): p is ToolPart => p.type === "tool" && p.state.status === "completed")
+      .flatMap((p) => (p.state as { attachments?: ToolAttachment[] } | undefined)?.attachments ?? [])
+      .filter((a) => a.mime.startsWith("image/")),
+  )
+  const terminalMessageIDs = createMemo(
+    () =>
+      new Set(
+        props.messages
+          .filter((message) => typeof message.time.completed === "number" || message.error !== undefined)
+          .map((message) => message.id),
+      ),
+  )
+  const toolsRunning = createMemo(() => hasRunningTool(allParts(), terminalMessageIDs()))
+  // working=false 且无运行中工具即视为本轮结束：中止的 turn 消息上可能既无
+  // time.completed 也无 error，按消息字段判定会让过程块永远展开。
+  const turnSettled = createMemo(() => !props.working && !toolsRunning())
+  const finalTextPartIDs = createMemo(() => {
+    if (!turnSettled()) return new Set<string>()
+    // Hidden continuation prompts (async-task result delivery, MAX_STEPS) add
+    // later assistant segments to this same turn. Segment by parentID so the
+    // final text is resolved per prompt: the direct answer to the user's own
+    // message must stay visible instead of being folded into the process block
+    // by the continuation segment that follows it.
+    const parents = new Map(props.messages.map((message) => [message.id, message.parentID] as const))
+    return new Set(
+      segmentedFinalResponseTextPartIDs(
+        flattened().map((item) => ({ parentID: parents.get(item.messageID), part: item.part })),
+      ),
+    )
+  })
+  const processParts = createMemo(() => flattened().filter((item) => !finalTextPartIDs().has(item.part.id)))
+  const finalTextParts = createMemo(() =>
+    flattened()
+      .filter((item) => finalTextPartIDs().has(item.part.id) && item.part.type === "text")
+      .map((item) => ({
+        message: msgs().get(item.messageID),
+        part: item.part as TextPart,
+      }))
+      .filter((item): item is { message: AssistantMessage; part: TextPart } => item.message?.role === "assistant"),
+  )
+  const assistantCopyPartID = createMemo(() => {
+    if (props.showAssistantCopyPartID === null) return null
+    if (props.showAssistantCopyPartID === undefined) return
+    return finalTextParts().at(-1)?.part.id ?? props.showAssistantCopyPartID
+  })
+  const inlineCopyPartID = createMemo(() => (assistantCopyPartID() === undefined ? undefined : null))
+  const failed = createMemo(() => props.messages.some((message) => message.error !== undefined))
+  const completed = createMemo(() => turnSettled())
+
+  const displayMode = createMemo(
+    () => props.turnDisplayMode ?? computeTurnDisplayMode(processParts(), props.showReasoningSummaries ?? true),
+  )
+  const grouped = createMemo(
+    () => {
+      const group = displayMode() === "inline_single" ? groupParts : stageParts
+      return group(processParts())
+    },
+    [] as PartGroup[],
+    { equals: sameGroups },
+  )
+
+  const last = createMemo(() => grouped().at(-1)?.key)
+  const blockStartMs = createMemo(() => {
+    for (const item of processParts()) {
+      const p = item.part as { time?: { start?: number }; state?: { time?: { start?: number } } }
+      const t = p.time ?? p.state?.time
+      if (t && typeof t.start === "number") return t.start
+    }
+  })
+  const blockEndMs = createMemo(() => {
+    let end: number | undefined
+    for (const item of processParts()) {
+      const p = item.part as { time?: { end?: number }; state?: { time?: { end?: number } } }
+      const t = p.time ?? p.state?.time
+      if (t && typeof t.end === "number") end = Math.max(end ?? 0, t.end)
+    }
+    return end
+  })
+
+  return (
+    <div data-component="assistant-parts">
+      <Show when={grouped().length > 0}>
+        <TurnProcessGroup
+          working={props.working}
+          completed={completed()}
+          failed={failed()}
+          turnDurationMs={props.turnDurationMs}
+          blockStartMs={blockStartMs()}
+          blockEndMs={blockEndMs()}
+        >
+      <Index each={grouped()}>
+        {(entryAccessor) => {
+          const entryType = createMemo(() => entryAccessor().type)
+
+          return (
+            <div data-component="assistant-part-group">
+              <Switch>
+                <Match when={entryType() === "tool_stage"}>
+                  {(() => {
+                    const items = createMemo(
+                      () => {
+                        const entry = entryAccessor()
+                        if (entry.type !== "tool_stage") return []
+                        return entry.refs
+                          .map((ref) => {
+                            const item = part().get(ref.messageID)?.get(ref.partID)
+                            const message = msgs().get(ref.messageID)
+                            if (!item || !message || message.role !== "assistant") return
+                            return {
+                              messageID: ref.messageID,
+                              part: item,
+                              message: message as AssistantMessage,
+                            }
+                          })
+                          .filter((item): item is StageItem => !!item)
+                      },
+                      [] as StageItem[],
+                       { equals: same },
+                    )
+                    const busy = createMemo(() => props.working && last() === entryAccessor().key)
+                    return (
+                      <Show when={items().length > 0}>
+                        <ToolStageGroup
+                          stageKey={entryAccessor().key}
+                          items={items()}
+                          busy={busy()}
+                          working={props.working}
+                          isLastStage={last() === entryAccessor().key}
+                          hasFollowingText={(() => {
+                            const tail = items().at(-1)?.part.id
+                            const index = flattened().findIndex((item) => item.part.id === tail)
+                            return index >= 0 && flattened().slice(index + 1).some((item) => item.part.type === "text" && !!item.part.text.trim())
+                          })()}
+                          showAssistantCopyPartID={inlineCopyPartID()}
+                          turnDurationMs={props.turnDurationMs}
+                          shellToolDefaultOpen={props.shellToolDefaultOpen}
+                          editToolDefaultOpen={props.editToolDefaultOpen}
+                          onRegenerate={props.onRegenerate}
+                          onShare={props.onShare}
+                          onCardClick={props.onCardClick}
+                          isLocalTestCardDisabled={props.isLocalTestCardDisabled}
+                        />
+                      </Show>
+                    )
+                  })()}
+                </Match>
+                <Match when={entryType() === "part"}>
+                  {(() => {
+                    const message = createMemo(() => {
+                      const entry = entryAccessor()
+                      if (entry.type !== "part") return
+                      return msgs().get(entry.ref.messageID)
+                    })
+                    const item = createMemo(() => {
+                      const entry = entryAccessor()
+                      if (entry.type !== "part") return
+                      return part().get(entry.ref.messageID)?.get(entry.ref.partID)
+                    })
+
+                    return (
+                      <Show when={message()}>
+                        <Show when={item()}>
+                          <Part
+                            part={item()!}
+                            message={message()!}
+                            showAssistantCopyPartID={inlineCopyPartID()}
+                            turnDurationMs={props.turnDurationMs}
+                            defaultOpen={partDefaultOpen(
+                              item()!,
+                              props.shellToolDefaultOpen,
+                              props.editToolDefaultOpen,
+                            )}
+                            onRegenerate={props.onRegenerate}
+                            onShare={props.onShare}
+                            onCardClick={props.onCardClick}
+                            isLocalTestCardDisabled={props.isLocalTestCardDisabled}
+                          />
+                        </Show>
+                      </Show>
+                    )
+                  })()}
+                </Match>
+                <Match when={entryType() === "reasoning"}>
+                  {(() => {
+                    const merged = createMemo(() => {
+                      const entry = entryAccessor()
+                      if (entry.type !== "reasoning") return
+                      const parts = entry.refs.map((ref) => part().get(ref.messageID)?.get(ref.partID))
+                      const message = msgs().get(entry.refs.at(-1)!.messageID)
+                      if (!message || message.role !== "assistant") return
+                      return { parts, message: message as AssistantMessage }
+                    })
+                    return (
+                      <Show when={merged()}>
+                        <ReasoningRunDisplay
+                          parts={merged()?.parts ?? []}
+                          message={merged()?.message as AssistantMessage}
+                          showAssistantCopyPartID={inlineCopyPartID()}
+                          onCardClick={props.onCardClick}
+                          isLocalTestCardDisabled={props.isLocalTestCardDisabled}
+                        />
+                      </Show>
+                    )
+                  })()}
+                </Match>
+              </Switch>
+            </div>
+          )
+        }}
+      </Index>
+      </TurnProcessGroup>
+      </Show>
+      <For each={finalTextParts()}>
+        {(item, idx) => (
+          <Part
+            part={item.part}
+            message={item.message}
+            showAssistantCopyPartID={assistantCopyPartID()}
+            turnDurationMs={props.turnDurationMs}
+            turnCredits={props.turnCredits}
+            turnCreditsLoading={props.turnCreditsLoading}
+            onFork={props.onFork}
+            onRegenerate={props.onRegenerate}
+            onShare={props.onShare}
+            onCardClick={props.onCardClick}
+            isLocalTestCardDisabled={props.isLocalTestCardDisabled}
+            imageAttachments={turnImageAttachments()}
+            tailCards={idx() === finalTextParts().length - 1 ? tailCards() : undefined}
+          />
+        )}
+      </For>
+      {/* finalTextParts 为空时（轮次未产出总结文本）仍需展示交付卡 */}
+      <Show when={finalTextParts().length === 0 && tailCards().length > 0}>
+        <For each={tailCards()}>
+          {(card) => (
+            <RenderCard
+              kind={card.kind}
+              config={card}
+              localTestDisabled={props.isLocalTestCardDisabled?.(card.kind, card)}
+              onCardClick={props.onCardClick}
+            />
+          )}
+        </For>
+      </Show>
+    </div>
+  )
+}
+
+function isContextGroupTool(part: PartType): part is ToolPart {
+  return part.type === "tool" && CONTEXT_GROUP_TOOLS.has(part.tool)
+}
+
+function contextToolDetail(part: ToolPart): string | undefined {
+  const info = getToolInfo(part.tool, part.state?.input ?? {})
+  if (info.subtitle) return info.subtitle
+  if (part.state?.status === "error") return part.state.error
+  if ((part.state?.status === "running" || part.state?.status === "completed") && part.state.title)
+    return part.state.title
+  const description = part.state?.input?.description
+  if (typeof description === "string") return description
+  return undefined
+}
+
+function stageToolSummary(parts: ToolPart[], i18n: ReturnType<typeof useI18n>) {
+  const skill = parts.filter((part) => part.tool === "skill").length
+  const explore = parts.filter((part) => CONTEXT_GROUP_TOOLS.has(part.tool)).length
+  const shell = parts.filter((part) => part.tool === "bash").length
+  const patch = parts.filter((part) => part.tool === "edit" || part.tool === "write" || part.tool === "apply_patch").length
+  const known = skill + explore + shell + patch
+  const extra = Math.max(0, parts.length - known)
+  const items: string[] = []
+  if (explore > 0) items.push(i18n.t("ui.toolStage.summary.explore", { count: explore }))
+  if (patch > 0) items.push(i18n.t("ui.toolStage.summary.patch", { count: patch }))
+  if (shell > 0) items.push(i18n.t("ui.toolStage.summary.shell", { count: shell }))
+  if (skill > 0) items.push(i18n.t("ui.toolStage.summary.skill", { count: skill }))
+  if (extra > 0) items.push(i18n.t("ui.toolStage.summary.other", { count: extra }))
+  return items.join(" \u00B7 ")
+}
+
+function stageToolLast(parts: ToolPart[]) {
+  const part = parts.at(-1)
+  if (!part) return ""
+  const info = getToolInfo(part.tool, part.state?.input ?? {})
+  return (info.subtitle || contextToolDetail(part) || info.title)?.trim() || info.title
+}
+
+function stageToolLabel(status: "running" | "error" | "completed", i18n: ReturnType<typeof useI18n>) {
+  if (status === "running") return i18n.t("ui.toolStage.status.running")
+  if (status === "error") return i18n.t("ui.toolErrorCard.failed")
+  return i18n.t("ui.toolStage.status.completed")
+}
+
+type StageItem = {
+  messageID: string
+  message: AssistantMessage
+  part: PartType
+}
+
+function ToolStageStatusRow(props: {
+  status: "running" | "error" | "completed"
+  label: string
+  summary?: string
+  action?: JSX.Element
+}) {
+  return (
+    <div data-component="tool-stage-group-trigger" data-static={props.action ? undefined : "true"}>
+      <div data-component="tool-trigger" data-tool-kind="tool-stage" data-stage-status={props.status}>
+        <div data-slot="basic-tool-tool-trigger-content">
+          <div data-slot="basic-tool-tool-info">
+            <div data-slot="basic-tool-tool-info-structured">
+              <div data-slot="basic-tool-tool-info-main">
+                <span data-slot="tool-stage-status-icon" data-status={props.status} aria-hidden="true">
+                  <Switch>
+                    <Match when={props.status === "running"}>
+                      <Icon name="loading" size="small" />
+                    </Match>
+                    <Match when={props.status === "error"}>
+                      <Icon name="action-failed" size="small" />
+                    </Match>
+                    <Match when={props.status === "completed"}>
+                      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 14 14" fill="none">
+                        <path d="M8.76563 4.55094C8.9488 4.28592 9.31237 4.21966 9.57739 4.40283C9.84215 4.58605 9.90853 4.94911 9.7255 5.21403L6.70972 9.57764C6.60913 9.72313 6.4475 9.81509 6.27108 9.82772C6.09471 9.84027 5.9219 9.77223 5.80168 9.64258L4.16561 7.87777C3.94661 7.64153 3.96072 7.2725 4.19694 7.05347C4.43318 6.83447 4.80221 6.84858 5.02124 7.0848L6.16284 8.31584L8.76563 4.55094Z" fill="currentColor"/>
+                        <path fill-rule="evenodd" clip-rule="evenodd" d="M6.99967 0.583252C10.5435 0.583252 13.4163 3.45609 13.4163 6.99992C13.4163 10.5437 10.5435 13.4166 6.99967 13.4166C3.45585 13.4166 0.583008 10.5437 0.583008 6.99992C0.583008 3.45609 3.45585 0.583252 6.99967 0.583252ZM6.99967 1.74992C4.10018 1.74992 1.74967 4.10042 1.74967 6.99992C1.74967 9.89941 4.10018 12.2499 6.99967 12.2499C9.89917 12.2499 12.2497 9.89941 12.2497 6.99992C12.2497 4.10042 9.89917 1.74992 6.99967 1.74992Z" fill="currentColor"/>
+                      </svg>
+                    </Match>
+                  </Switch>
+                </span>
+                <span data-slot="basic-tool-tool-title" title={props.label}>{props.label}</span>
+                <Show when={props.summary}>
+                  <span data-slot="basic-tool-tool-subtitle" class="tool-stage-group-summary" title={props.summary}>
+                    {props.summary}
+                  </span>
+                </Show>
+              </div>
+            </div>
+          </div>
+        </div>
+        {props.action}
+      </div>
+    </div>
+  )
+}
+
+function ToolStageGroup(props: {
+  stageKey: string
+  items: StageItem[]
+  busy?: boolean
+  working?: boolean
+  isLastStage?: boolean
+  hasFollowingText?: boolean
+  showAssistantCopyPartID?: string | null
+  turnDurationMs?: number
+  shellToolDefaultOpen?: boolean
+  editToolDefaultOpen?: boolean
+  onRegenerate?: () => void
+  onShare?: () => void
+  onCardClick?: (kind: string, config: Record<string, string>) => void
+  isLocalTestCardDisabled?: (kind: string, config: Record<string, string>) => boolean
+}) {
+  const i18n = useI18n()
+  const emptyTools: ToolPart[] = []
+  const [open, setOpen] = createSignal(false)
+  let userInteracted = false
+  let autoCollapsed = false
+  let toolListRef: HTMLDivElement | undefined
+  let followToolList = true
+  const handleToolListScroll = () => {
+    if (!toolListRef) return
+    followToolList = toolListRef.scrollHeight - toolListRef.clientHeight - toolListRef.scrollTop <= 24
+  }
+  const handleOpenChange = (value: boolean) => {
+    userInteracted = true
+    setOpen(value)
+  }
+  const byRef = createMemo(
+    () =>
+      new Map(
+        props.items.map((item) => [`${item.messageID}:${item.part.id}`, item] as const),
+      ),
+  )
+  const tools = createMemo(
+    () => props.items.map((item) => item.part).filter((part): part is ToolPart => part.type === "tool"),
+    emptyTools,
+    { equals: same },
+  )
+  const grouped = createMemo(
+    () =>
+      mergeReasoningRuns(
+        groupParts(props.items.map((item) => ({ messageID: item.messageID, part: item.part }))),
+        (ref) => byRef().get(`${ref.messageID}:${ref.partID}`)?.part,
+      ),
+    [] as PartGroup[],
+    { equals: sameGroups },
+  )
+  const status = createMemo(() => {
+    if (!!props.busy) return "running" as const
+    const toolStatus = stageToolStatus(tools())
+    // 当父会话已不再工作（idle/aborted），但工具 state 仍为 running/pending，
+    // 说明后端 cleanup 尚未完成或子会话未被及时级联取消，视为中断状态显示 error。
+    if (toolStatus === "running" && !props.working) return "error" as const
+    return toolStatus
+  })
+  const summary = createMemo(() => stageToolSummary(tools(), i18n))
+  const last = createMemo(() => stageToolLast(tools()))
+
+  createEffect(
+    on([status, () => !!props.hasFollowingText], ([current, hasFollowingText]) => {
+      if (userInteracted) return
+      if (current === "completed" && hasFollowingText) {
+        autoCollapsed = true
+        setOpen(false)
+        return
+      }
+      if (current === "running" && !autoCollapsed) {
+        setOpen(true)
+      }
+    }),
+  )
+
+  createEffect(() => {
+    tools().length
+    const shouldFollow = open() && status() === "running" && followToolList
+    if (!shouldFollow) return
+    const frame = requestAnimationFrame(() => {
+      if (toolListRef && followToolList) toolListRef.scrollTop = toolListRef.scrollHeight
+    })
+    onCleanup(() => cancelAnimationFrame(frame))
+  })
+
+  return (
+    <Show when={tools().length > 0}>
+      <Collapsible open={open()} onOpenChange={handleOpenChange} variant="ghost" class="tool-collapsible tool-stage-collapsible">
+        <Collapsible.Trigger data-hide-details="true">
+          <ToolStageStatusRow
+            status={status()}
+            label={status() === "completed" ? (summary() || stageToolLabel(status(), i18n)) : stageToolLabel(status(), i18n)}
+            summary={status() === "completed" ? undefined : summary()}
+            action={
+              <span data-slot="basic-tool-tool-action" data-slot-kind="tool-stage-action" class="text-[var(--neutral-400)] w-[14px] h-[14px] cursor-pointer [--icon-fill:var(--neutral-500)]">
+                <span data-slot="tool-stage-last">{last()}</span>
+                <span data-slot="tool-stage-chevron" aria-hidden="true">
+                  <Icon name="tool-arrow-right" class="size-[14px]" containerClass="size-[14px]"/>
+                </span>
+              </span>
+            }
+          />
+        </Collapsible.Trigger>
+        <Collapsible.Content forceMount>
+          <div data-slot="stage-collapsible-inner">
+            <div
+              ref={(el) => (toolListRef = el)}
+              onScroll={handleToolListScroll}
+              data-scrollable
+              data-component="tool-stage-group-list"
+              data-stage-key={props.stageKey}
+            >
+              <Index each={grouped()}>
+                {(entryAccessor) => {
+                  const entryType = createMemo(() => entryAccessor().type)
+
+                  return (
+                    <Switch>
+                      <Match when={entryType() === "context"}>
+                        {(() => {
+                          const contextItems = createMemo(
+                            () => {
+                              const entry = entryAccessor()
+                              if (entry.type !== "context") return []
+                              return entry.refs
+                                .map((ref) => byRef().get(`${ref.messageID}:${ref.partID}`))
+                                .filter((item): item is StageItem => !!item && isContextGroupTool(item.part))
+                            },
+                            [] as StageItem[],
+                          )
+
+                          return (
+                            <For each={contextItems()}>
+                              {(item) => (
+                                <Part
+                                  part={item.part}
+                                  message={item.message}
+                                  compactToolRow
+                                  showAssistantCopyPartID={props.showAssistantCopyPartID}
+                                  turnDurationMs={props.turnDurationMs}
+                                  autoOpenWhenSingle={canInlineSingle(item.part)}
+                                  defaultOpen={partDefaultOpen(
+                                    item.part,
+                                    props.shellToolDefaultOpen,
+                                    props.editToolDefaultOpen,
+                                  )}
+                                  onRegenerate={props.onRegenerate}
+                                  onShare={props.onShare}
+                                  onCardClick={props.onCardClick}
+                                  isLocalTestCardDisabled={props.isLocalTestCardDisabled}
+                                />
+                              )}
+                            </For>
+                          )
+                        })()}
+                      </Match>
+                      <Match when={entryType() === "part"}>
+                        {(() => {
+                          const item = createMemo(() => {
+                            const entry = entryAccessor()
+                            if (entry.type !== "part") return
+                            return byRef().get(`${entry.ref.messageID}:${entry.ref.partID}`)
+                          })
+
+                          return (
+                            <Show when={item()}>
+                              <Part
+                                part={item()?.part as PartType}
+                                message={item()?.message as AssistantMessage}
+                                compactToolRow
+                                showAssistantCopyPartID={props.showAssistantCopyPartID}
+                                turnDurationMs={props.turnDurationMs}
+                                autoOpenWhenSingle={canInlineSingle(item()?.part)}
+                                defaultOpen={partDefaultOpen(
+                                  item()?.part,
+                                  props.shellToolDefaultOpen,
+                                  props.editToolDefaultOpen,
+                                )}
+                                onRegenerate={props.onRegenerate}
+                                onShare={props.onShare}
+                                onCardClick={props.onCardClick}
+                                isLocalTestCardDisabled={props.isLocalTestCardDisabled}
+                              />
+                            </Show>
+                          )
+                        })()}
+                      </Match>
+                      <Match when={entryType() === "reasoning"}>
+                        {(() => {
+                          const merged = createMemo(() => {
+                            const entry = entryAccessor()
+                            if (entry.type !== "reasoning") return
+                            const parts = entry.refs.map((ref) => byRef().get(`${ref.messageID}:${ref.partID}`)?.part)
+                            const message = byRef().get(`${entry.refs.at(-1)!.messageID}:${entry.refs.at(-1)!.partID}`)?.message
+                            if (!message) return
+                            return { parts, message }
+                          })
+                          return (
+                            <Show when={merged()}>
+                              <ReasoningRunDisplay
+                                parts={merged()?.parts ?? []}
+                                message={merged()?.message as AssistantMessage}
+                                showAssistantCopyPartID={props.showAssistantCopyPartID}
+                                onCardClick={props.onCardClick}
+                                isLocalTestCardDisabled={props.isLocalTestCardDisabled}
+                              />
+                            </Show>
+                          )
+                        })()}
+                      </Match>
+                    </Switch>
+                  )
+                }}
+              </Index>
+            </div>
+          </div>
+        </Collapsible.Content>
+      </Collapsible>
+    </Show>
+  )
+}
+
+function ExaOutput(props: { output?: string }) {
+  const links = createMemo(() => urls(props.output))
+
+  return (
+    <Show when={links().length > 0}>
+      <div data-component="exa-tool-output">
+        <div data-slot="exa-tool-links">
+          <For each={links()}>
+            {(url) => (
+              <a
+                data-slot="exa-tool-link"
+                href={url}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={(event) => event.stopPropagation()}
+              >
+                {url}
+              </a>
+            )}
+          </For>
+        </div>
+      </div>
+    </Show>
+  )
+}
+
+export function registerPartComponent(type: string, component: PartComponent) {
+  PART_MAPPING[type] = component
+}
+
+export function Message(props: MessageProps) {
+  return (
+    <Show when={props.message}>
+      {(message) => (
+        <Switch>
+          <Match when={message().role === "user"}>
+            <UserMessageDisplay
+              message={message() as UserMessage}
+              parts={props.parts}
+              actions={props.actions}
+              onCardClick={props.onCardClick}
+              onShare={props.onShare}
+            />
+          </Match>
+          <Match when={message().role === "assistant"}>
+            <AssistantMessageDisplay
+              message={message() as AssistantMessage}
+              parts={props.parts}
+              showAssistantCopyPartID={props.showAssistantCopyPartID}
+              showReasoningSummaries={props.showReasoningSummaries}
+              onCardClick={props.onCardClick}
+              isLocalTestCardDisabled={props.isLocalTestCardDisabled}
+            />
+          </Match>
+        </Switch>
+      )}
+    </Show>
+  )
+}
+
+export function AssistantMessageDisplay(props: {
+  message: AssistantMessage
+  parts: PartType[]
+  showAssistantCopyPartID?: string | null
+  showReasoningSummaries?: boolean
+  onCardClick?: (kind: string, config: Record<string, string>) => void
+  isLocalTestCardDisabled?: (kind: string, config: Record<string, string>) => boolean
+}) {
+  const part = createMemo(() => index(props.parts))
+  const flattened = createMemo(() =>
+    props.parts
+      .filter((part) => renderable(part, props.showReasoningSummaries ?? true))
+      .map((part) => ({
+        messageID: props.message?.id ?? "",
+        part,
+      })),
+  )
+  const displayMode = createMemo(() => computeTurnDisplayMode(flattened(), props.showReasoningSummaries ?? true))
+  const grouped = createMemo(
+    () => (displayMode() === "inline_single" ? groupParts(flattened()) : stageParts(flattened())),
+    [] as PartGroup[],
+    { equals: sameGroups },
+  )
+
+  const messageImageAttachments = createMemo(() =>
+    props.parts
+      .filter((p): p is ToolPart => p.type === "tool" && (p as ToolPart).state?.status === "completed")
+      .flatMap((p) => ((p as ToolPart).state as { attachments?: ToolAttachment[] } | undefined)?.attachments ?? [])
+      .filter((a) => a.mime.startsWith("image/")),
+  )
+
+  return (
+    <>
+      <Index each={grouped()}>
+        {(entryAccessor) => {
+          const entryType = createMemo(() => entryAccessor().type)
+
+          return (
+            <Switch>
+              <Match when={entryType() === "tool_stage"}>
+                {(() => {
+                  const items = createMemo(
+                    () => {
+                      const entry = entryAccessor()
+                      if (entry.type !== "tool_stage") return []
+                      return entry.refs
+                        .map((ref) => {
+                          const item = part().get(ref.partID)
+                          if (!item) return
+                          return {
+                            messageID: ref.messageID,
+                            part: item,
+                            message: props.message,
+                          }
+                        })
+                        .filter((item): item is StageItem => !!item)
+                    },
+                    [] as StageItem[],
+                  )
+
+                  return (
+                    <Show when={items().length > 0}>
+                      <ToolStageGroup stageKey={entryAccessor().key} items={items()} onCardClick={props.onCardClick} isLocalTestCardDisabled={props.isLocalTestCardDisabled} />
+                    </Show>
+                  )
+                })()}
+              </Match>
+            <Match when={entryType() === "part"}>
+              {(() => {
+                const item = createMemo(() => {
+                  const entry = entryAccessor()
+                  if (entry.type !== "part") return
+                  return part().get(entry.ref.partID)
+                })
+
+                return (
+                  <Show when={item()}>
+                    <Part
+                      part={item()!}
+                      message={props.message}
+                      singleStep={displayMode() === "inline_single"}
+                      autoOpenWhenSingle={canInlineSingle(item()!)}
+                      showAssistantCopyPartID={props.showAssistantCopyPartID}
+                      onCardClick={props.onCardClick}
+                      isLocalTestCardDisabled={props.isLocalTestCardDisabled}
+                    />
+                  </Show>
+                )
+              })()}
+            </Match>
+            <Match when={entryType() === "reasoning"}>
+              {(() => {
+                const merged = createMemo(() => {
+                  const entry = entryAccessor()
+                  if (entry.type !== "reasoning") return
+                  return { parts: entry.refs.map((ref) => part().get(ref.partID)), message: props.message }
+                })
+                return (
+                  <Show when={merged()}>
+                    <ReasoningRunDisplay
+                      parts={merged()?.parts ?? []}
+                      message={merged()?.message as AssistantMessage}
+                      showAssistantCopyPartID={props.showAssistantCopyPartID}
+                      onCardClick={props.onCardClick}
+                      isLocalTestCardDisabled={props.isLocalTestCardDisabled}
+                    />
+                  </Show>
+                )
+              })()}
+            </Match>
+          </Switch>
+        )
+      }}
+    </Index>
+      <Show when={messageImageAttachments().length > 0}>
+        <div data-component="assistant-message-attachments" style={{ display: "flex", "flex-wrap": "wrap", gap: "12px", "margin-top": "8px" }}>
+          <For each={messageImageAttachments()}>
+            {(img) => (
+              <img
+                src={img.url}
+                alt={img.filename ?? "Generated image"}
+                style={{ "max-width": "100%", "border-radius": "8px" }}
+              />
+            )}
+          </For>
+        </div>
+      </Show>
+    </>
+  )
+}
+
+export function UserMessageDisplay(props: {
+  message: UserMessage
+  parts: PartType[]
+  actions?: UserActions
+  onCardClick?: (kind: string, config: Record<string, string>) => void
+  onShare?: () => void
+}) {
+  const data = useData()
+  const dialog = useDialog()
+  const i18n = useI18n()
+  const [state, setState] = createStore({
+    copied: false,
+    busy: false,
+  })
+  const copied = () => state.copied
+  const busy = () => state.busy
+
+  const textPart = createMemo(
+    () => props.parts?.find((p) => p.type === "text" && !(p as TextPart).synthetic) as TextPart | undefined,
+  )
+
+  const text = createMemo(() => {
+    const part = textPart()
+    if (!part) return ""
+    const origin = part.metadata?.origin
+    if (typeof origin === "string") return origin
+    return part.text || ""
+  })
+
+  const files = createMemo(() => (props.parts?.filter((p) => p.type === "file") as FilePart[]) ?? [])
+  // v2 rules：@ 引用规则在用户气泡以 chip 展示（名称 + hover 完整路径），不走文件附件卡片。
+  const rules = createMemo(() => (props.parts?.filter((p) => p.type === "rule") as RulePart[]) ?? [])
+
+  // 规则在消息文本中的 @提及 区间：rule part 不携带 source 位置，按 "@name" 文本定位。
+  // 要求匹配后不紧跟名称字符，避免 @verify 误命中 @verify_副本2 的前缀。
+  const ruleRefs = createMemo(() => {
+    const body = text()
+    if (!body) return []
+    return rules().flatMap((rule) => {
+      if (!rule.name) return []
+      const needle = `@${rule.name}`
+      const start = body.indexOf(needle)
+      if (start === -1) return []
+      const after = body[start + needle.length]
+      if (after && /[\w\-.]/.test(after)) return []
+      return [{ start, end: start + needle.length, name: rule.name, path: rule.path }]
+    })
+  })
+
+  const attachments = createMemo(() => files().filter(attached))
+
+  const inlineFiles = createMemo(() => files().filter(inline))
+
+  const agents = createMemo(() => (props.parts?.filter((p) => p.type === "agent") as AgentPart[]) ?? [])
+  const originAgentMentions = createMemo(() => {
+    const part = textPart()
+    const raw = part?.metadata?.agentMentions
+    if (!Array.isArray(raw)) return [] as Array<{ start: number; end: number; value: string; name?: string }>
+    return raw.flatMap((item) => {
+      if (!item || typeof item !== "object") return []
+      const start = (item as { start?: unknown }).start
+      const end = (item as { end?: unknown }).end
+      const value = (item as { value?: unknown }).value
+      const name = (item as { name?: unknown }).name
+      if (typeof start !== "number" || typeof end !== "number" || typeof value !== "string") return []
+      if (start < 0 || end < start || !value.startsWith("@")) return []
+      return [{ start, end, value, name: typeof name === "string" ? name : undefined }]
+    })
+  })
+  const skills = createMemo(() => agents().filter((agent) => agent.name && agent.source?.value?.startsWith("/")))
+  const appContextAppName = createMemo(() => {
+    const part = props.parts?.find((p) => p.type === "text" && (p as TextPart).metadata?.appContext) as TextPart | undefined
+    return ((part?.metadata as { appName?: string } | undefined)?.appName) ?? ""
+  })
+  const compact = createMemo(() => {
+    if (skills().length === 0) return text()
+    const line = tail(text())
+    const stripped = skills().reduce((memo, item) => {
+      const bySource = item.source?.value?.trim()
+      const byName = item.name ? `/${item.name.trim()}` : undefined
+      const tokens = [bySource, byName].filter((token): token is string => !!token)
+      return tokens.reduce((value, token) => value.replace(token, "").trim(), memo)
+    }, line)
+    return stripped.replace(/^[\s,:：，-]+/, "").trim()
+  })
+  const skillDetail = createMemo(() => {
+    if (skills().length === 0) return undefined
+    const lines = text()
+      .split("\n")
+      .map((line) => line.trim())
+      .filter((line) => !!line)
+    if (lines.length <= 1) return undefined
+    return intro(lines.slice(0, -1).join("\n"))
+  })
+
+  const model = createMemo(() => {
+    if (!props.message) return ""
+    const providerID = props.message.model?.providerID
+    const modelID = props.message.model?.modelID
+    if (!providerID || !modelID) return ""
+    // 优先使用消息自身携带的 modelLevel（用户提交时写入），避免同 modelId 多配置导致显示不一致
+    const storedLevel = (props.message.model as { modelLevel?: string } | undefined)?.modelLevel
+    // 同 modelId 可能对应多条 MaaS 配置（不同 lingeeModelId），优先按 lingeeModelId 精确匹配模型条目
+    const lingeeModelId = props.message.model?.lingeeModelId
+    const match = data.store.provider?.all?.find((p) => p.id === providerID)
+    const modelEntry = match?.models?.[lingeeModelId ?? modelID]
+    const modelLevel = storedLevel ?? (modelEntry as { modelLevel?: string } | undefined)?.modelLevel
+    // kingdee-maas 模型显示名必须由 modelLevel 派生，与模型选择器保持一致；
+    // provider models 中的 name 可能因缓存/数据时序与当前 modelLevel 不一致。
+    if (providerID === "kingdee-maas" && modelLevel) {
+      return getModelDisplayName(modelID, modelEntry?.name ?? modelID, i18n.t, 0, modelLevel)
+    }
+    // 优先使用 provider models 列表中已注入的 name 字段（已包含序号或国际化处理）
+    if (modelEntry?.name) return modelEntry.name
+    // 兜底：调用 getModelDisplayName 通过 modelLevel 进行国际化（无序号上下文，使用默认 index=0）
+    return getModelDisplayName(modelID, modelID, i18n.t, 0, modelLevel)
+  })
+  const timefmt = createMemo(
+    () =>
+      new Intl.DateTimeFormat("en-GB", {
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: false,
+      }),
+  )
+
+  const stamp = createMemo(() => {
+    const created = props.message?.time?.created
+    if (typeof created !== "number") return ""
+    const parts = timefmt().formatToParts(created)
+    const get = (type: Intl.DateTimeFormatPartTypes) => parts.find((p) => p.type === type)?.value ?? ""
+    return `${get("month")}-${get("day")} ${get("hour")}:${get("minute")}`
+  })
+
+  const metaHead = createMemo(() => {
+    const agent = props.message?.agent
+    const items = [agent ? agent[0]?.toUpperCase() + agent.slice(1) : "", model()]
+    return items.filter((x) => !!x).join("\u00A0\u00B7\u00A0")
+  })
+
+  const metaTail = stamp
+
+  const openImagePreview = (url: string, alt?: string) => {
+    dialog.show(() => <ImagePreview src={url} alt={alt} />)
+  }
+
+  const handleCopy = async () => {
+    const content = text()
+    if (!content) return
+
+    // 有技能时构造 text/html，使粘贴时 parseClipboardHTML 能从 pill DOM 重建 pill
+    const refs = skills()
+      .filter((s) => s.source?.start !== undefined && s.source?.end !== undefined)
+      .map((s) => ({ start: s.source!.start!, end: s.source!.end!, name: s.name, content: s.source?.value ?? `/${s.name}` }))
+      .sort((a, b) => a.start - b.start)
+
+    if (refs.length > 0 && typeof ClipboardItem !== "undefined" && navigator.clipboard?.write) {
+      const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;")
+      let html = ""
+      let lastIndex = 0
+      for (const ref of refs) {
+        if (ref.start < lastIndex) continue
+        if (ref.start > lastIndex) html += esc(content.slice(lastIndex, ref.start))
+        html += `<span data-type="agent" data-name="${esc(ref.name)}" data-content="${esc(ref.content)}">${esc(content.slice(ref.start, ref.end))}</span>`
+        lastIndex = ref.end
+      }
+      if (lastIndex < content.length) html += esc(content.slice(lastIndex))
+
+      try {
+        await navigator.clipboard.write([new ClipboardItem({
+          "text/plain": new Blob([content], { type: "text/plain" }),
+          "text/html": new Blob([html], { type: "text/html" }),
+        })])
+        setState("copied", true)
+        setTimeout(() => setState("copied", false), 2000)
+        return
+      } catch {
+        // 降级到 writeText
+      }
+    }
+
+    await navigator.clipboard.writeText(content)
+    setState("copied", true)
+    setTimeout(() => setState("copied", false), 2000)
+  }
+
+  const [expanded, setExpanded] = createSignal(false)
+  const [overflow, setOverflow] = createSignal(false)
+  let textInnerRef: HTMLDivElement | undefined
+
+  createEffect(() => {
+    const el = textInnerRef
+    if (!el) return
+    const _ = text()
+
+    const check = () => {
+      setOverflow(el.scrollHeight > el.clientHeight + 1)
+    }
+
+    const ro = new ResizeObserver(check)
+    ro.observe(el)
+    const parent = el.parentElement
+    if (parent) ro.observe(parent)
+
+    check()
+
+    onCleanup(() => ro.disconnect())
+  })
+
+  const revert = () => {
+    const act = props.actions?.revert
+    if (!act || busy()) return
+    setState("busy", true)
+    void Promise.resolve()
+      .then(() =>
+        act({
+          sessionID: props.message.sessionID,
+          messageID: props.message.id,
+        }),
+      )
+      .finally(() => setState("busy", false))
+  }
+
+  // 子agent会话中，task 工具自动发送的首条 user message（"Task: 描述\n\n prompt"）
+  // 改为和父会话 task-tool-card 一致的卡片样式展示，而不是普通文本气泡。
+  const session = createMemo(() => data.store.session?.find((item) => item.id === props.message?.sessionID))
+  const taskParentID = createMemo(() => session()?.parentID)
+  const firstUserMessageID = createMemo(() => {
+    const messages = data.store.message?.[props.message?.sessionID]
+    return messages?.find((item) => item.role === "user")?.id
+  })
+  const isTaskEntry = createMemo(() => !!taskParentID() && props.message?.id === firstUserMessageID())
+  const taskDisplay = createMemo(() => taskSessionDisplay(session()?.title))
+  const taskAgentInfo = createMemo(() => {
+    return taskAgent(taskDisplay().agent, data.store.agent)
+  })
+  const taskTitle = createMemo(() => taskDisplay().title)
+  const taskRole = createMemo(() => taskDisplay().role ?? i18n.t("ui.tool.task.role"))
+  const taskStatus = createMemo(() => {
+    const uid = firstUserMessageID()
+    const assistants = (data.store.message?.[props.message?.sessionID] ?? []).filter(
+      (item): item is AssistantMessage => item.role === "assistant" && item.parentID === uid,
+    )
+    if (assistants.some((item) => item.error && item.error.name !== "MessageAbortedError")) return "error" as const
+    // 中止的 turn 后端也会写 time.completed，必须先于 completed 判断
+    if (assistants.some((item) => item.error?.name === "MessageAbortedError")) return "aborted" as const
+    if (assistants.length > 0 && assistants.every((item) => typeof item.time.completed === "number"))
+      return "completed" as const
+    return "running" as const
+  })
+  const taskStatusText = createMemo(() => {
+    const status = taskStatus()
+    if (status === "error") return i18n.t("ui.tool.task.status.error")
+    if (status === "aborted") return i18n.t("ui.tool.task.status.aborted")
+    if (status === "completed") return i18n.t("ui.tool.task.status.completed")
+    return i18n.t("ui.tool.task.status.running")
+  })
+  // 头像从预设的头像素材集合中根据子agent会话 id 确定性地“随机”选取，避免重新渲染时头像跳变。
+  const avatarImage = createMemo(() => pickAvatar(session()?.id ?? props.message?.sessionID ?? ""))
+
+  return (
+    <Show
+      when={!isTaskEntry()}
+      fallback={
+        <div data-component="user-message" data-variant="task-entry">
+          <div data-component="task-tool-card">
+            <div data-component="task-tool-card-header">
+              <span
+                data-component="task-tool-card-avatar"
+                data-tool-status={taskStatus()}
+                aria-hidden="true"
+                style={taskAgentInfo().color ? { "background-color": taskAgentInfo().color } : undefined}
+              >
+                <img src={avatarImage()} alt="" data-component="task-tool-card-avatar-image" draggable={false} />
+              </span>
+              <span data-component="task-tool-card-role">{taskRole()}</span>
+              <span data-component="task-tool-card-status" data-tool-status={taskStatus()}>
+                <TextShimmer text={taskStatusText()} active={taskStatus() === "running"} />
+              </span>
+            </div>
+            <Show when={taskTitle()}>
+              <div data-component="task-tool-card-title">{taskTitle()}</div>
+            </Show>
+          </div>
+        </div>
+      }
+    >
+    <div data-component="user-message">
+      <Show when={attachments().length > 0}>
+        <div data-slot="user-message-attachments">
+          <For each={attachments()}>
+            {(file) => {
+              const type = kind(file)
+              const isDir = file.mime === "application/x-directory"
+              const name = file.filename ?? i18n.t("ui.message.attachment.alt")
+              const meta = isDir
+                ? i18n.t("ui.message.attachment.folder")
+                : [attachmentType(name, file.mime), attachmentSize(file.url)]
+                    .filter((x) => !!x)
+                    .join(" · ")
+
+              return (
+                <div
+                  data-slot="user-message-attachment"
+                  data-type={type}
+                  data-clickable={!isDir ? "true" : undefined}
+                  title={type === "file" ? (meta ? `${name} (${meta})` : name) : undefined}
+                  onClick={() => {
+                    if (isDir) return
+                    if (type === "image") {
+                      openImagePreview(file.url, name)
+                      return
+                    }
+                    // file 类型：优先 source.path（原始磁盘路径），回退 file:// url 的 pathname
+                    // （后端 materialize PDF/Office 到磁盘生成的临时路径）。走与 file-link 一致的
+                    // onCardClick("openFile") 链路调起右侧预览。data: URL 无 pathname 可用，跳过。
+                    const sourcePath = file.source && "path" in file.source ? file.source.path : undefined
+                    const filePath =
+                      sourcePath ??
+                      (file.url.startsWith("file://") ? decodeURIComponent(new URL(file.url).pathname) : undefined)
+                    if (filePath) props.onCardClick?.("openFile", { path: filePath, messageID: props.message.id })
+                  }}
+                >
+                  <Show
+                    when={type === "image"}
+                    fallback={
+                      <div data-slot="user-message-attachment-file">
+                        <FileIcon node={{ path: name, type: isDir ? "directory" : "file" }} />
+                        <div data-slot="user-message-attachment-info">
+                          <span data-slot="user-message-attachment-name">{name}</span>
+                          <Show when={meta}>
+                            <span data-slot="user-message-attachment-meta">{meta}</span>
+                          </Show>
+                        </div>
+                      </div>
+                    }
+                  >
+                    <img data-slot="user-message-attachment-image" src={file.url} alt={name} />
+                  </Show>
+                </div>
+              )
+            }}
+          </For>
+        </div>
+      </Show>
+      <Show when={text() || skills().length > 0}>
+        <>
+          <div data-slot="user-message-body">
+            <div
+              data-slot="user-message-text"
+              data-expanded={expanded() ? "true" : undefined}
+              data-has-expand={overflow() || expanded() ? "true" : undefined}
+            >
+              <div data-slot="user-message-text-inner" ref={textInnerRef}>
+                <Show
+                  when={skills().length > 0}
+                  fallback={
+                    // text-inner 是 -webkit-box(竖排 line-clamp):直接放多个分段时每个子元素
+                    // 独占一行。与技能分支一致,用 inline 容器包成单个子元素,分段才能内联排列。
+                    <div data-slot="user-message-inline">
+                      <HighlightedText
+                        text={text()}
+                        references={inlineFiles()}
+                        agents={agents()}
+                        originAgentMentions={originAgentMentions()}
+                        rules={ruleRefs()}
+                      />
+                    </div>
+                  }
+                >
+                  <div data-slot="user-message-inline">
+                      <SkillInlineText
+                        text={text()}
+                        skills={skills()}
+                        skillDetail={skillDetail()}
+                        appName={appContextAppName()}
+                        references={inlineFiles()}
+                        originAgentMentions={originAgentMentions()}
+                        rules={ruleRefs()}
+                      />
+                    </div>
+                  </Show>
+                </div>
+                <Show when={overflow() || expanded()}>
+                  <button
+                    type="button"
+                    data-slot="user-message-expand"
+                    onClick={() => setExpanded((e) => !e)}
+                    aria-label={expanded() ? i18n.t("ui.message.collapse") : i18n.t("ui.message.expand")}
+                  >
+                    <Icon name={expanded() ? "collapse-message" : "expand-message"} size="small" />
+                  </button>
+                </Show>
+              </div>
+            </div>
+            <div data-slot="user-message-copy-wrapper">
+              <Show when={metaHead() || metaTail()}>
+                <span data-slot="user-message-meta-wrap">
+                  <Show when={metaHead()}>
+                    <span data-slot="user-message-meta" class="text-12-regular text-text-weak cursor-default">
+                      {metaHead()}
+                    </span>
+                  </Show>
+                  <Show when={metaHead() && metaTail()}>
+                    <span data-slot="user-message-meta-sep" class="text-12-regular text-text-weak cursor-default">
+                      {"\u00A0\u00B7\u00A0"}
+                    </span>
+                  </Show>
+                  <Show when={metaTail()}>
+                    <span data-slot="user-message-meta-tail" class="text-12-regular text-text-weak cursor-default">
+                      {metaTail()}
+                    </span>
+                  </Show>
+                </span>
+              </Show>
+              <Show when={props.actions?.revert}>
+                <Tooltip value={i18n.t("ui.message.revertMessage")} placement="top" gutter={4}>
+                  <IconButton
+                    icon="reset"
+                    size="normal"
+                    variant="ghost"
+                    class="w-7 h-7"
+                    disabled={!!busy()}
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={(event) => {
+                      event.stopPropagation()
+                      revert()
+                    }}
+                    aria-label={i18n.t("ui.message.revertMessage")}
+                  />
+                </Tooltip>
+              </Show>
+              <Tooltip
+                value={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copyMessage")}
+                placement="top"
+                gutter={4}
+              >
+                <IconButton
+                  icon={copied() ? "check" : "copy"}
+                  size="normal"
+                  variant="ghost"
+                  class="w-7 h-7"
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    handleCopy()
+                  }}
+                  aria-label={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copyMessage")}
+                />
+              </Tooltip>
+              <Show when={props.onShare}>
+                <Tooltip value={i18n.t("ui.message.share")} placement="top" gutter={4}>
+                  <IconButton
+                    icon="share"
+                    size="normal"
+                    class="w-7 h-7"
+                    variant="ghost"
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => props.onShare?.()}
+                    aria-label={i18n.t("ui.message.share")}
+                  />
+                </Tooltip>
+              </Show>
+            </div>
+          </>
+        </Show>
+      </div>
+    </Show>
+  )
+}
+
+type HighlightSegment = { text: string; type?: "file" | "agent" | "rule"; rule?: RuleRef }
+type OriginAgentMention = { start: number; end: number; value: string; name?: string }
+
+
+function intro(text: string) {
+  const lines = text
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => !!line && !line.startsWith("#") && !line.startsWith("```") && !line.startsWith("|"))
+  const value = (lines[0] ?? text).replace(/\s+/g, " ").trim()
+  if (value.length <= 180) return value
+  return `${value.slice(0, 177).trimEnd()}...`
+}
+
+function tail(text: string) {
+  const lines = text
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => !!line)
+  const value = lines.at(-1) ?? text.trim()
+  if (value.length <= 160) return value
+  return `${value.slice(0, 157).trimEnd()}...`
+}
+
+/** 技能触发名 → UI 展示名（与 prompt-input.tsx 中 SKILL_DISPLAY_NAME_MAP 保持一致） */
+const SKILL_DISPLAY_NAMES: Record<string, string> = {
+  "app-build": "cosmic-app-builder",
+  "kd-frontend-development": "cosmic-kwc-builder",
+  "standalone-build": "general-app-builder",
+  "kingdee-skill-creator": "skill-builder",
+  "ai-partner-creator": "agent-builder",
+  "kingdee-design": "prototype-builder",
+}
+
+/** 仅苍穹技能需要并展示关联的苍穹应用。 */
+const COSMIC_APP_SKILLS = new Set(["app-build", "kd-frontend-development"])
+
+/** 技能触发名 → 图标名（与 skill-entries.ts 中 SKILL_TABS 的 iconName 保持一致） */
+const SKILL_ICON_NAME_MAP: Record<string, Parameters<typeof Icon>[0]["name"]> = {
+  "kingdee-skill-creator": "skill-bolt",
+  "ai-partner-creator": "ai-partner",
+  "kingdee-design": "app-prototype",
+  "standalone-build": "app-general",
+  "app-build": "app-cosmic",
+  "kd-frontend-development": "app-cosmic",
+  "mcp-apps-builder": "mcp",
+}
+const SKILL_DISPLAY_NAME_PATTERN = new RegExp(
+  `(?<![A-Za-z0-9-])(?:${Object.keys(SKILL_DISPLAY_NAMES).join("|")})(?![A-Za-z0-9-])`,
+  "g",
+)
+const replaceSkillDisplayNames = (text: string): string =>
+  text.replace(SKILL_DISPLAY_NAME_PATTERN, (name) => SKILL_DISPLAY_NAMES[name] ?? name)
+
+function SkillPill(props: { text: string; detail?: string; app?: string; iconName?: Parameters<typeof Icon>[0]["name"] }) {
+  return (
+    <Tooltip
+      placement="top-start"
+      gutter={6}
+      inactive={!props.detail}
+      value={
+        <div data-slot="user-message-skill-tip">
+          <div data-slot="user-message-skill-tip-title">{props.text}</div>
+          <Show when={props.detail}>
+            <div data-slot="user-message-skill-tip-body">{props.detail}</div>
+          </Show>
+        </div>
+      }
+    >
+      <span data-slot="user-message-skill">
+        <Icon name={props.iconName ?? "skill-bolt"} size="small" class="shrink-0 text-[#2970FF]" />
+        <span data-slot="user-message-skill-label">{props.text}</span>
+        <Show when={props.app}>
+          <span aria-hidden="true" class="inline-block w-px h-3.5 bg-[var(--skill-pill-divider-bg,var(--primary-200,rgba(0,0,0,0.1)))] shrink-0 mx-1" />
+          <span class="text-[var(--skill-pill-app-text,var(--neutral-800))] truncate max-w-[140px]">{props.app}</span>
+        </Show>
+      </span>
+    </Tooltip>
+  )
+}
+
+type RuleRef = { start: number; end: number; name: string; path: string }
+
+function HighlightedText(props: {
+  text: string
+  references: FilePart[]
+  agents: AgentPart[]
+  originAgentMentions: OriginAgentMention[]
+  rules?: RuleRef[]
+  skipRanges?: { start: number; end: number }[]
+}) {
+  const segments = createMemo(() => {
+    const text = props.text
+
+    type Ref = { start: number; end: number; type: "file" | "agent" | "rule"; skip?: boolean; rule?: RuleRef }
+    const allRefs: Ref[] = [
+      ...props.references
+        .filter((r) => r.source?.text?.start !== undefined && r.source?.text?.end !== undefined)
+        .map((r) => ({ start: r.source!.text!.start, end: r.source!.text!.end, type: "file" as const })),
+      ...props.agents
+        .filter((a) => a.source?.start !== undefined && a.source?.end !== undefined)
+        .map((a) => ({ start: a.source!.start, end: a.source!.end, type: "agent" as const })),
+      ...props.originAgentMentions.map((item) => ({ start: item.start, end: item.end, type: "agent" as const })),
+      ...(props.rules ?? []).map((r) => ({ start: r.start, end: r.end, type: "rule" as const, rule: r })),
+      ...(props.skipRanges ?? []).map((r) => ({ start: r.start, end: r.end, type: "agent" as const, skip: true })),
+    ].sort((a, b) => a.start - b.start)
+
+    const result: HighlightSegment[] = []
+    let lastIndex = 0
+
+    for (const ref of allRefs) {
+      if (ref.start < lastIndex) continue
+
+      if (ref.start > lastIndex) {
+        result.push({ text: text.slice(lastIndex, ref.start) })
+      }
+
+      if (!ref.skip) {
+        result.push({ text: text.slice(ref.start, ref.end), type: ref.type, rule: ref.rule })
+      }
+      lastIndex = ref.end
+    }
+
+    if (lastIndex < text.length) {
+      result.push({ text: text.slice(lastIndex) })
+    }
+
+    return result
+  })
+
+  return (
+    <For each={segments()}>
+      {(segment) => (
+        <Show
+          when={segment.rule}
+          fallback={<span data-highlight={segment.type}>{segment.text}</span>}
+        >
+          <SkillPill text={segment.rule!.name} detail={segment.rule!.path} iconName="book-open" />
+        </Show>
+      )}
+    </For>
+  )
+}
+
+/** 将技能 pill 按 source.start/end 内联渲染在文本中，而非统一置于文本前方。 */
+function SkillInlineText(props: {
+  text: string
+  skills: AgentPart[]
+  skillDetail?: string
+  appName?: string
+  references: FilePart[]
+  originAgentMentions: OriginAgentMention[]
+  rules?: RuleRef[]
+}) {
+  const segments = createMemo(() => {
+    type Ref = { start: number; end: number; type: "file" | "agent" | "skill" | "rule"; skill?: AgentPart; rule?: RuleRef }
+    const refs: Ref[] = [
+      ...props.references
+        .filter((r) => r.source?.text?.start !== undefined && r.source?.text?.end !== undefined)
+        .map((r) => ({ start: r.source!.text!.start, end: r.source!.text!.end, type: "file" as const })),
+      ...props.originAgentMentions.map((item) => ({ start: item.start, end: item.end, type: "agent" as const })),
+      ...props.skills
+        .filter((s) => s.source?.start !== undefined && s.source?.end !== undefined)
+        .map((s) => {
+          const start = s.source!.start
+          let end = s.source!.end
+          const t = props.text
+          while (end < t.length && /\s/.test(t[end]!)) end++
+          return { start, end, type: "skill" as const, skill: s }
+        }),
+      ...(props.rules ?? []).map((r) => ({ start: r.start, end: r.end, type: "rule" as const, rule: r })),
+    ].sort((a, b) => a.start - b.start)
+
+    type Segment = { text: string; type?: "file" | "agent" | "skill" | "rule"; skill?: AgentPart; rule?: RuleRef }
+    const result: Segment[] = []
+    let lastIndex = 0
+    for (const ref of refs) {
+      if (ref.start < lastIndex) continue
+      if (ref.start > lastIndex) result.push({ text: props.text.slice(lastIndex, ref.start) })
+      if (ref.type === "skill" && ref.skill) {
+        result.push({ text: props.text.slice(ref.start, ref.end), skill: ref.skill })
+      } else if (ref.type === "rule" && ref.rule) {
+        result.push({ text: props.text.slice(ref.start, ref.end), rule: ref.rule })
+      } else {
+        result.push({ text: props.text.slice(ref.start, ref.end), type: ref.type })
+      }
+      lastIndex = ref.end
+    }
+    if (lastIndex < props.text.length) result.push({ text: props.text.slice(lastIndex) })
+    return result
+  })
+
+  return (
+    <For each={segments()}>
+      {(segment) => (
+        <Show
+          when={segment.skill || segment.rule}
+          fallback={<span data-highlight={segment.type}>{replaceSkillDisplayNames(segment.text)}</span>}
+        >
+          <Show
+            when={segment.rule}
+            fallback={
+              <SkillPill
+                text={SKILL_DISPLAY_NAMES[segment.skill!.name] ?? segment.skill!.name}
+                detail={props.skillDetail}
+                app={COSMIC_APP_SKILLS.has(segment.skill!.name) ? props.appName : undefined}
+                iconName={SKILL_ICON_NAME_MAP[segment.skill!.name]}
+              />
+            }
+          >
+            <SkillPill text={segment.rule!.name} detail={segment.rule!.path} iconName="book-open" />
+          </Show>
+        </Show>
+      )}
+    </For>
+  )
+}
+
+export function Part(props: MessagePartProps) {
+  const component = createMemo(() => {
+    if (!props.part || !props.message) return
+    return PART_MAPPING[props.part.type]
+  })
+  return (
+    <Show when={props.part && props.message && component()}>
+      {(resolved) => (
+        <Dynamic
+          component={resolved()}
+          part={props.part}
+          message={props.message}
+          footerOnly={props.footerOnly}
+          hideDetails={props.hideDetails}
+          singleStep={props.singleStep}
+          autoOpenWhenSingle={props.autoOpenWhenSingle}
+          defaultOpen={props.defaultOpen}
+          showAssistantCopyPartID={props.showAssistantCopyPartID}
+          turnDurationMs={props.turnDurationMs}
+          turnCredits={props.turnCredits}
+          turnCreditsLoading={props.turnCreditsLoading}
+          onFork={props.onFork}
+          onRegenerate={props.onRegenerate}
+          onShare={props.onShare}
+          onCardClick={props.onCardClick}
+          isLocalTestCardDisabled={props.isLocalTestCardDisabled}
+          imageAttachments={props.imageAttachments}
+          toolPresentationCards={props.toolPresentationCards}
+          tailCards={props.tailCards}
+        />
+      )}
+    </Show>
+  )
+}
+
+export interface ToolAttachment {
+  mime: string
+  filename?: string
+  url: string
+}
+
+export interface ToolProps {
+  input: Record<string, any>
+  metadata: Record<string, any>
+  tool: string
+  output?: string
+  status?: string
+  attachments?: ToolAttachment[]
+  hideDetails?: boolean
+  compactToolRow?: boolean
+  defaultOpen?: boolean
+  forceOpen?: boolean
+  locked?: boolean
+  singleStep?: boolean
+  autoOpenWhenSingle?: boolean
+  onCardClick?: (kind: string, config: Record<string, string>) => void
+}
+
+export type ToolComponent = Component<ToolProps>
+
+const state: Record<
+  string,
+  {
+    name: string
+    render?: ToolComponent
+  }
+> = {}
+
+export function registerTool(input: { name: string; render?: ToolComponent }) {
+  state[input.name] = input
+  return input
+}
+
+export function getTool(name: string) {
+  return state[name]?.render
+}
+
+export const ToolRegistry = {
+  register: registerTool,
+  render: getTool,
+}
+
+function ToolFileAccordion(props: { path: string; actions?: JSX.Element; children: JSX.Element; defaultOpen?: boolean }) {
+  const value = createMemo(() => props.path || "tool-file")
+  const initial = createMemo(() => (props.defaultOpen === false ? [] : [value()]))
+
+  return (
+    <Accordion
+      multiple
+      data-scope="apply-patch"
+      style={{ "--sticky-accordion-offset": "40px" }}
+      defaultValue={initial()}
+    >
+      <Accordion.Item value={value()}>
+        <StickyAccordionHeader>
+          <Accordion.Trigger
+            ref={(el: HTMLElement) => {
+              // 与 Collapsible.Trigger 的 suppressClickAfterDrag 同理：
+              // 拖拽选中标题文本时（鼠标移动 >3px），在捕获阶段抑制 click，
+              // 避免 mouseup 触发 accordion toggle（展开/收起）。
+              let downX = 0
+              let downY = 0
+              const handleMouseDown = (e: MouseEvent) => {
+                downX = e.clientX
+                downY = e.clientY
+              }
+              const handleClick = (e: MouseEvent) => {
+                if (Math.abs(e.clientX - downX) > 3 || Math.abs(e.clientY - downY) > 3) {
+                  e.preventDefault()
+                  e.stopPropagation()
+                }
+              }
+              el.addEventListener("mousedown", handleMouseDown)
+              el.addEventListener("click", handleClick, true)
+              onCleanup(() => {
+                el.removeEventListener("mousedown", handleMouseDown)
+                el.removeEventListener("click", handleClick, true)
+              })
+            }}
+          >
+            <div data-slot="apply-patch-trigger-content">
+              <div data-slot="apply-patch-file-info">
+                <FileIcon node={{ path: props.path, type: "file" }} />
+                <div data-slot="apply-patch-file-name-container">
+                  <Show when={props.path.includes("/")}>
+                    <span data-slot="apply-patch-directory">{`\u202A${getDirectory(props.path)}\u202C`}</span>
+                  </Show>
+                  <span data-slot="apply-patch-filename">{getFilename(props.path)}</span>
+                </div>
+              </div>
+              <div data-slot="apply-patch-trigger-actions">
+                {props.actions}
+                <Icon name="chevron-grabber-vertical" size="small" />
+              </div>
+            </div>
+          </Accordion.Trigger>
+        </StickyAccordionHeader>
+        <Accordion.Content>{props.children}</Accordion.Content>
+      </Accordion.Item>
+    </Accordion>
+  )
+}
+
+PART_MAPPING["tool"] = function ToolPartDisplay(props) {
+  const data = useData()
+  const i18n = useI18n()
+  const part = () => props.part as ToolPart
+  if (part().tool === "todowrite") return null
+  if (part().tool === "invalid") return null
+
+  const hideQuestion = createMemo(() => false)
+
+  const emptyInput: Record<string, any> = {}
+  const emptyMetadata: Record<string, any> = {}
+
+  const input = () => part().state?.input ?? emptyInput
+  const partMetadata = () => part().state?.metadata ?? emptyMetadata
+  const taskId = createMemo(() => {
+    if (part().tool !== "task" && part().tool !== "agent") return
+    const value = partMetadata().sessionId
+    if (typeof value === "string" && value) return value
+  })
+  const taskHref = createMemo(() => {
+    if (part().tool !== "task" && part().tool !== "agent") return
+    return sessionLink(taskId(), useLocation().pathname, data.sessionHref)
+  })
+  const taskSubtitle = createMemo(() => {
+    if (part().tool !== "task" && part().tool !== "agent") return undefined
+    const value = input().description
+    if (typeof value === "string" && value) return value
+    return taskId()
+  })
+
+  const render = createMemo(() => ToolRegistry.render(part().tool) ?? GenericTool)
+
+  // 内联仅保留 kdexpert 阶段卡（§6.1 折叠修复）：其余交付卡由 tailDeliveryCards 提升到
+  // 轮次/消息尾部常驻渲染，不再随工具 part 内联显示，避免被过程折叠区收起后不可见。
+  // __localTestCardKey 注入与 item 级键形态（`${messageID}:${partID}:${itemIndex}`）在 inlineToolPartCards 内处理。
+  const toolPartCards = createMemo(() =>
+    inlineToolPartCards(props.toolPresentationCards, `${part().messageID}:${part().id}:`),
+  )
+
+  // 中断场景识别：后端 cleanup 会在 metadata 上写 interrupted=true 以及 abort_reason（watchdog-idle-timeout / instance_dispose / user_abort_request / unknown 等）。
+  // 前端识别此标志后，单 part 错误卡一律静默——下方 MessageDivider 已统一表达本轮的中断状态（"已中止"/"会话超时，已自动停止"等），
+  // 单 part 再渲染一次"问题 / Tool execution aborted"属于重复信息噪声。
+  // 但工具调用本身（工具名、输入参数、部分输出）仍正常渲染，保证调用链路可追溯。
+  const isInterrupted = createMemo(() => {
+    const meta = partMetadata()
+    return meta && meta.interrupted === true
+  })
+
+  // 会话级中断兜底：后端 cleanup 可能因时序竞争（failToolCall 先于 cleanup 删除条目、
+  // 或 LLM SDK 中断时未发送 tool-error 事件）导致 tool part 的 state.status 仍停留在
+  // pending/running。此时若所属 assistant message 已被标记为 MessageAbortedError，
+  // 前端应主动将该 part 视为 error，避免 loading spinner 永久卡住。
+  const isMessageAborted = createMemo(
+    () => (props.message as AssistantMessage | undefined)?.error?.name === "MessageAbortedError",
+  )
+  const isStalePending = createMemo(
+    () =>
+      isMessageAborted() &&
+      (part().state?.status === "pending" || part().state?.status === "running"),
+  )
+
+  // 任何中断原因（user 主动取消 / watchdog 超时 / 实例释放 / 未知）都静默该 part 错误卡，避免与轮级 divider 重复。
+  const silentSinglePart = createMemo(() => isInterrupted())
+
+  // 前端保底：当父会话已 idle（取消/超时/释放），但工具 part 仍为 running/pending，
+  // 说明后端 cleanup 尚未完成或子会话未被及时级联取消，视为中断状态显示 error。
+  // 与 ToolStageGroup 的 working 保底逻辑一致，避免 spinner 残留。
+  // 额外检查：
+  //   1. isInterrupted() — 后端已写入 interrupted 标志
+  //   2. message.time.completed — 所属 assistant message 已完成，说明该轮次已结束
+  //      （同一 session 有新 run 时 session_status 为 busy，旧保底失效；用 message 完成时间做兜底）
+  const effectiveStatus = createMemo(() => {
+    const partStatus = part().state?.status
+    if (!partStatus) return
+    if (partStatus !== "running" && partStatus !== "pending") return partStatus
+    // 1. 后端 cleanup 已写入中断标志
+    if (isInterrupted()) return "error" as const
+    // 2. 所属 assistant message 已完成（同一 session 新 run 启动后 session_status=busy 时的关键兜底）
+    const msgs = data.store.message?.[part().sessionID]
+    const msg = msgs?.find((m) => m.id === part().messageID)
+    if (msg && typeof (msg.time as any).completed === "number") return "error" as const
+    // 3. Session 已 idle 或无记录
+    const ss = data.store.session_status[part().sessionID]
+    if (!ss || ss.type === "idle") return "error" as const
+    return partStatus
+  })
+
+  return (
+    <Show when={!hideQuestion()}>
+      <div data-component="tool-part-wrapper">
+        <Switch>
+          <Match when={!silentSinglePart() && effectiveStatus() === "error" && (part().state as any)?.error}>
+            {(error) => {
+              const cleaned = error().replace("Error: ", "")
+              if (part().tool === "question" && cleaned.includes("dismissed this question")) {
+                return (
+                  <div style="width: 100%; display: flex; justify-content: flex-end;">
+                    <span class="text-13-regular text-text-weak cursor-default">
+                      {i18n.t("ui.messagePart.questions.dismissed")}
+                    </span>
+                  </div>
+                )
+              }
+              return (
+                <ToolErrorCard
+                  tool={part().tool}
+                  error={maskAbsolutePaths(error(), data.directory)}
+                  defaultOpen={props.defaultOpen}
+                  subtitle={taskSubtitle()}
+                  href={taskHref()}
+                />
+              )
+            }}
+          </Match>
+          <Match when={true}>
+            <>
+              <For each={toolPartCards()}>
+                {(card) => (
+                  <RenderCard
+                    kind={card.kind}
+                    config={card}
+                    localTestDisabled={props.isLocalTestCardDisabled?.(card.kind, card)}
+                    onCardClick={props.onCardClick}
+                  />
+                )}
+              </For>
+              <Dynamic
+                component={render()}
+                input={input()}
+                tool={part().tool}
+                metadata={{
+                  ...partMetadata(),
+                  _outputMeta: (part().state as { outputMeta?: { totalBytes: number; truncated: boolean } })?.outputMeta,
+                  _partSessionID: part().sessionID,
+                  _partMessageID: part().messageID,
+                  _partID: part().id,
+                }}
+                output={
+                  part().tool === "bash"
+                    ? bashOutputWithoutRender(part())
+                    : (part().state as { output?: string } | undefined)?.output
+                }
+                attachments={(part().state as { attachments?: ToolAttachment[] } | undefined)?.attachments}
+                status={effectiveStatus()}
+                hideDetails={props.hideDetails}
+                singleStep={props.singleStep}
+                autoOpenWhenSingle={props.autoOpenWhenSingle}
+                defaultOpen={props.defaultOpen}
+                onCardClick={props.onCardClick}
+              />
+            </>
+          </Match>
+        </Switch>
+      </div>
+    </Show>
+  )
+}
+
+export function MessageDivider(props: { label: string; action?: JSX.Element }) {
+  return (
+    <div data-component="compaction-part">
+      <div data-slot="compaction-part-divider">
+        <span data-slot="compaction-part-line" />
+        <span data-slot="compaction-part-label" class="text-12-regular text-text-weak">
+          {props.label}
+        </span>
+        <Show when={props.action}>
+          {props.action}
+        </Show>
+        <span data-slot="compaction-part-line" />
+      </div>
+    </div>
+  )
+}
+
+
+PART_MAPPING["compaction"] = function CompactionPartDisplay() {
+  const i18n = useI18n()
+  return <MessageDivider label={i18n.t("ui.messagePart.compaction")} />
+}
+
+const MISSING_TEXT_PART = { id: "", type: "text", text: "" } as TextPart
+
+PART_MAPPING["text"] = function TextPartDisplay(props) {
+  const data = useData()
+  const i18n = useI18n()
+  const numfmt = createMemo(() => new Intl.NumberFormat(i18n.locale()))
+  // Part 被移出或替换时，子 memo 可能先于外层 Show 销毁重算一次。
+  // 空文本占位不会产生 UI，同时避免这次重算读取 undefined 的 text/id。
+  const part = () => (props.part ?? MISSING_TEXT_PART) as TextPart
+  // props.message 仅在 Part 挂载时保证非空；更新期上游消息列表重建可能短暂为
+  // undefined（SSE 分帧批处理后高发），memo 会先于 Show 卸载重算，必须自身兜底。
+  const interrupted = createMemo(
+    () =>
+      props.message?.role === "assistant" &&
+      (props.message as AssistantMessage).error?.name === "MessageAbortedError",
+  )
+
+  const model = createMemo(() => {
+    if (!props.message || props.message.role !== "assistant") return ""
+    const message = props.message as AssistantMessage
+    // 优先使用消息自身携带的 modelLevel（assistant 创建时从 user message 复制），避免同 modelId 多配置导致显示不一致
+    const storedLevel = (message as { modelLevel?: string }).modelLevel
+    // assistant 消息自身不携带 lingeeModelId，回溯 parentID 对应的 user 消息获取，
+    // 同 modelId 可能对应多条 MaaS 配置（不同 lingeeModelId），优先按 lingeeModelId 精确匹配模型条目
+    const parentMessage = data.store.message?.[message.sessionID]?.find((m) => m.id === message.parentID)
+    const lingeeModelId = parentMessage?.role === "user" ? (parentMessage as UserMessage).model?.lingeeModelId : undefined
+    const match = data.store.provider?.all?.find((p) => p.id === message.providerID)
+    const modelEntry = match?.models?.[lingeeModelId ?? message.modelID]
+    const modelLevel = storedLevel ?? (modelEntry as { modelLevel?: string } | undefined)?.modelLevel
+    // kingdee-maas 模型显示名必须由 modelLevel 派生，与模型选择器保持一致；
+    // provider models 中的 name 可能因缓存/数据时序与当前 modelLevel 不一致。
+    if (message.providerID === "kingdee-maas" && modelLevel) {
+      return getModelDisplayName(message.modelID, modelEntry?.name ?? message.modelID, i18n.t, 0, modelLevel)
+    }
+    // 优先使用 provider models 列表中已注入的 name 字段（已包含序号或国际化处理）
+    if (modelEntry?.name) return modelEntry.name
+    // 兜底：调用 getModelDisplayName 通过 modelLevel 进行国际化（无序号上下文，使用默认 index=0）
+    return getModelDisplayName(message.modelID, message.modelID, i18n.t, 0, modelLevel)
+  })
+
+  const duration = createMemo(() => {
+    if (!props.message || props.message.role !== "assistant") return ""
+    const message = props.message as AssistantMessage
+    const completed = message.time.completed
+    const ms =
+      typeof props.turnDurationMs === "number"
+        ? props.turnDurationMs
+        : typeof completed === "number"
+          ? completed - message.time.created
+          : -1
+    if (!(ms >= 0)) return ""
+    const total = Math.round(ms / 1000)
+    if (total < 60) return `${numfmt().format(total)}s`
+    const minutes = Math.floor(total / 60)
+    const seconds = total % 60
+    return `${numfmt().format(minutes)}m ${numfmt().format(seconds)}s`
+  })
+
+  const meta = createMemo(() => {
+    if (!props.message || props.message.role !== "assistant") return ""
+    const agent = (props.message as AssistantMessage).agent
+    const items = [
+      agent ? agent[0]?.toUpperCase() + agent.slice(1) : "",
+      model(),
+      duration(),
+      interrupted() ? i18n.t("ui.message.interrupted") : "",
+    ]
+    return items.filter((x) => !!x).join(" \u00B7 ")
+  })
+
+  const streaming = createMemo(
+    () =>
+      props.message?.role === "assistant" &&
+      typeof (props.message as AssistantMessage).time.completed !== "number",
+  )
+  const text = () => (part().text ?? "").trim()
+  const isLastTextPart = createMemo(() => {
+    if (!props.message) return false
+    const last = (data.store.part?.[props.message.id] ?? [])
+      .filter((item): item is TextPart => item?.type === "text" && !item.metadata?.compaction_file_restore && !!item.text?.trim())
+      .at(-1)
+    return last?.id === part().id
+  })
+  const showCopy = createMemo(() => {
+    if (part().synthetic) return false
+    if (!props.message || props.message.role !== "assistant") return isLastTextPart()
+    if (props.showAssistantCopyPartID === null) return false
+    if (typeof props.showAssistantCopyPartID === "string") return props.showAssistantCopyPartID === part().id
+    return isLastTextPart()
+  })
+  const openFilePath = (path: string) => {
+    const messageID = props.message?.id
+    if (!messageID) return
+    props.onCardClick?.("openFile", { path, messageID, origin: "link" })
+  }
+  const messageImageAttachments = createMemo(() => {
+    if (!showCopy()) return []
+    return props.imageAttachments ?? []
+  })
+  const dialog = useDialog()
+  const openImagePreview = (url: string, alt?: string) => {
+    dialog.show(() => <ImagePreview src={url} alt={alt} />)
+  }
+  const [copied, setCopied] = createSignal(false)
+  const [forking, setForking] = createSignal(false)
+
+  const handleCopy = async () => {
+    const content = text()
+    if (!content) return
+    await navigator.clipboard.writeText(content)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
+  const handleFork = async () => {
+    if (!props.onFork || forking()) return
+    setForking(true)
+    try {
+      await props.onFork()
+    } finally {
+      setForking(false)
+    }
+  }
+
+  // 双源去重（§6.4）：同消息 + 同 kind + 同有效身份（id/directory/path 任一存在且相等）时
+  // tool 卡优先，命中的文本 render 段降级为空文本（保留其余文本）；
+  // 缺身份字段的文本卡不参与去重，避免跨 kind 复用同一 id/目录被误隐藏。
+  const toolCardIdentities = createMemo(() => {
+    const identities = new Set<string>()
+    const all = props.toolPresentationCards
+    if (!all) return identities
+    const prefix = `${props.message?.id}:`
+    for (const [key, config] of all) {
+      if (!config || !key.startsWith(prefix)) continue
+      const identity = config.id || config.directory || config.path
+      if (config.kind && identity) identities.add(`${config.kind}\u0000${identity}`)
+    }
+    return identities
+  })
+  const segments = createMemo(() => {
+    const raw = splitRenderBlocks(text())
+    const identities = toolCardIdentities()
+    if (identities.size === 0) return raw
+    return raw.map((segment) => {
+      if (segment.type !== "render") return segment
+      const identity = segment.config.id || segment.config.directory || segment.config.path
+      if (!identity || !identities.has(`${segment.kind}\u0000${identity}`)) return segment
+      return { type: "text" as const, content: "" }
+    })
+  })
+  const hasRenderBlocks = createMemo(() => segments().length > 1 || segments()[0]?.type !== "text")
+  // When phase-only kdapp blocks are filtered out by split(), use the cleaned text
+  // instead of raw text() which still contains the :::render:kdapp...::: directive
+  const displayText = createMemo(() => {
+    const segs = segments()
+    if (!hasRenderBlocks() && segs.length === 1 && segs[0].type === "text") {
+      return segs[0].content
+    }
+    return text()
+  })
+
+  const renderText = createMemo(() => {
+    const guardCode = (part() as TextPart).metadata?.guardCode as string | undefined
+    if (!guardCode) return replaceSkillDisplayNames(displayText())
+
+    switch (guardCode) {
+      case "GUARD_CONTENT_SENSITIVE":
+        return i18n.t("guard.contentSensitive")
+      case "GUARD_CREDENTIAL_LEAK":
+        return i18n.t("guard.credentialLeak")
+      case "GUARD_COMPLIANCE_VIOLATION":
+        return i18n.t("guard.complianceViolation")
+      case "GUARD_PRESET_DATA_READONLY":
+        return i18n.t("guard.presetDataReadonly")
+      case "GUARD_BLOCKED_PATH":
+        return i18n.t("guard.blockedPath")
+      case "GUARD_PRESET_PATH_WRITE": {
+        const match = text().match(/[\uff08(](.+?)[\uff09)]/)
+        const pathValue = match ? match[1] : ""
+        return i18n.t("guard.presetPathWrite", { path: pathValue })
+      }
+      default:
+        return replaceSkillDisplayNames(displayText())
+    }
+  })
+
+  return (
+    <Show when={!part().metadata?.compaction_file_restore && text()}>
+      <div data-component="text-part">
+        <Show when={!props.footerOnly}>
+          <div data-slot="text-part-body">
+              <Show
+                when={hasRenderBlocks()}
+                fallback={
+                  <Show
+                    when={streaming()}
+                    fallback={
+                      <Markdown
+                        text={renderText()}
+                        cacheKey={part().id}
+                        streaming={false}
+                        onFilePath={openFilePath}
+                      />
+                    }
+                  >
+                    <PacedMarkdown
+                      text={renderText()}
+                      cacheKey={part().id}
+                      streaming={streaming()}
+                      onFilePath={openFilePath}
+                    />
+                  </Show>
+                }
+              >
+                <For each={segments()}>
+                  {(seg, idx) => (
+                    <Show
+                      when={seg.type === "render" && seg}
+                      fallback={
+                        seg.type === "text" && seg.content.trim() ? (
+                          <Markdown
+                            text={replaceSkillDisplayNames(seg.content.trim())}
+                            cacheKey={`${part().id}:seg:${idx()}`}
+                            streaming={false}
+                            onFilePath={openFilePath}
+                          />
+                        ) : null
+                      }
+                    >
+                      {(render) => {
+                        const cardConfig = createMemo(() => ({
+                          ...render().config,
+                          __localTestCardKey: `${props.message?.id}:${part().id}:${idx()}`,
+                          __localTestSourceMessageID: props.message?.id,
+                          __localTestSourcePartID: part().id,
+                          __localTestSourceRenderIndex: String(idx()),
+                        }))
+                        const localTestDisabled = createMemo(() => props.isLocalTestCardDisabled?.(render().kind, cardConfig()))
+                        return (
+                          <RenderCard
+                            kind={render().kind}
+                            config={cardConfig()}
+                            localTestDisabled={localTestDisabled()}
+                            onCardClick={props.onCardClick}
+                          />
+                        )
+                      }}
+                    </Show>
+                  )}
+                </For>
+              </Show>
+          </div>
+        </Show>
+        <Show when={messageImageAttachments().length > 0}>
+          <div data-component="text-part-image-attachments" style={{ display: "flex", "flex-wrap": "wrap", gap: "8px", "margin-top": "8px" }}>
+            <For each={messageImageAttachments()}>
+              {(img) => {
+                const [hovered, setHovered] = createSignal(false)
+                return (
+                  <div
+                    style={{ position: "relative", width: "180px", height: "100px", "border-radius": "8px", overflow: "hidden", cursor: "pointer" }}
+                    onMouseEnter={() => setHovered(true)}
+                    onMouseLeave={() => setHovered(false)}
+                    onClick={() => openImagePreview(img.url, img.filename ?? "Generated image")}
+                  >
+                    <img
+                      src={img.url}
+                      alt={img.filename ?? "Generated image"}
+                      style={{ width: "100%", height: "100%", "object-fit": "cover" }}
+                    />
+                    <button
+                      type="button"
+                      onClick={(e: MouseEvent) => {
+                        e.stopPropagation()
+                        const a = document.createElement("a")
+                        a.href = img.url
+                        a.download = img.filename ?? `generated-${Date.now()}.png`
+                        document.body.appendChild(a)
+                        a.click()
+                        document.body.removeChild(a)
+                      }}
+                      style={{
+                        position: "absolute",
+                        top: "50%",
+                        left: "50%",
+                        transform: "translate(-50%, -50%)",
+                        background: "var(--image-overlay-bg, rgba(0, 0, 0, 0.55))",
+                        color: "var(--image-overlay-text, #fff)",
+                        border: "none",
+                        "border-radius": "20px",
+                        padding: "6px 16px",
+                        cursor: "pointer",
+                        display: "flex",
+                        "align-items": "center",
+                        gap: "6px",
+                        "font-size": "13px",
+                        "backdrop-filter": "blur(4px)",
+                        opacity: hovered() ? "1" : "0",
+                        transition: "opacity 0.2s ease",
+                        "pointer-events": hovered() ? "auto" : "none",
+                      }}
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M12 3v12m0 0l-4-4m4 4l4-4M5 21h14" />
+                      </svg>
+                      {i18n.t("ui.message.download")}
+                    </button>
+                  </div>
+                )
+              }}
+            </For>
+          </div>
+        </Show>
+        <Show when={(props.tailCards ?? []).length > 0}>
+          <For each={props.tailCards}>
+            {(card) => (
+              <RenderCard
+                kind={card.kind}
+                config={card}
+                localTestDisabled={props.isLocalTestCardDisabled?.(card.kind, card)}
+                onCardClick={props.onCardClick}
+              />
+            )}
+          </For>
+        </Show>
+        <Show when={showCopy()}>
+          <div data-slot="text-part-copy-wrapper" data-interrupted={interrupted() ? "" : undefined}>
+            <span data-slot="text-part-copy-actions">
+              <Tooltip
+                value={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copyResponse")}
+                placement="top"
+                gutter={4}
+              >
+                <IconButton
+                  icon={copied() ? "check" : "copy"}
+                  size="normal"
+                  class="w-7 h-7"
+                  variant="ghost"
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={handleCopy}
+                  aria-label={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copyResponse")}
+                />
+              </Tooltip>
+              <Show when={props.onRegenerate}>
+                <Tooltip value={i18n.t("ui.message.regenerate")} placement="top" gutter={4}>
+                  <IconButton
+                    icon="refresh"
+                    size="normal"
+                    class="w-7 h-7"
+                    variant="ghost"
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => props.onRegenerate?.()}
+                    aria-label={i18n.t("ui.message.regenerate")}
+                  />
+                </Tooltip>
+              </Show>
+              <Show when={props.onFork}>
+                <Tooltip value={i18n.t("ui.message.forkMessage")} placement="top" gutter={4}>
+                  <IconButton
+                    icon={forking() ? "loading" : "fork"}
+                    size="normal"
+                    class="w-7 h-7"
+                    classList={{ "[&_svg]:animate-spin": forking() }}
+                    variant="ghost"
+                    data-action="fork-session"
+                    disabled={forking()}
+                    aria-busy={forking() ? "true" : undefined}
+                    onMouseDown={(event) => event.preventDefault()}
+                    onClick={(event) => {
+                      event.stopPropagation()
+                      void handleFork()
+                    }}
+                    aria-label={i18n.t("ui.message.forkMessage")}
+                  />
+                </Tooltip>
+              </Show>
+              <Show when={props.onShare}>
+                <Tooltip value={i18n.t("ui.message.share")} placement="top" gutter={4}>
+                  <IconButton
+                    icon="share"
+                    size="normal"
+                    class="w-7 h-7"
+                    variant="ghost"
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => props.onShare?.()}
+                    aria-label={i18n.t("ui.message.share")}
+                  />
+                </Tooltip>
+              </Show>
+            </span>
+            <Show when={meta()}>
+              <span data-slot="text-part-meta" class="text-12-regular text-text-weak cursor-default">
+                {meta()}
+              </span>
+            </Show>
+            <Show when={props.turnCreditsLoading}>
+              <span data-slot="text-part-credits" class="text-12-regular text-text-weak cursor-default">
+                <Icon name="loading" size="small" class="size-3.5 inline-block align-[-2px] animate-spin" />
+                {i18n.t("ui.sessionTurn.credits.calculating")}
+              </span>
+            </Show>
+            <Show when={!props.turnCreditsLoading && typeof props.turnCredits === "number"}>
+              <Tooltip value={i18n.t("ui.sessionTurn.credits.tooltip")} placement="top" gutter={4}>
+                <span data-slot="text-part-credits" class="text-12-regular text-text-weak cursor-default">
+                  <Icon name="lightning-charge" size="small" class="size-3.5 inline-block align-[-2px]" />
+                  {i18n.t("ui.sessionTurn.credits.consumed")} {props.turnCredits!.toFixed(2)}
+                </span>
+              </Tooltip>
+            </Show>
+          </div>
+        </Show>
+      </div>
+    </Show>
+  )
+}
+
+// reasoning part 可能在 store 中被移除（切换会话、重建回合）后，Solid 同一批更新里本组件的
+// 派生计算先于外层 <Show> 卸载而重算，此时 props.part 已是 undefined。直接读 .text 会抛
+// TypeError 整页白屏，这里沿用 text part 的哨兵做法：取不到就当空思考，渲染为空。
+const MISSING_REASONING_PART = { id: "", type: "reasoning", text: "", time: { start: 0 } } as ReasoningPart
+
+PART_MAPPING["reasoning"] = function ReasoningPartDisplay(props) {
+  const part = () => (props.part ?? MISSING_REASONING_PART) as ReasoningPart
+  const i18n = useI18n()
+  const data = useData()
+  // 该次思考自身是否已结束：以 part 自己的 time.end 为准（reasoning-end 事件到达即置位）。
+  // 不依赖消息级 time.completed：多步骤 agent loop 中后端每步结束都会设 time.completed，
+  // 导致正在 streaming 的 reasoning 误判为已结束，定时器不启动。
+  const partEnded = createMemo(() => typeof part().time?.end === "number")
+  const streaming = createMemo(() => !partEnded())
+  // 检测同一条消息中是否有工具正在运行（pending/running），用于区分"思考中"与"运行中"
+  const hasRunningTools = createMemo(() => {
+    if (!props.message) return false
+    const parts = data?.store.part[props.message.id]
+    if (!parts) return false
+    return hasRunningTool(parts)
+  })
+  const labelText = createMemo(() => {
+    if (streaming()) {
+      return hasRunningTools() ? i18n.t("ui.reasoning.working") : i18n.t("ui.reasoning.understanding")
+    }
+    return i18n.t("ui.reasoning.thinkingDone")
+  })
+  const text = () => part().text?.trim() ?? ""
+  const displayText = createMemo(() => replaceSkillDisplayNames(text()))
+  const summary = createMemo(() => {
+    const value = text().trimEnd()
+    if (!value) return
+    if (streaming()) return value.slice(value.lastIndexOf("\n") + 1).trim() || undefined
+    const newline = value.indexOf("\n")
+    return value.slice(0, newline === -1 ? value.length : newline).trim() || undefined
+  })
+  const [expanded, setExpanded] = createSignal(false)
+
+  let bodyRef: HTMLDivElement | undefined
+  let summaryRef: HTMLSpanElement | undefined
+  let summaryRaf: number | undefined
+
+  createEffect(() => {
+    summary()
+    if (!summaryRef) return
+    if (summaryRaf !== undefined) cancelAnimationFrame(summaryRaf)
+    summaryRaf = requestAnimationFrame(() => {
+      summaryRaf = undefined
+      if (summaryRef) summaryRef.scrollLeft = streaming() ? summaryRef.scrollWidth - summaryRef.clientWidth : 0
+    })
+  })
+
+  // streaming 时自动滚动到最新内容（RAF dedup：合并同帧内多个 token 的滚动请求，避免每 token 都触发 scrollHeight layout）。
+  // 用户向上滚离底部即暂停跟随以便回看，滚回底部（距底 24px 内）自动恢复；
+  // 程序定位永远落在底部，scroll 事件按位置判断不会误伤跟随态。
+  let follow = true
+  let scrollRaf: number | undefined
+  createEffect(() => {
+    text()
+    if (!streaming() || !bodyRef) return
+    if (scrollRaf !== undefined) return
+    scrollRaf = requestAnimationFrame(() => {
+      scrollRaf = undefined
+      if (!bodyRef || !follow) return
+      bodyRef.scrollTop = bodyRef.scrollHeight
+    })
+  })
+
+  onCleanup(() => {
+    if (scrollRaf !== undefined) cancelAnimationFrame(scrollRaf)
+    if (summaryRaf !== undefined) cancelAnimationFrame(summaryRaf)
+  })
+
+  return (
+    <Show when={text()}>
+      <div
+        data-component="reasoning-part"
+        data-expanded={props.processView || expanded()}
+        data-process-view={props.processView ? "true" : undefined}
+        data-state={streaming() ? "running" : "ok"}
+      >
+        <Show when={!props.processView}>
+          <div
+            data-slot="reasoning-header"
+            role="button"
+            aria-expanded={expanded()}
+            onClick={() => setExpanded(!expanded())}
+          >
+          {/* 思考中不带图标，与轮次思考行（"正在思考..."）样式一致；完成后显示 brain 图标 */}
+          <Show when={!streaming()}>
+            <span data-slot="reasoning-icon">
+              <Icon name="brain-24" size="small" />
+            </span>
+          </Show>
+          <span data-slot="reasoning-label">
+            <TextShimmer text={labelText()} active={streaming()} />
+          </span>
+          <Show when={!expanded() && summary()}>
+            {(value) => <>
+              <span data-slot="reasoning-summary-separator" aria-hidden="true" />
+              <span ref={summaryRef} data-slot="reasoning-summary" title={value()}>{value()}</span>
+            </>}
+          </Show>
+          <svg
+            data-slot="reasoning-chevron"
+            aria-hidden="true"
+            xmlns="http://www.w3.org/2000/svg"
+            width="14"
+            height="14"
+            viewBox="0 0 14 14"
+            fill="none"
+          >
+            <path d="M5.12918 10.9125C5.35699 11.1403 5.72633 11.1403 5.95414 10.9125L9.45414 7.41252C9.68195 7.18471 9.68195 6.81537 9.45414 6.58756L5.95414 3.08756C5.72633 2.85976 5.35699 2.85976 5.12918 3.08756C4.90138 3.31537 4.90138 3.68471 5.12918 3.91252L8.2167 7.00004L5.12918 10.0876C4.90138 10.3154 4.90138 10.6847 5.12918 10.9125Z" fill="currentColor"/>
+          </svg>
+          </div>
+        </Show>
+        <Show when={props.processView || expanded()}>
+          <div
+            data-slot="reasoning-body"
+            data-streaming={streaming()}
+            ref={(el) => {
+              bodyRef = el
+              // 模块展开挂载时若仍在思考，直接定位到最新内容（流式期间由 text effect 持续跟随）
+              follow = true
+              if (!streaming() || scrollRaf !== undefined) return
+              scrollRaf = requestAnimationFrame(() => {
+                scrollRaf = undefined
+                if (bodyRef) bodyRef.scrollTop = bodyRef.scrollHeight
+              })
+            }}
+            onScroll={() => {
+              if (!bodyRef) return
+              follow = bodyRef.scrollHeight - bodyRef.scrollTop - bodyRef.clientHeight < 24
+            }}
+          >
+            <Show when={streaming()} fallback={<Markdown text={text()} cacheKey={part().id} streaming={false} />}>
+              <PacedMarkdown text={text()} cacheKey={part().id} streaming={streaming()} />
+            </Show>
+          </div>
+        </Show>
+      </div>
+    </Show>
+  )
+}
+
+ToolRegistry.register({
+  name: "read",
+  render(props) {
+    const data = useData()
+    const i18n = useI18n()
+    const args: string[] = []
+    if (props.input.offset) args.push("offset=" + props.input.offset)
+    if (props.input.limit) args.push("limit=" + props.input.limit)
+    const loaded = createMemo(() => {
+      if (props.status !== "completed") return []
+      const value = props.metadata.loaded
+      if (!value || !Array.isArray(value)) return []
+      return value.filter((p): p is string => typeof p === "string")
+    })
+    const isPresetData = props.metadata?.isPresetData === true
+      || (typeof props.input.filePath === "string" && props.input.filePath.includes("preset-data"))
+    const isBuiltinSkills = props.metadata?.isBuiltinSkills === true
+      || (typeof props.input.filePath === "string" && props.input.filePath.includes("builtin-skills"))
+    const isDirectory = props.metadata?.isDirectory === true
+    const canPreview = !isPresetData && !isBuiltinSkills && !isDirectory && !!props.onCardClick && !!props.input.filePath
+    const handleSubtitleClick = canPreview
+      ? () => props.onCardClick!("openFile", { path: props.input.filePath })
+      : undefined
+    return (
+      <>
+        <BasicTool
+          {...props}
+          icon="book-open-24"
+          onSubtitleClick={handleSubtitleClick}
+      trigger={{
+        title: i18n.t("ui.tool.read"),
+        subtitle: props.input.filePath ? getFilename(props.input.filePath) : "",
+        subtitleTitle: props.input.filePath ? toAbsolutePath(data.directory, props.input.filePath) : undefined,
+        subtitleClass: props.input.filePath ? "file-path" : undefined,
+        args,
+      }}
+        />
+      </>
+    )
+  },
+})
+
+ToolRegistry.register({
+  name: "generate_image",
+  render(props) {
+    const i18n = useI18n()
+    return (
+      <BasicTool
+        {...props}
+        icon="photo"
+        trigger={{
+          title: i18n.t("ui.tool.generate_image"),
+          subtitle: typeof props.input.prompt === "string"
+            ? props.input.prompt.slice(0, 80) + (props.input.prompt.length > 80 ? "…" : "")
+            : "",
+          args: typeof props.input.size === "string" ? [props.input.size] : [],
+        }}
+      />
+    )
+  },
+})
+
+ToolRegistry.register({
+  name: "list",
+  render(props) {
+    const i18n = useI18n()
+    return (
+      <BasicTool
+        {...props}
+        icon="bullet-list"
+        trigger={{ title: i18n.t("ui.tool.list"), subtitle: getDirectory(props.input.path || "/") }}
+      >
+        <Show when={props.output}>
+          <div data-component="tool-output" data-scrollable>
+            <Markdown text={props.output!} />
+          </div>
+        </Show>
+      </BasicTool>
+    )
+  },
+})
+
+ToolRegistry.register({
+  name: "glob",
+  render(props) {
+    const i18n = useI18n()
+    const dir = getDirectory(props.input.path || "/")
+    const pattern = typeof props.input.pattern === "string" ? props.input.pattern : undefined
+    const parsed = createMemo(() => {
+      const out = props.output
+      if (!out) return { files: [] as string[], notes: [] as string[] }
+      const files: string[] = []
+      const notes: string[] = []
+      for (const raw of out.split("\n")) {
+        const line = raw.trim()
+        if (!line) continue
+        if (line.startsWith("(") || /^no files/i.test(line)) {
+          notes.push(line)
+          continue
+        }
+        files.push(line)
+      }
+      return { files, notes }
+    })
+    return (
+      <BasicTool
+        {...props}
+        icon="find-catalog-24"
+        trigger={{
+          title: i18n.t("ui.tool.glob"),
+          subtitle: pattern ? getFilename(pattern) : dir,
+          args: pattern && dir ? [dir] : [],
+        }}
+      >
+        <Show when={parsed().files.length > 0 || parsed().notes.length > 0}>
+          <div data-component="tool-glob-output" data-scrollable>
+            <For each={parsed().files}>
+              {(filepath) => (
+                <div data-component="tool-loaded-file" data-slot="tool-glob-file">
+                  <FileIcon node={{ path: filepath, type: "file" }} />
+                  <div data-slot="apply-patch-file-name-container">
+                    <Show when={filepath.includes("/")}>
+                      <span data-slot="apply-patch-directory">{`\u202A${getDirectory(filepath)}\u202C`}</span>
+                    </Show>
+                    <span data-slot="apply-patch-filename">{getFilename(filepath)}</span>
+                  </div>
+                </div>
+              )}
+            </For>
+            <For each={parsed().notes}>
+              {(note) => <div data-component="tool-loaded-file" data-slot="tool-glob-note">{note}</div>}
+            </For>
+          </div>
+        </Show>
+      </BasicTool>
+    )
+  },
+})
+
+ToolRegistry.register({
+  name: "grep",
+  render(props) {
+    const i18n = useI18n()
+    const dir = getDirectory(props.input.path || "/")
+    const pattern = typeof props.input.pattern === "string" ? props.input.pattern : undefined
+    const include = typeof props.input.include === "string" ? props.input.include : undefined
+    const args: string[] = []
+    if (pattern && dir) args.push(dir)
+    if (include) args.push("include=" + include)
+    return (
+      <BasicTool
+        {...props}
+        icon="find-catalog-24"
+        trigger={{
+          title: i18n.t("ui.tool.grep"),
+          subtitle: pattern || dir,
+          args,
+        }}
+      >
+        <Show when={props.output}>
+          <div data-component="tool-output" data-scrollable>
+            <Markdown text={props.output!} />
+          </div>
+        </Show>
+      </BasicTool>
+    )
+  },
+})
+
+ToolRegistry.register({
+  name: "webfetch",
+  render(props) {
+    const i18n = useI18n()
+    const pending = createMemo(() => props.status === "pending" || props.status === "running")
+    const url = createMemo(() => {
+      const value = props.input.url
+      if (typeof value !== "string") return ""
+      return value
+    })
+    return (
+      <BasicTool
+        {...props}
+        hideDetails
+        icon="web-search-24"
+        trigger={
+          <div data-slot="basic-tool-tool-info-structured">
+            <div data-slot="basic-tool-tool-info-main">
+              <span data-slot="basic-tool-tool-title">
+                <TextShimmer text={i18n.t("ui.tool.webfetch")} active={pending()} />
+              </span>
+              <Show when={!pending() && url()}>
+                <a
+                  data-slot="basic-tool-tool-subtitle"
+                  class="clickable subagent-link"
+                  href={url()}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={(event) => event.stopPropagation()}
+                >
+                  {url()}
+                </a>
+              </Show>
+            </div>
+            {/* <Show when={!pending() && url()}>
+              <div data-component="tool-action">
+                <Icon name="square-arrow-top-right" size="small" />
+              </div>
+            </Show> */}
+          </div>
+        }
+      />
+    )
+  },
+})
+
+ToolRegistry.register({
+  name: "websearch",
+  render(props) {
+    const i18n = useI18n()
+    const query = createMemo(() => {
+      const value = props.input.query
+      if (typeof value !== "string") return ""
+      return value
+    })
+    const hasContent = createMemo(() => urls(props.output).length > 0)
+
+    return (
+      <BasicTool
+        {...props}
+        icon="web-search-24"
+        hideDetails={!hasContent()}
+        trigger={{
+          title: i18n.t("ui.tool.websearch"),
+          subtitle: query(),
+          subtitleClass: "exa-tool-query",
+        }}
+      >
+        <ExaOutput output={props.output} />
+      </BasicTool>
+    )
+  },
+})
+
+ToolRegistry.register({
+  name: "codesearch",
+  render(props) {
+    const i18n = useI18n()
+    const query = createMemo(() => {
+      const value = props.input.query
+      if (typeof value !== "string") return ""
+      return value
+    })
+    const hasContent = createMemo(() => urls(props.output).length > 0)
+
+    return (
+      <BasicTool
+        {...props}
+        icon="code"
+        hideDetails={!hasContent()}
+        trigger={{
+          title: i18n.t("ui.tool.codesearch"),
+          subtitle: query(),
+          subtitleClass: "exa-tool-query",
+        }}
+      >
+        <ExaOutput output={props.output} />
+      </BasicTool>
+    )
+  },
+})
+
+const TaskToolCard: ToolComponent = (props) => {
+    const data = useData()
+    const i18n = useI18n()
+    const location = useLocation()
+    const childSessionId = createMemo(() => {
+      const value = taskSessionID(props.metadata)
+      if (value) return value
+      return taskSession(
+        props.input,
+        location.pathname,
+        data.store.session,
+        taskAgent(taskAgentType(props.input, props.metadata), data.store.agent).name,
+        props.status,
+      )
+    })
+    const agent = createMemo(() => taskAgent(taskAgentType(props.input, props.metadata), data.store.agent))
+    const title = createMemo(() => {
+      const value = taskRole(props.input)
+      if (value) return value
+      if (props.tool === "spawn_task" || props.tool === "spawn_agent") return agentTitle(i18n, agent().name)
+      return i18n.t("ui.tool.task.role")
+    })
+    const tone = createMemo(() => agent().color)
+    const subtitle = createMemo(() => {
+      const value = props.input.description
+      if (typeof value === "string" && value) return value
+      return childSessionId()
+    })
+    const visualStatus = createMemo(() => taskToolStatus(props.tool, props.status, props.metadata))
+    const running = createMemo(() => visualStatus() === "pending" || visualStatus() === "running")
+    const statusText = createMemo(() => {
+      if (visualStatus() === "error") return i18n.t("ui.tool.task.status.error")
+      if (visualStatus() === "aborted") return i18n.t("ui.tool.task.status.aborted")
+      if (visualStatus() === "completed") return i18n.t("ui.tool.task.status.completed")
+      return i18n.t("ui.tool.task.status.running")
+    })
+    // 头像从预设的头像素材集合中根据子agent会话 id（为空时回退到任务描述）确定性地“随机”选取，避免重新渲染时头像跳变。
+    const avatarImage = createMemo(() => pickAvatar(childSessionId() || subtitle() || "task"))
+
+    const href = createMemo(() => sessionLink(childSessionId(), location.pathname, data.sessionHref))
+    const clickable = createMemo(() => !!(childSessionId() && (data.navigateToSession || href())))
+
+    const open = () => {
+      const id = childSessionId()
+      if (!id) return
+      if (data.navigateToSession) {
+        data.navigateToSession(id)
+        return
+      }
+      const value = href()
+      if (value) window.location.assign(value)
+    }
+
+    const navigate = (event: MouseEvent) => {
+      // 副标题支持拖拽选中文字，选中后松开鼠标同样会触发 click（或 <a> 默认跳转），
+      // 此时应视为选中文字操作而非点击卡片，跳过跳转，避免选中态被误判为导航请求。
+      if (window.getSelection()?.toString()) {
+        event.preventDefault()
+        return
+      }
+      if (!data.navigateToSession) return
+      if (event.button !== 0 || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return
+      event.preventDefault()
+      open()
+    }
+
+    const trigger = () => (
+      <div data-component="task-tool-card" data-clickable={clickable() ? "true" : undefined}>
+        <div data-component="task-tool-card-header">
+          <span
+            data-component="task-tool-card-avatar"
+            data-tool-status={visualStatus()}
+            aria-hidden="true"
+            style={tone() ? { "background-color": tone() } : undefined}
+          >
+            <img src={avatarImage()} alt="" data-component="task-tool-card-avatar-image" draggable={false} />
+          </span>
+          <span data-component="task-tool-card-role" title={title()}>
+            {title()}
+          </span>
+          <span data-component="task-tool-card-status" data-tool-status={visualStatus()}>
+            <TextShimmer text={statusText()} active={running()} />
+          </span>
+        </div>
+        <Show when={subtitle()}>
+          <div data-component="task-tool-card-title">{subtitle()}</div>
+        </Show>
+      </div>
+    )
+
+    return (
+      <BasicTool
+        icon="task"
+        kind="task"
+        status={visualStatus()}
+        trigger={trigger()}
+        hideDetails
+        triggerHref={href()}
+        clickable={clickable()}
+        onTriggerClick={navigate}
+      />
+    )
+}
+
+ToolRegistry.register({
+  name: "task",
+  render: TaskToolCard,
+})
+
+ToolRegistry.register({
+  name: "agent",
+  render: TaskToolCard,
+})
+
+ToolRegistry.register({
+  name: "spawn_task",
+  render: TaskToolCard,
+})
+
+ToolRegistry.register({
+  name: "spawn_agent",
+  render: TaskToolCard,
+})
+
+function TruncatedBashOutput(props: {
+  preview: string
+  totalBytes: number
+  sessionID: string
+  messageID: string
+  partID: string
+}) {
+  const data = useData()
+  const i18n = useI18n()
+  const [expanded, setExpanded] = createSignal(false)
+  const [segments, setSegments] = createSignal<string[]>([])
+  const [loading, setLoading] = createSignal(false)
+  const [error, setError] = createSignal<string | undefined>()
+  const [nextOffset, setNextOffset] = createSignal<number | null>(null)
+  const [copied, setCopied] = createSignal(false)
+  let controller: AbortController | undefined
+
+  onCleanup(() => controller?.abort())
+
+  const formatBytes = (bytes: number) => {
+    if (bytes < 1024) return `${bytes} B`
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+  }
+
+  const loadNext = async () => {
+    if (!data.fetchPartContent) return
+    controller?.abort()
+    controller = new AbortController()
+    setLoading(true)
+    setError(undefined)
+    try {
+      const offset = nextOffset() ?? 0
+      const result = await data.fetchPartContent({
+        sessionID: props.sessionID,
+        messageID: props.messageID,
+        partID: props.partID,
+        offset,
+        length: 65536,
+        signal: controller.signal,
+      })
+      setSegments((prev) => [...prev, result.data])
+      setNextOffset(result.nextOffset)
+    } catch (e) {
+      if ((e as Error).name !== "AbortError") setError((e as Error).message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const toggle = () => {
+    if (expanded()) {
+      controller?.abort()
+      setExpanded(false)
+      setSegments([])
+      setNextOffset(null)
+      setError(undefined)
+    } else {
+      setExpanded(true)
+      loadNext()
+    }
+  }
+
+  const fullText = createMemo(() => segments().join(""))
+
+  const handleCopy = async () => {
+    const content = fullText() || props.preview
+    if (!content) return
+    await navigator.clipboard.writeText(content)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
+  return (
+    <>
+      <div data-slot="bash-scroll" data-scrollable>
+        <pre data-slot="bash-pre">
+          <code>{expanded() ? fullText() || props.preview : props.preview}</code>
+        </pre>
+      </div>
+      <Show when={!expanded()}>
+        <div
+          style={{
+            padding: "4px 12px",
+            "font-size": "var(--font-size-small)",
+            color: "var(--text-weaker)",
+            display: "flex",
+            "align-items": "center",
+            gap: "8px",
+          }}
+        >
+          <span>{i18n.t("ui.tool.outputTruncated", { bytes: formatBytes(props.totalBytes) })}</span>
+          <button
+            type="button"
+            onClick={toggle}
+            style={{
+              color: "var(--text-interactive-base)",
+              cursor: "pointer",
+              background: "none",
+              border: "none",
+              "font-size": "var(--font-size-small)",
+            }}
+          >
+            {i18n.t("ui.tool.viewFullOutput")}
+          </button>
+        </div>
+      </Show>
+      <Show when={expanded()}>
+        <div style={{ display: "flex", "align-items": "center", gap: "8px", padding: "4px 12px", "font-size": "var(--font-size-small)" }}>
+          <Show when={loading()}>
+            <span style={{ color: "var(--text-weaker)" }}>{i18n.t("ui.tool.loading")}</span>
+          </Show>
+          <Show when={error()}>
+            <span style={{ color: "var(--text-danger)" }}>{error()}</span>
+            <button type="button" onClick={loadNext} style={{ color: "var(--text-interactive-base)", cursor: "pointer", background: "none", border: "none", "font-size": "var(--font-size-small)" }}>
+              {i18n.t("ui.tool.retry")}
+            </button>
+          </Show>
+          <Show when={nextOffset() !== null && !loading()}>
+            <button type="button" onClick={loadNext} style={{ color: "var(--text-interactive-base)", cursor: "pointer", background: "none", border: "none", "font-size": "var(--font-size-small)" }}>
+              {i18n.t("ui.tool.loadMoreOutput")}
+            </button>
+          </Show>
+          <Show when={nextOffset() === null && !loading() && segments().length > 0}>
+            <span style={{ color: "var(--text-weaker)" }}>{i18n.t("ui.tool.outputComplete")}</span>
+            <button type="button" onClick={handleCopy} style={{ color: "var(--text-interactive-base)", cursor: "pointer", background: "none", border: "none", "font-size": "var(--font-size-small)" }}>
+              {copied() ? i18n.t("ui.message.copied") : i18n.t("ui.tool.copyFullOutput")}
+            </button>
+          </Show>
+          <button type="button" onClick={toggle} style={{ color: "var(--text-interactive-base)", cursor: "pointer", background: "none", border: "none", "font-size": "var(--font-size-small)" }}>
+            {i18n.t("ui.tool.collapse")}
+          </button>
+        </div>
+      </Show>
+    </>
+  )
+}
+
+ToolRegistry.register({
+  name: "bash",
+  render(props) {
+    const data = useData()
+    const i18n = useI18n()
+    const pending = () => props.status === "pending" || props.status === "running"
+    const command = () => {
+      const value = props.input.command ?? props.metadata.command
+      return typeof value === "string" ? maskAbsolutePaths(value, data.directory) : ""
+    }
+    const subtitle = () => {
+      if (props.compactToolRow) return command() || props.input.description || ""
+      if (pending()) return ""
+      return typeof props.input.description === "string" ? props.input.description || command() : command()
+    }
+    const text = createMemo(() => {
+      const cmd = props.input.command ?? props.metadata.command ?? ""
+      const out = maskAbsolutePaths(stripAnsi(props.output || props.metadata.output || ""), data.directory)
+      const command = maskAbsolutePaths(cmd, data.directory)
+      if (!cmd && !out) return ""
+      const header = command ? `$ ${command}` : ""
+      const body = out ? (header ? "\n\n" + out : out) : ""
+      // 运行中且尚无流式输出时，给一个小提示，避免展开后整个面板是空的。
+      const placeholder = pending() && !out ? (header ? "\n\n" : "") + i18n.t("ui.tool.shellRunning") : ""
+      return `${header}${body}${placeholder}`
+    })
+    const [copied, setCopied] = createSignal(false)
+
+    const handleCopy = async () => {
+      const content = text()
+      if (!content) return
+      await navigator.clipboard.writeText(content)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    }
+
+    return (
+      <BasicTool
+        {...props}
+        icon="square-code-24"
+        allowOpenWhilePending
+        trigger={
+          <div data-slot="basic-tool-tool-info-structured">
+            <div data-slot="basic-tool-tool-info-main">
+              <span data-slot="basic-tool-tool-title">
+                <TextShimmer text={i18n.t("ui.tool.shell")} active={pending()} />
+              </span>
+              <Show when={subtitle()}>
+                <ShellSubmessage text={subtitle()} />
+              </Show>
+            </div>
+          </div>
+        }
+      >
+        <div data-component="bash-output">
+          <Show when={!(props.metadata?._outputMeta?.truncated && data.fetchPartContent)}>
+            <div data-slot="bash-copy">
+              <Tooltip
+                value={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copy")}
+                placement="top"
+                gutter={4}
+              >
+                <IconButton
+                  icon={copied() ? "check" : "copy"}
+                  size="small"
+                  variant="secondary"
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={handleCopy}
+                  aria-label={copied() ? i18n.t("ui.message.copied") : i18n.t("ui.message.copy")}
+                />
+              </Tooltip>
+            </div>
+          </Show>
+          <Show when={props.metadata?._outputMeta?.truncated && data.fetchPartContent}>
+            <TruncatedBashOutput
+              preview={text()}
+              totalBytes={props.metadata._outputMeta.totalBytes}
+              sessionID={props.metadata._partSessionID}
+              messageID={props.metadata._partMessageID}
+              partID={props.metadata._partID}
+            />
+          </Show>
+          <Show when={!(props.metadata?._outputMeta?.truncated && data.fetchPartContent)}>
+            <div data-slot="bash-scroll" data-scrollable>
+              <pre data-slot="bash-pre">
+                <code>{text()}</code>
+              </pre>
+            </div>
+          </Show>
+        </div>
+      </BasicTool>
+    )
+  },
+})
+
+ToolRegistry.register({
+  name: "edit",
+  render(props) {
+    const i18n = useI18n()
+    const data = useData()
+    const fileComponent = useFileComponent()
+    const diagnostics = createMemo(() => getDiagnostics(props.metadata.diagnostics, props.input.filePath))
+    const path = createMemo(() => props.metadata?.filediff?.file || props.input.filePath || "")
+    const filename = () => getFilename(props.input.filePath ?? "")
+    const pending = () => props.status === "pending" || props.status === "running"
+    const canPreview = () => !pending() && !!props.onCardClick && !!props.input.filePath
+    const openPreview = (e: MouseEvent) => {
+      if (!canPreview()) return
+      e.preventDefault()
+      e.stopPropagation()
+      props.onCardClick!("openFile", { path: props.input.filePath })
+    }
+    return (
+      <div data-component="edit-tool">
+        <BasicTool
+          {...props}
+          icon="edit-24"
+          defer
+          stickyTrigger
+          trigger={
+            <div data-component="edit-trigger">
+              <div data-slot="message-part-title-area">
+                <div data-slot="message-part-title">
+                  <span data-slot="message-part-title-text">
+                    <TextShimmer text={i18n.t("ui.messagePart.title.edit")} active={pending()} />
+                  </span>
+                  <Show when={filename()}>
+                    <Tooltip value={path() ? toAbsolutePath(data.directory, path()) : undefined} placement="top" class="tool-file-name-tooltip" contentClass="tool-file-path-tooltip">
+                      <span
+                        data-slot="message-part-title-filename"
+                        classList={{ clickable: canPreview() }}
+                        onClick={openPreview}
+                      >
+                        {filename()}
+                      </span>
+                    </Tooltip>
+                  </Show>
+                </div>
+              </div>
+              <div data-slot="message-part-actions">
+                <Show when={!pending() && props.metadata.filediff}>
+                  <DiffChanges changes={props.metadata.filediff} />
+                </Show>
+              </div>
+            </div>
+          }
+        >
+          <Show when={path()}>
+            <ToolFileAccordion
+              path={path()}
+              actions={
+                <Show when={!pending() && props.metadata.filediff}>
+                  <DiffChanges changes={props.metadata.filediff!} />
+                </Show>
+              }
+            >
+              <div data-component="edit-content">
+                <Dynamic
+                  component={fileComponent}
+                  mode="diff"
+                  before={{
+                    name: props.metadata?.filediff?.file || props.input.filePath,
+                    contents: props.metadata?.filediff?.before || props.input.oldString,
+                  }}
+                  after={{
+                    name: props.metadata?.filediff?.file || props.input.filePath,
+                    contents: props.metadata?.filediff?.after || props.input.newString,
+                  }}
+                />
+              </div>
+            </ToolFileAccordion>
+          </Show>
+          <DiagnosticsDisplay diagnostics={diagnostics()} />
+        </BasicTool>
+      </div>
+    )
+  },
+})
+
+ToolRegistry.register({
+  name: "write",
+  render(props) {
+    const i18n = useI18n()
+    const data = useData()
+    const fileComponent = useFileComponent()
+    const diagnostics = createMemo(() => getDiagnostics(props.metadata.diagnostics, props.input.filePath))
+    const streamedFilePath = () => (typeof props.metadata.filePath === "string" ? props.metadata.filePath : undefined)
+    const path = createMemo(() => props.input.filePath || streamedFilePath() || "")
+    const filename = () => getFilename(path())
+    const pending = () => props.status === "pending" || props.status === "running"
+    const docTitle = () =>
+      pending() ? undefined : getDocumentTitle({ filePath: props.input.filePath, content: props.input.content })
+    const progressMessage = createMemo(() => {
+      if (!pending()) return undefined
+      const meta = props.metadata as Record<string, any>
+      if (!meta?.phase) return undefined
+      const phase = meta.phase as string
+      const msg =
+        phase === "generating_input" && filename()
+          ? i18n.t("ui.tool.phase.generating_file", { filename: filename() })
+          : i18n.t(`ui.tool.phase.${phase}` as any)
+      if (phase === "generating_input") {
+        const count = typeof meta.charCount === "number" ? meta.charCount : 0
+        return count > 0
+          ? `${msg} · ${i18n.t("ui.tool.generatedChars", { count })}`
+          : msg
+      }
+      return msg
+    })
+    const canPreview = () => !pending() && !!props.onCardClick && !!props.input.filePath
+    const openPreview = (e: MouseEvent) => {
+      if (!canPreview()) return
+      e.preventDefault()
+      e.stopPropagation()
+      props.onCardClick!("openFile", { path: props.input.filePath })
+    }
+    return (
+      <div data-component="write-tool">
+        <BasicTool
+          {...props}
+          icon="edit-doc-16"
+          defer
+          stickyTrigger
+          trigger={
+            <div data-component="write-trigger">
+              <div data-slot="message-part-title-area">
+                <div data-slot="message-part-title">
+                  <span data-slot="message-part-title-text">
+                    <TextShimmer text={progressMessage() ?? i18n.t("ui.messagePart.title.write")} active={pending()} />
+                  </span>
+                  <Show when={filename() && !progressMessage()}>
+                    <Tooltip
+                      value={
+                        docTitle() && path() ? (
+                          <div data-slot="tool-title-tooltip">
+                            <span data-slot="tool-title-tooltip-name">{docTitle()}</span>
+                            <span data-slot="tool-title-tooltip-path">{toAbsolutePath(data.directory, path())}</span>
+                          </div>
+                        ) : path() ? (
+                          toAbsolutePath(data.directory, path())
+                        ) : undefined
+                      }
+                      placement="top"
+                      class="tool-file-name-tooltip"
+                      contentClass="tool-file-path-tooltip"
+                    >
+                      <span
+                        data-slot="message-part-title-filename"
+                        classList={{ clickable: canPreview() }}
+                        onClick={openPreview}
+                      >
+                        {docTitle() ?? filename()}
+                      </span>
+                    </Tooltip>
+                  </Show>
+                </div>
+              </div>
+              <div data-slot="message-part-actions">{/* <DiffChanges diff={diff} /> */}</div>
+            </div>
+          }
+        >
+          <Show when={props.input.content && path()}>
+            <ToolFileAccordion path={path()}>
+              <div data-component="write-content">
+                <Dynamic
+                  component={fileComponent}
+                  mode="text"
+                  file={{
+                    name: props.input.filePath,
+                    contents: props.input.content,
+                    cacheKey: checksum(props.input.content),
+                  }}
+                  overflow="scroll"
+                />
+              </div>
+            </ToolFileAccordion>
+          </Show>
+          <DiagnosticsDisplay diagnostics={diagnostics()} />
+        </BasicTool>
+      </div>
+    )
+  },
+})
+
+ToolRegistry.register({
+  name: "apply_patch",
+  render(props) {
+    const i18n = useI18n()
+    const data = useData()
+    const fileComponent = useFileComponent()
+    const files = createMemo(() => patchFiles(props.metadata.files))
+    const pending = createMemo(() => props.status === "pending" || props.status === "running")
+    const single = createMemo(() => {
+      const list = files()
+      if (list.length !== 1) return
+      return list[0]
+    })
+    const streamedFilename = () =>
+      typeof props.metadata.filePath === "string" ? getFilename(props.metadata.filePath) : undefined
+    const [expanded, setExpanded] = createSignal<string[]>([])
+
+    const progressMessage = createMemo(() => {
+      if (!pending()) return undefined
+      const meta = props.metadata as Record<string, any>
+      if (!meta?.phase) return undefined
+      const phase = meta.phase as string
+      const filename = streamedFilename()
+      const msg =
+        phase === "generating_input" && filename
+          ? i18n.t("ui.tool.phase.generating_file", { filename })
+          : i18n.t(`ui.tool.phase.${phase}` as any)
+      if (phase === "generating_input") {
+        const count = typeof meta.charCount === "number" ? meta.charCount : 0
+        return count > 0
+          ? `${msg} · ${i18n.t("ui.tool.generatedChars", { count })}`
+          : msg
+      }
+      return msg
+    })
+
+    const subtitle = createMemo(() => {
+      if (progressMessage()) return progressMessage()!
+      const count = files().length
+      if (count === 0) return ""
+      return `${count} ${i18n.t(count > 1 ? "ui.common.file.other" : "ui.common.file.one")}`
+    })
+
+    return (
+      <Show
+        when={single()}
+        fallback={
+          <div data-component="apply-patch-tool">
+            <BasicTool
+              {...props}
+              icon="edit-doc-16"
+              defer
+              stickyTrigger
+              trigger={{
+                title: i18n.t("ui.tool.patch"),
+                subtitle: subtitle(),
+              }}
+            >
+              <Show when={files().length > 0}>
+                <Accordion
+                  multiple
+                  data-scope="apply-patch"
+                  style={{ "--sticky-accordion-offset": "40px" }}
+                  value={expanded()}
+                  onChange={(value) => setExpanded(Array.isArray(value) ? value : value ? [value] : [])}
+                >
+                  <For each={files()}>
+                    {(file) => {
+                      const active = createMemo(() => expanded().includes(file.filePath))
+                      const [visible, setVisible] = createSignal(false)
+
+                      createEffect(() => {
+                        if (!active()) {
+                          setVisible(false)
+                          return
+                        }
+
+                        requestAnimationFrame(() => {
+                          if (!active()) return
+                          setVisible(true)
+                        })
+                      })
+
+                      return (
+                        <Accordion.Item value={file.filePath} data-type={file.type}>
+                          <StickyAccordionHeader>
+                            <Accordion.Trigger>
+                              <div data-slot="apply-patch-trigger-content">
+                                <div data-slot="apply-patch-file-info">
+                                  <FileIcon node={{ path: file.relativePath, type: "file" }} />
+                                  <div data-slot="apply-patch-file-name-container">
+                                    <Tooltip value={toAbsolutePath(data.directory, file.relativePath)} placement="top" class="tool-file-name-tooltip" contentClass="tool-file-path-tooltip">
+                                      <span
+                                        data-slot="apply-patch-filename"
+                                      >
+                                        {getFilename(file.relativePath)}
+                                      </span>
+                                    </Tooltip>
+                                  </div>
+                                </div>
+                                <div data-slot="apply-patch-trigger-actions">
+                                  <Switch>
+                                    <Match when={file.type === "add"}>
+                                      <span data-slot="apply-patch-change" data-type="added">
+                                        {i18n.t("ui.patch.action.created")}
+                                      </span>
+                                    </Match>
+                                    <Match when={file.type === "delete"}>
+                                      <span data-slot="apply-patch-change" data-type="removed">
+                                        {i18n.t("ui.patch.action.deleted")}
+                                      </span>
+                                    </Match>
+                                    <Match when={file.type === "move"}>
+                                      <span data-slot="apply-patch-change" data-type="modified">
+                                        {i18n.t("ui.patch.action.moved")}
+                                      </span>
+                                    </Match>
+                                    <Match when={true}>
+                                      <DiffChanges changes={{ additions: file.additions, deletions: file.deletions }} />
+                                    </Match>
+                                  </Switch>
+                                  <Icon name="chevron-grabber-vertical" size="small" />
+                                </div>
+                              </div>
+                            </Accordion.Trigger>
+                          </StickyAccordionHeader>
+                          <Accordion.Content>
+                            <Show when={visible()}>
+                              <div data-component="apply-patch-file-diff">
+                                <Dynamic component={fileComponent} mode="diff" fileDiff={file.view.fileDiff} />
+                              </div>
+                            </Show>
+                          </Accordion.Content>
+                        </Accordion.Item>
+                      )
+                    }}
+                  </For>
+                </Accordion>
+              </Show>
+            </BasicTool>
+          </div>
+        }
+      >
+        <div data-component="apply-patch-tool">
+          <BasicTool
+            {...props}
+            icon="edit-doc-16"
+            defer
+            stickyTrigger
+            trigger={
+              <div data-component="edit-trigger">
+                <div data-slot="message-part-title-area">
+                  <div data-slot="message-part-title">
+                    <span data-slot="message-part-title-text">
+                      <TextShimmer text={progressMessage() ?? i18n.t("ui.tool.patch")} active={pending()} />
+                    </span>
+                    <Show when={single()!.relativePath && !progressMessage()}>
+                      <Tooltip value={toAbsolutePath(data.directory, single()!.relativePath)} placement="top" class="tool-file-name-tooltip" contentClass="tool-file-path-tooltip">
+                        <span
+                          data-slot="message-part-title-filename"
+                        >
+                          {getFilename(single()!.relativePath)}
+                        </span>
+                      </Tooltip>
+                    </Show>
+                  </div>
+                </div>
+                <div data-slot="message-part-actions">
+                  <Show when={!pending()}>
+                    <DiffChanges changes={{ additions: single()!.additions, deletions: single()!.deletions }} />
+                  </Show>
+                </div>
+              </div>
+            }
+          >
+            <ToolFileAccordion
+              path={single()!.relativePath}
+              defaultOpen={false}
+              actions={
+                <Switch>
+                  <Match when={single()!.type === "add"}>
+                    <span data-slot="apply-patch-change" data-type="added">
+                      {i18n.t("ui.patch.action.created")}
+                    </span>
+                  </Match>
+                  <Match when={single()!.type === "delete"}>
+                    <span data-slot="apply-patch-change" data-type="removed">
+                      {i18n.t("ui.patch.action.deleted")}
+                    </span>
+                  </Match>
+                  <Match when={single()!.type === "move"}>
+                    <span data-slot="apply-patch-change" data-type="modified">
+                      {i18n.t("ui.patch.action.moved")}
+                    </span>
+                  </Match>
+                  <Match when={true}>
+                    <DiffChanges changes={{ additions: single()!.additions, deletions: single()!.deletions }} />
+                  </Match>
+                </Switch>
+              }
+            >
+              <div data-component="apply-patch-file-diff">
+                <Dynamic component={fileComponent} mode="diff" fileDiff={single()!.view.fileDiff} />
+              </div>
+            </ToolFileAccordion>
+          </BasicTool>
+        </div>
+      </Show>
+    )
+  },
+})
+
+ToolRegistry.register({
+  name: "todowrite",
+  render(props) {
+    const i18n = useI18n()
+    const todos = createMemo(() => {
+      const meta = props.metadata?.todos
+      if (Array.isArray(meta)) return meta
+
+      const input = props.input.todos
+      if (Array.isArray(input)) return input
+
+      return []
+    })
+
+    const subtitle = createMemo(() => {
+      const list = todos()
+      if (list.length === 0) return ""
+      return `${list.filter((t: Todo) => t.status === "completed").length}/${list.length}`
+    })
+
+    return (
+      <BasicTool
+        {...props}
+        defaultOpen
+        icon="checklist"
+        trigger={{
+          title: i18n.t("ui.tool.todos"),
+          subtitle: subtitle(),
+        }}
+      >
+        <Show when={todos().length}>
+          <div data-component="todos">
+            <For each={todos()}>
+              {(todo: Todo) => (
+                <Checkbox readOnly checked={todo.status === "completed"}>
+                  <span
+                    data-slot="message-part-todo-content"
+                    data-completed={todo.status === "completed" ? "completed" : undefined}
+                  >
+                    {todo.content}
+                  </span>
+                </Checkbox>
+              )}
+            </For>
+          </div>
+        </Show>
+      </BasicTool>
+    )
+  },
+})
+
+ToolRegistry.register({
+  name: "question",
+  render(props) {
+    const i18n = useI18n()
+    const questions = createMemo(() => (props.input.questions ?? []) as QuestionInfo[])
+    const answers = createMemo(() => (props.metadata.answers ?? []) as QuestionAnswer[])
+    const completed = createMemo(() => answers().length > 0)
+    const loading = createMemo(() => props.status === "pending" || props.status === "running")
+
+    const subtitle = createMemo(() => {
+      if (loading()) return undefined
+      const count = questions().length
+      if (count === 0) return ""
+      if (completed()) return i18n.t("ui.question.subtitle.answered", { count })
+      return `${count} ${i18n.t(count > 1 ? "ui.common.question.other" : "ui.common.question.one")}`
+    })
+
+    return (
+      <BasicTool
+        {...props}
+        defaultOpen={completed()}
+        icon="dialog-box-24"
+        trigger={{
+          title: i18n.t("ui.tool.questions"),
+          subtitle: subtitle(),
+        }}
+      >
+        <Show when={completed()}>
+          <div data-component="question-answers">
+            <For each={questions()}>
+              {(q, i) => {
+                const answer = () => answers()[i()] ?? []
+                return (
+                  <div data-slot="question-answer-item">
+                    <div data-slot="question-text">{q.question}</div>
+                    <div data-slot="answer-text">{answer().join(", ") || i18n.t("ui.question.answer.none")}</div>
+                  </div>
+                )
+              }}
+            </For>
+          </div>
+        </Show>
+      </BasicTool>
+    )
+  },
+})
+
+ToolRegistry.register({
+  name: "skill",
+  render(props) {
+    const i18n = useI18n()
+    const name = createMemo(() => {
+      const raw = props.input.name
+      return (raw ? (SKILL_DISPLAY_NAMES[raw] ?? raw) : undefined) || i18n.t("ui.tool.skill")
+    })
+    const running = createMemo(() => props.status === "pending" || props.status === "running")
+
+    return (
+      <div data-component="tool-trigger" data-tool-kind="skill">
+        <div data-slot="basic-tool-tool-trigger-content">
+          <Show when={props.status === "completed" || props.status === "error"}>
+            <span data-slot="basic-tool-tool-indicator" data-tool-status={props.status}>
+              <Icon name={props.status === "error" ? "action-failed" : "plugin-24"} size="small" />
+            </span>
+          </Show>
+          <div data-slot="basic-tool-tool-info">
+            <div data-slot="basic-tool-tool-info-structured">
+              <div data-slot="basic-tool-tool-info-main">
+                <span data-slot="basic-tool-tool-title">{i18n.t("ui.tool.skill")}</span>
+                <span data-slot="basic-tool-tool-subtitle" class="truncate">
+                  {name()}
+                </span>
+                <span data-slot="skill-tool-status">
+                  <ToolStatusTitle
+                    active={running()}
+                    activeText={i18n.t("ui.sessionTurn.status.callingSkill")}
+                    doneText={i18n.t("ui.sessionTurn.status.calledSkill")}
+                    split={false}
+                  />
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  },
+})

@@ -1,0 +1,283 @@
+[data-component="select"] {
+  [data-slot="select-select-trigger"] {
+    padding: 0 4px 0 8px;
+    box-shadow: none;
+
+    [data-slot="select-select-trigger-value"] {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    [data-slot="select-select-trigger-icon"] {
+      width: 16px;
+      height: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      color: var(--text-weak);
+      transition: transform 0.1s ease-in-out;
+    }
+
+    &[data-expanded] {
+      &[data-variant="secondary"] {
+        background-color: var(--button-secondary-hover);
+      }
+      &[data-variant="ghost"] {
+        background-color: var(--surface-raised-base-active);
+      }
+      &[data-variant="primary"] {
+        background-color: var(--icon-strong-active);
+      }
+    }
+
+    &:not([data-expanded]):focus-visible {
+      &[data-variant="secondary"] {
+        background-color: var(--button-secondary-base);
+      }
+      &[data-variant="ghost"] {
+        background-color: var(--surface-raised-base-hover);
+      }
+      &[data-variant="primary"] {
+        background-color: var(--icon-strong-base);
+      }
+    }
+  }
+
+  &[data-trigger-style="settings"] {
+    [data-slot="select-select-trigger"] {
+      padding: 0 0 0 12px;
+      box-shadow: none;
+      border-radius: 0;
+      min-width: 48px;
+      height: 22px;
+      justify-content: flex-end;
+      gap: 4px;
+      background-color: transparent;
+      border: none;
+      min-height: 0;
+
+      [data-slot="select-select-trigger-value"] {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        color: var(--neutral-700);
+        font-size: 12px;
+        font-style: normal;
+        font-weight: var(--font-weight-regular);
+        line-height: 18px;
+      }
+      [data-slot="select-select-trigger-icon"] {
+        width: 12.5px;
+        height: 18px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+        color: #666666;
+        background-color: transparent;
+        border-radius: 0;
+        transition: transform 0.1s ease-in-out;
+      }
+
+      &[data-slot="select-select-trigger"]:hover:not(:disabled),
+      &[data-slot="select-select-trigger"][data-expanded],
+      &[data-slot="select-select-trigger"][data-expanded]:hover:not(:disabled) {
+        background-color: transparent;
+        box-shadow: none;
+      }
+
+      &:not([data-expanded]):not(:focus-visible):focus {
+        background-color: transparent;
+        box-shadow: none;
+      }
+    }
+  }
+
+  /* 盒式下拉:黑 3% 底 + 8px 圆角 + 28px 高,12px 的 black-46 收起箭头。
+     用于 worktree 设置页等需要「有边界的控件」而非 settings 无边框风格的地方。 */
+  &[data-trigger-style="boxed"] {
+    [data-slot="select-select-trigger"] {
+      height: 28px;
+      min-height: 28px;
+      padding: 0 12px;
+      gap: 4px;
+      border: none;
+      border-radius: 8px;
+      box-shadow: none;
+      /* neutral-50 = 亮 black-3 / 暗 white-3,主题自适应;别用裸 --black-3(暗黑下等于透明)。
+         必须带 fallback：--neutral-50 在仓库内没有声明，缺省时 var() 会让整条
+         background 失效(invalid at computed-value time)、退回透明，盒式底色就没了。
+         中间再垫一层 --surface-card-base：它在 theme.css 里有定义且带暗色覆盖
+         (亮 3% 黑 / 暗 3% 白)，避免非 Nova 主题在暗色下退到黑色 fallback 而看不见。 */
+      background: var(--neutral-50, var(--surface-card-base, rgba(0, 0, 0, 0.03)));
+
+      [data-slot="select-select-trigger-value"] {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        color: var(--neutral-700);
+        font-size: 14px;
+        font-style: normal;
+        font-weight: var(--font-weight-regular);
+        line-height: 20px;
+      }
+      [data-slot="select-select-trigger-icon"] {
+        width: 12px;
+        height: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+        /* neutral-500 = 亮 black-46 / 暗 white-46;裸 --black-46 在暗黑下不可见。 */
+        color: var(--neutral-500);
+        transition: transform 0.1s ease-in-out;
+      }
+
+      &:hover:not(:disabled),
+      &[data-expanded] {
+        background: var(--neutral-50, var(--surface-card-base, rgba(0, 0, 0, 0.03)));
+        box-shadow: none;
+      }
+    }
+  }
+}
+
+[data-component="select-content"] {
+  min-width: 104px;
+  max-width: 23rem;
+  overflow: hidden;
+  border-radius: var(--radius-md);
+  background-color: var(--surface-raised-stronger-non-alpha);
+  padding: 4px;
+  box-shadow: var(--shadow-xs-border);
+  z-index: 60;
+
+  &[data-expanded] {
+    animation: select-open 0.15s ease-out;
+  }
+
+  [data-slot="select-select-content-list"] {
+    overflow-y: auto;
+    max-height: 202px;
+    white-space: nowrap;
+    overflow-x: hidden;
+    display: flex;
+    flex-direction: column;
+
+    &:focus {
+      outline: none;
+    }
+
+    > *:not([role="presentation"]) + *:not([role="presentation"]) {
+      margin-top: 2px;
+    }
+  }
+
+  [data-slot="select-select-item"] {
+    position: relative;
+    display: flex;
+    align-items: center;
+    padding: 2px 8px;
+    gap: 12px;
+    border-radius: 4px;
+    cursor: pointer;
+
+    /* text-12-medium */
+    font-family: var(--font-family-sans);
+    font-size: var(--font-size-small);
+    font-style: normal;
+    font-weight: var(--font-weight-medium);
+    line-height: var(--line-height-large); /* 166.667% */
+    letter-spacing: var(--letter-spacing-normal);
+
+    color: var(--neutral-800);
+
+    transition:
+      background-color 0.2s ease-in-out,
+      color 0.2s ease-in-out;
+    outline: none;
+    user-select: none;
+
+    &[data-highlighted] {
+      background: var(--surface-raised-base-hover);
+    }
+    &[data-disabled] {
+      background-color: var(--surface-raised-base);
+      pointer-events: none;
+    }
+    [data-slot="select-select-item-indicator"] {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-left: auto;
+      width: 16px;
+      height: 16px;
+    }
+    &:focus {
+      outline: none;
+    }
+    &:hover {
+      background: var(--surface-raised-base-hover);
+    }
+  }
+}
+
+[data-component="select-content"][data-trigger-style="settings"],
+[data-component="select-content"][data-trigger-style="boxed"] {
+  min-width: 181px;
+  padding: 4px;
+  border-radius: 20px;
+  border: 0.5px solid var(--neutral-200, rgba(0, 0, 0, 0.12));
+  background: var(--neutral-0);
+  box-shadow: 0 4px 12px 0 var(--neutral-130, rgba(0, 0, 0, 0.08));
+
+  [data-slot="select-select-content-list"] {
+    padding: 0;
+    scrollbar-width: none;
+
+    &::-webkit-scrollbar {
+      display: none;
+    }
+  }
+
+  [data-slot="select-select-item"] {
+    min-height: 32px;
+    padding: 8px;
+    color: var(--neutral-700, rgba(0, 0, 0, 0.94));
+    font-size: 14px;
+    font-style: normal;
+    font-weight: var(--font-weight-regular);
+    line-height: 20px;
+    letter-spacing: var(--letter-spacing-normal);
+    border-radius: 999px;
+
+    &[data-highlighted] {
+      background: var(--neutral-50);
+    }
+
+    &:hover {
+      background: var(--neutral-50);
+    }
+  }
+
+  [data-slot="select-select-item-label"] {
+    width: 100%;
+  }
+
+  [data-slot="select-select-item-indicator"] {
+    display: flex;
+    color: var(--neutral-500);
+  }
+}
+
+@keyframes select-open {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}

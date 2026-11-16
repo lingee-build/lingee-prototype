@@ -1,0 +1,3160 @@
+@import "@kcode/ui/styles/tailwind";
+
+:root {
+  --nav-beta-text: #767676;
+}
+
+:root[data-color-scheme="dark"] {
+  --nav-beta-text: var(--neutral-500);
+}
+
+.nav-beta {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 4px;
+  background: var(--neutral-100);
+  color: var(--nav-beta-text);
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 16px;
+  letter-spacing: 0;
+  border: none;
+  box-shadow: none;
+}
+
+/* Dropdown menu style overrides：对齐 control_plane chatAttachDropdown 的边框与投影，
+   避免菜单在浅色背景上缺少视觉分隔和层次感。 */
+[data-component="dropdown-menu-content"],
+[data-component="dropdown-menu-sub-content"] {
+  border-radius: 20px;
+  min-width: 150px;
+  border: 0.5px solid var(--neutral-130, rgba(0, 0, 0, 0.08));
+  box-shadow: 0 4px 12px var(--neutral-130, rgba(0, 0, 0, 0.08));
+}
+
+/* 分割线：0.5px rgba(0,0,0,0.06)，两头留空 4px，对齐 SVG 设计稿 */
+[data-component="dropdown-menu-content"] [data-slot="dropdown-menu-separator"],
+[data-component="dropdown-menu-sub-content"] [data-slot="dropdown-menu-separator"] {
+  border-top: 0.5px solid var(--neutral-100, rgba(0, 0, 0, 0.06));
+  margin: 4px 0;
+  height: 0;
+  padding: 0 4px;
+}
+
+[data-component="dropdown-menu-content"] [data-slot="dropdown-menu-item"],
+[data-component="dropdown-menu-content"] [data-slot="dropdown-menu-checkbox-item"],
+[data-component="dropdown-menu-content"] [data-slot="dropdown-menu-radio-item"],
+[data-component="dropdown-menu-content"] [data-slot="dropdown-menu-sub-trigger"],
+[data-component="dropdown-menu-sub-content"] [data-slot="dropdown-menu-item"],
+[data-component="dropdown-menu-sub-content"] [data-slot="dropdown-menu-checkbox-item"],
+[data-component="dropdown-menu-sub-content"] [data-slot="dropdown-menu-radio-item"],
+[data-component="dropdown-menu-sub-content"] [data-slot="dropdown-menu-sub-trigger"] {
+  height: 32px;
+  padding: 0 8px;
+  gap: 4px;
+  border-radius: 999px;
+}
+
+[data-component="dropdown-menu-content"] [data-slot="dropdown-menu-item"][data-highlighted],
+[data-component="dropdown-menu-content"] [data-slot="dropdown-menu-checkbox-item"][data-highlighted],
+[data-component="dropdown-menu-content"] [data-slot="dropdown-menu-radio-item"][data-highlighted],
+[data-component="dropdown-menu-content"] [data-slot="dropdown-menu-sub-trigger"][data-highlighted],
+[data-component="dropdown-menu-sub-content"] [data-slot="dropdown-menu-item"][data-highlighted],
+[data-component="dropdown-menu-sub-content"] [data-slot="dropdown-menu-checkbox-item"][data-highlighted],
+[data-component="dropdown-menu-sub-content"] [data-slot="dropdown-menu-radio-item"][data-highlighted],
+[data-component="dropdown-menu-sub-content"] [data-slot="dropdown-menu-sub-trigger"][data-highlighted] {
+  background: var(--neutral-50, rgba(0, 0, 0, 0.03));
+}
+
+/* SubTrigger 悬停时图标变黑，对齐 kwork DropdownSubTrigger 选中态 */
+[data-component="dropdown-menu-content"] [data-slot="dropdown-menu-sub-trigger"][data-highlighted],
+[data-component="dropdown-menu-sub-content"] [data-slot="dropdown-menu-sub-trigger"][data-highlighted] {
+  [data-component="icon"],
+  svg {
+    color: var(--neutral-900, rgba(0, 0, 0, 0.88));
+  }
+}
+
+[data-component="dropdown-menu-content"]
+  [data-slot="dropdown-menu-item"][data-variant="destructive"][data-highlighted] {
+  background: var(--danger-50, #fff0f1);
+  color: var(--danger-600, #ff293b);
+  [data-component="icon"] {
+    color: var(--danger-600, #ff293b);
+  }
+}
+
+/* 一级菜单项：对齐 kwork chatAttachDropdown 的 32px 行高与 12px 字号 */
+[data-component="dropdown-menu-content"] [data-slot="dropdown-menu-item"],
+[data-component="dropdown-menu-content"] [data-slot="dropdown-menu-checkbox-item"],
+[data-component="dropdown-menu-content"] [data-slot="dropdown-menu-radio-item"],
+[data-component="dropdown-menu-content"] [data-slot="dropdown-menu-sub-trigger"] {
+  height: 32px;
+  font-size: 12px;
+  line-height: 18px;
+}
+
+/* Spec/目标模式选择项：卡片式两行布局，去除 32px 固定高度限制 */
+[data-component="dropdown-menu-content"] [data-slot="dropdown-menu-item"].mode-card-item {
+  height: auto;
+  padding: 5px 8px;
+  color: var(--text-color-secondary-82);
+  font-size: 14px;
+  line-height: 20px;
+  border-radius: 12px;
+}
+
+/* 技能开发卡片操作菜单使用组件库标准字号，提升操作项可读性 */
+[data-component="dropdown-menu-content"].skill-card-actions-menu [data-slot="dropdown-menu-item"] {
+  font-size: 14px;
+  line-height: 20px;
+}
+
+/* 测试下拉按钮菜单使用组件库标准 14px 字号（设计稿要求） */
+[data-component="dropdown-menu-content"].test-dropdown-menu [data-slot="dropdown-menu-item"] {
+  font-size: 14px;
+  line-height: 20px;
+  height: auto;
+  padding: 8px 12px;
+}
+
+[data-component="dropdown-menu-content"].test-dropdown-menu {
+  min-width: auto;
+}
+
+/* 项目侧边栏操作菜单使用组件库标准字号，提升操作项可读性 */
+[data-component="dropdown-menu-content"].project-actions-menu [data-slot="dropdown-menu-item"] {
+  font-size: 14px;
+  line-height: 20px;
+}
+
+/* 智能体/技能开发页 Select 风格下拉使用 14px 字号，与 trigger 文案保持一致 */
+[data-component="dropdown-menu-content"].domain-select-menu [data-slot="dropdown-menu-item"] {
+  font-size: 14px;
+  line-height: 20px;
+  height: 32px;
+}
+
+/* 工具选择子菜单：List 组件内部（list-scroll/list-items/list-item）默认自带
+   12px/8px 间距与 4px 内边距 + 底部渐隐遮罩，会让工具列表行之间出现明显间隙，
+   且在内容超出 max-height 时于底部出现一条渐隐分割线，这里让工具行紧密贴合，
+   并去掉渐隐遮罩，与设计稿保持一致。 */
+[data-component="dropdown-menu-sub-content"] [data-component="list"] [data-slot="list-scroll"] {
+  gap: 0;
+  -webkit-mask: none;
+  mask: none;
+}
+[data-component="dropdown-menu-sub-content"] [data-component="list"] [data-slot="list-items"] {
+  gap: 2px;
+  padding: 0;
+}
+[data-component="dropdown-menu-sub-content"] [data-component="list"] [data-slot="list-item"] {
+  padding: 0;
+}
+
+/* Toast notification style overrides
+ *
+ * 全部限定 :not([data-position="bottom-right"])：右下角浮层的视觉规范完全由
+ * kcode-ui 的 toast.css 承载，两边同时管会打架。具体踩过的两个坑：
+ * 1. 这里的 title / description 都写 color: var(--text-toast-description)，
+ *    该变量由 kcode-ui 主题系统（resolve.ts）在运行时注入，亮暗模式自适应。
+ *    标题和描述取到同一个颜色 —— 设计稿要求的是 black82 / black46 两档。
+ * 2. 这里用 flex order 把 :first-child 排到右边充当主按钮。右下角浮层已经改成
+ *    「DOM 顺序即视觉顺序」（忽略在前、主操作在后），再叠 order 会把两者的
+ *    颜色和位置一起颠倒。
+ */
+[data-component="toast"]:not([data-position="bottom-right"]) [data-slot="toast-icon"] {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+}
+
+[data-component="toast"]:not([data-position="bottom-right"]) [data-slot="toast-icon"] [data-component="icon"] {
+  width: 20px;
+  height: 20px;
+  color: var(--text-toast-description);
+}
+
+[data-component="toast"]:not([data-position="bottom-right"]) [data-slot="toast-title"] {
+  color: var(--text-toast-description);
+  font-family: "PingFang SC";
+  font-size: 16px;
+  font-weight: 400;
+  line-height: 24px;
+}
+
+[data-component="toast"]:not([data-position="bottom-right"]) [data-slot="toast-description"] {
+  color: var(--text-toast-description);
+  font-family: "PingFang SC";
+  font-size: 16px;
+  font-weight: 400;
+  line-height: 24px;
+}
+
+[data-component="toast"]:not([data-position="bottom-right"]) [data-slot="toast-actions"] {
+  margin-top: 8px;
+  gap: 12px;
+  justify-content: flex-end;
+}
+
+[data-component="toast"]:not([data-position="bottom-right"]) [data-slot="toast-action"] {
+  display: block;
+  padding: 8px 12px;
+  text-align: center;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 22px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+[data-component="toast"]:not([data-position="bottom-right"]) [data-slot="toast-action"]:first-child {
+  background: var(--primary-600, #495dff);
+  color: #fff;
+  flex-shrink: 0;
+  order: 2;
+}
+
+[data-component="toast"]:not([data-position="bottom-right"]) [data-slot="toast-action"]:first-child:hover {
+  text-decoration: none;
+}
+
+[data-component="toast"]:not([data-position="bottom-right"]) [data-slot="toast-action"]:last-child:not(:first-child) {
+  color: var(--neutral-600, rgba(0, 0, 0, 0.64));
+  background: none;
+  order: 1;
+}
+
+[data-component="toast"]:not([data-position="bottom-right"])
+  [data-slot="toast-action"]:last-child:not(:first-child):hover {
+  text-decoration: none;
+}
+
+[data-component="toast"] [data-slot="toast-close-button"] {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+}
+
+/* Permission dock style overrides */
+[data-component="session-prompt-dock"] {
+  padding: 0 24px 8px 24px;
+}
+
+[data-component="dock-prompt"][data-kind="permission"] {
+  width: 710px;
+  max-width: 100%;
+  border-radius: 24px;
+  border: 1px solid var(--neutral-200, rgba(0, 0, 0, 0.1));
+  background: var(--neutral-0);
+  box-shadow: 0px 4px 15px 0px #2f3e6126;
+  padding: 20px;
+}
+
+[data-component="dock-prompt"][data-kind="permission"] [data-slot="permission-body"] {
+  border-radius: 0;
+  border: none;
+  background: none;
+  box-shadow: none;
+  padding: 0;
+}
+
+[data-component="dock-prompt"][data-kind="permission"] [data-slot="permission-row"][data-variant="header"] {
+  grid-template-columns: 24px 1fr 23px;
+  gap: 8px;
+}
+
+[data-component="dock-prompt"][data-kind="permission"] [data-slot="permission-icon"] [data-component="icon"] {
+  width: 24px;
+  height: 24px;
+}
+
+[data-component="dock-prompt"][data-kind="permission"] [data-slot="permission-header-title"] {
+  color: var(--neutral-700, rgba(0, 0, 0, 0.82));
+  font-family: var(--family-title, "Microsoft YaHei");
+  font-size: var(--size-6, 20px);
+  font-weight: 600;
+  line-height: var(--line-height-6, 30px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+[data-component="dock-prompt"][data-kind="permission"] [data-slot="permission-hint"] {
+  color: var(--neutral-700, rgba(0, 0, 0, 0.94));
+  font-family: "PingFang SC";
+  font-size: 14px;
+  font-weight: 400;
+  line-height: normal;
+  padding-left: 6px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+[data-component="dock-prompt"][data-kind="permission"] [data-slot="permission-patterns"] {
+  padding-left: 6px;
+}
+
+[data-component="dock-prompt"][data-kind="permission"] [data-slot="permission-patterns"] code {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  display: block;
+}
+
+[data-component="dock-prompt"][data-kind="permission"] [data-slot="permission-footer"] {
+  padding: 12px 0 0;
+  margin-top: 0;
+  border-radius: 0;
+  background: none;
+  border: none;
+  box-shadow: none;
+}
+
+[data-component="dock-prompt"][data-kind="permission"] [data-slot="permission-footer-actions"] {
+  gap: 8px;
+}
+
+[data-component="dock-prompt"][data-kind="permission"]
+  [data-slot="permission-footer-actions"]
+  [data-component="button"][data-variant="ghost"] {
+  height: 36px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  color: var(--neutral-600, rgba(0, 0, 0, 0.64));
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 20px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  display: block;
+  text-align: center;
+}
+
+[data-component="dock-prompt"][data-kind="permission"]
+  [data-slot="permission-footer-actions"]
+  [data-component="button"][data-variant="secondary"] {
+  height: 36px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--Buttons-Secondary-Borders-BR-Color-1, #007aff);
+  background: none;
+  color: var(--Buttons-Secondary-Text-Color-1, #007aff);
+  font-family: "PingFang SC";
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 20px;
+  box-shadow: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  display: block;
+  text-align: center;
+}
+
+[data-component="dock-prompt"][data-kind="permission"]
+  [data-slot="permission-footer-actions"]
+  [data-component="button"][data-variant="primary"] {
+  height: 36px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: var(--primary-600, #495dff);
+  color: #fff;
+  font-family: "PingFang SC";
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 20px;
+  box-shadow: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  display: block;
+  text-align: center;
+}
+
+/* Question dock style tune */
+[data-component="dock-prompt"][data-kind="question"] {
+  border-radius: 24px;
+  border: 1px solid var(--docker-border);
+  background: var(--docker-bg);
+  box-shadow: 0px 4px 15px 0px #2f3e6126;
+  padding: 0;
+  overflow: hidden;
+}
+
+[data-component="dock-prompt"][data-kind="question"] [data-slot="question-body"] {
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  gap: 0;
+  padding: 0;
+}
+
+[data-component="dock-prompt"][data-kind="question"] [data-slot="question-header"] {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+  padding: 12px 16px 0 16px;
+}
+
+[data-component="dock-prompt"][data-kind="question"] [data-slot="question-header"]:empty {
+  display: none;
+}
+
+[data-component="dock-prompt"][data-kind="question"] [data-slot="question-header-main"] {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  padding: 4px 4px 8px;
+}
+
+[data-component="dock-prompt"][data-kind="question"] [data-slot="question-header-title"] {
+  font-size: 16px;
+  font-weight: 400;
+  line-height: 24px;
+  color: var(--neutral-600, rgba(0, 0, 0, 0.64));
+  min-width: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  user-select: text;
+  -webkit-user-select: text;
+  cursor: pointer;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  overflow: hidden;
+}
+
+[data-component="dock-prompt"][data-kind="question"] [data-slot="question-header-title"][data-expanded="true"] {
+  -webkit-line-clamp: unset;
+  line-clamp: unset;
+}
+
+[data-component="dock-prompt"][data-kind="question"] [data-slot="question-context"] {
+  margin-top: 4px;
+}
+
+[data-component="dock-prompt"][data-kind="question"] [data-slot="question-context-toggle"] {
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--primary-500, #1890ff);
+  cursor: pointer;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+[data-component="dock-prompt"][data-kind="question"] [data-slot="question-context-body"] {
+  margin-top: 4px;
+}
+
+[data-component="dock-prompt"][data-kind="question"] [data-slot="question-context-body"] [data-component="markdown"] {
+  font-size: 14px;
+  line-height: 22px;
+  color: var(--neutral-500, rgba(0, 0, 0, 0.45));
+}
+
+[data-component="dock-prompt"][data-kind="question"] [data-slot="question-context-body"] [data-component="markdown"] h1,
+[data-component="dock-prompt"][data-kind="question"] [data-slot="question-context-body"] [data-component="markdown"] h2,
+[data-component="dock-prompt"][data-kind="question"] [data-slot="question-context-body"] [data-component="markdown"] h3,
+[data-component="dock-prompt"][data-kind="question"] [data-slot="question-context-body"] [data-component="markdown"] h4,
+[data-component="dock-prompt"][data-kind="question"] [data-slot="question-context-body"] [data-component="markdown"] h5,
+[data-component="dock-prompt"][data-kind="question"] [data-slot="question-context-body"] [data-component="markdown"] h6 {
+  font-size: 14px;
+  font-weight: 600;
+  margin: 8px 0 4px;
+  color: var(--neutral-600, rgba(0, 0, 0, 0.64));
+}
+
+[data-component="dock-prompt"][data-kind="question"] [data-slot="question-context-body"] [data-component="markdown"] p {
+  margin: 4px 0;
+}
+
+[data-component="dock-prompt"][data-kind="question"] [data-slot="question-context-body"] [data-component="markdown"] ul,
+[data-component="dock-prompt"][data-kind="question"] [data-slot="question-context-body"] [data-component="markdown"] ol {
+  padding-left: 20px;
+  margin: 4px 0;
+}
+
+[data-component="dock-prompt"][data-kind="question"] [data-slot="question-context-body"] [data-component="markdown"] li {
+  margin: 2px 0;
+}
+
+[data-component="dock-prompt"][data-kind="question"] [data-slot="question-context-body"] [data-component="markdown"] strong {
+  color: var(--neutral-600, rgba(0, 0, 0, 0.64));
+}
+
+/* 授权引导卡（服务端下发 redirectUrl）：标题取 header，正文取 question。与工作模式（kwork）
+   侧的渲染一致 —— 同一张卡片在那边是「第三方授权」+ 说明正文，不是把整段问句当标题。 */
+[data-component="dock-prompt"][data-kind="question"]
+  [data-slot="question-section"][data-auth="true"]
+  [data-slot="question-header-title"] {
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 24px;
+  color: var(--neutral-700, rgba(0, 0, 0, 0.82));
+}
+
+[data-component="dock-prompt"][data-kind="question"] [data-slot="question-description"] {
+  margin-top: 4px;
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 22px;
+  color: var(--neutral-600, rgba(0, 0, 0, 0.64));
+  min-width: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  user-select: text;
+  -webkit-user-select: text;
+  cursor: text;
+}
+
+[data-component="dock-prompt"][data-kind="question"] [data-slot="question-progress-row"] {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+}
+
+[data-component="dock-prompt"][data-kind="question"] [data-slot="question-multi-title"] {
+  flex: 1;
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 24px;
+  color: var(--neutral-700, rgba(0, 0, 0, 0.82));
+}
+
+[data-component="dock-prompt"][data-kind="question"] [data-slot="question-progress-text"] {
+  flex-shrink: 0;
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 24px;
+  color: var(--neutral-600, rgba(0, 0, 0, 0.64));
+}
+
+[data-component="dock-prompt"][data-kind="question"] [data-slot="question-progress-count"] {
+  min-width: 32px;
+  font-size: 16px;
+  font-weight: 400;
+  line-height: 24px;
+  color: var(--neutral-600, rgba(0, 0, 0, 0.64));
+  text-align: center;
+}
+
+[data-component="dock-prompt"][data-kind="question"] [data-slot="question-progress-nav"] {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--neutral-600, rgba(0, 0, 0, 0.64));
+  cursor: pointer;
+  transition:
+    background-color 140ms ease,
+    color 140ms ease,
+    opacity 140ms ease,
+    transform 140ms ease;
+
+  [data-component="icon"] {
+  width: 20px;
+  height: 20px;
+  }
+}
+
+[data-component="dock-prompt"][data-kind="question"] [data-slot="question-progress-nav"]:hover:not(:disabled) {
+  color: var(--neutral-400, rgba(0, 0, 0, 0.28));
+  background: var(--neutral-50, rgba(0, 0, 0, 0.03));
+}
+
+[data-component="dock-prompt"][data-kind="question"] [data-slot="question-progress-nav"]:active:not(:disabled) {
+  transform: scale(0.96);
+  background: var(--neutral-150, rgba(0, 0, 0, 0.08));
+}
+
+[data-component="dock-prompt"][data-kind="question"] [data-slot="question-progress-nav"]:disabled {
+  color: var(--neutral-400, rgba(0, 0, 0, 0.28));
+  cursor: not-allowed;
+
+  [data-component="icon"] {
+    color: var(--neutral-400, rgba(0, 0, 0, 0.28));
+  }
+}
+
+[data-component="dock-prompt"][data-kind="question"] [data-slot="question-content"] {
+  gap: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+[data-component="dock-prompt"][data-kind="question"] [data-slot="question-hint"] {
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 20px;
+  color: var(--neutral-500, rgba(0, 0, 0, 0.46));
+  min-width: 0;
+}
+
+/* 409 授权引导：跳转按钮。按钮外观交给 @kcode/ui 的 Button（data-variant="primary"），
+   这里只负责排版，不要在此覆写颜色。卡片正文已经写明「完成后回到这里选择…」，
+   不再额外挂提示语（工作模式侧同样没有）。 */
+[data-component="dock-prompt"][data-kind="question"] [data-slot="question-redirect"] {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 10px 0 8px;
+}
+
+[data-component="dock-prompt"][data-kind="question"] [data-slot="question-options"] {
+  margin-top: 0;
+  gap: 0;
+  padding: 0;
+  flex: 0 0 auto;
+  height: 276px;
+  max-height: 276px;
+  position: relative;
+  z-index: 1;
+  overflow-y: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  /*
+   * 不要使用 CSS scroll-snap-type: y mandatory。
+   * 当 section 内选项较多导致其高度超过容器（min-height: 100%）时，mandatory 吸附会强制把
+   * 滚动位置回弹到 section 起点，造成两个问题：
+   * 1) 用户滚到底部查看末尾选项（如 "Type your own answer"）后，浏览器把内容回弹到顶部；
+   * 2) 在 mousedown 期间发生回弹，mouseup 时鼠标位置下方变成了第 1 项，导致点击落到第 1 项。
+   * 跨题之间的吸附已由 session-question-dock.tsx 的 settleToNearest 在 JS 层实现，
+   * 该逻辑允许在单题内自由滚动，仅在接近边界时才吸附，行为更符合预期。
+   */
+  scroll-behavior: smooth;
+  overscroll-behavior: contain;
+}
+
+[data-component="dock-prompt"][data-kind="question"] [data-slot="question-options"]::-webkit-scrollbar {
+  display: none;
+}
+
+/* 授权引导卡（服务端下发 redirectUrl）内容固定 —— 一题、两个选项（见 session-question-dock.tsx
+   的 authOnly）。这类卡片不需要滚动容器：固定 276px 会在卡片里留出空白，还会把选项区底部裁掉
+   一截（实测 scrollHeight 290 > clientHeight 276），于是内容能被滚轮推动。高度交给内容决定。 */
+[data-component="dock-prompt"][data-kind="question"] [data-slot="question-options"][data-auth="true"] {
+  height: auto;
+  max-height: none;
+  overflow: visible;
+  scroll-behavior: auto;
+}
+
+[data-component="dock-prompt"][data-kind="question"]
+  [data-slot="question-options"][data-auth="true"]
+  [data-slot="question-section"] {
+  min-height: auto;
+}
+
+[data-component="dock-prompt"][data-kind="question"] [data-slot="question-section"] {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px;
+  min-height: 100%;
+  flex: 0 0 auto;
+  box-sizing: border-box;
+  /* 同上：吸附行为交由 JS（settleToNearest）处理，CSS 不再强制 snap-align/stop。 */
+  opacity: 1;
+  transform: none;
+  transition: opacity 180ms ease-out;
+  overflow: hidden;
+}
+
+[data-component="dock-prompt"][data-kind="question"] [data-slot="question-section"][data-active="true"] {
+  opacity: 1;
+  transform: none;
+}
+
+[data-component="dock-prompt"][data-kind="question"] [data-slot="question-option"] {
+  border-radius: 16px;
+  border: 0;
+  background: transparent;
+  padding: 10px 16px;
+  gap: 12px;
+  align-items: center;
+  /* 整项是一个选择控件：连同内部文字一起给小手，不要出现 I 型文本光标 */
+  cursor: pointer;
+  transition:
+    border-color 140ms ease,
+    box-shadow 140ms ease,
+    background-color 140ms ease;
+}
+
+[data-component="dock-prompt"][data-kind="question"] [data-slot="question-option"]:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+
+[data-component="dock-prompt"][data-kind="question"] [data-slot="question-option"]:hover {
+  background: var(--neutral-50, rgba(0, 0, 0, 0.03));
+}
+
+[data-component="dock-prompt"][data-kind="question"] [data-slot="question-option"][data-picked="true"] {
+  border: none;
+  box-shadow: none;
+}
+
+[data-component="dock-prompt"][data-kind="question"] [data-slot="question-option-box"] {
+  width: 22px;
+  height: 22px;
+  border-color: var(--neutral-300, rgba(0, 0, 0, 0.18));
+}
+
+[data-component="dock-prompt"][data-kind="question"] [data-slot="question-option-check"] {
+  width: 20px;
+  min-width: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  align-self: center;
+  transform: none;
+}
+
+[data-component="dock-prompt"][data-kind="question"] [data-slot="question-option-box"][data-type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border-width: 1px;
+  border-style: solid;
+  border-color: var(--neutral-300, rgba(0, 0, 0, 0.18));
+  border-radius: 4px;
+  background: transparent;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  transition:
+    border-color 140ms ease,
+    background 140ms ease;
+}
+
+[data-component="dock-prompt"][data-kind="question"] [data-slot="question-option-checkmark"] {
+  opacity: 0;
+  width: 14px;
+  height: 14px;
+  display: block;
+  color: #fff;
+}
+
+[data-component="dock-prompt"][data-kind="question"]
+  [data-slot="question-option-box"][data-type="checkbox"][data-picked="true"] {
+  border-color: var(--primary-600, #495dff);
+  background: var(--primary-600, #495dff);
+}
+
+[data-component="dock-prompt"][data-kind="question"]
+  [data-slot="question-option-box"][data-type="checkbox"][data-picked="true"]
+  [data-slot="question-option-checkmark"] {
+  opacity: 1;
+}
+
+[data-component="dock-prompt"][data-kind="question"] [data-slot="question-option-box"][data-type="number"] {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid var(--neutral-200, rgba(0, 0, 0, 0.08));
+  border-radius: 999px;
+  background: transparent;
+  color: var(--neutral-500, rgba(0, 0, 0, 0.46));
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1;
+  transition:
+    border-color 140ms ease,
+    color 140ms ease;
+}
+
+[data-component="dock-prompt"][data-kind="question"]
+  [data-slot="question-option-box"][data-type="number"][data-picked="true"] {
+  border-color: var(--primary-600, #495dff);
+  color: var(--primary-600, #495dff);
+}
+
+[data-component="dock-prompt"][data-kind="question"] [data-slot="question-option-index"] {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+
+[data-component="dock-prompt"][data-kind="question"] [data-slot="option-label"] {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 22px;
+  color: var(--black-64, #000000A3);
+}
+
+[data-component="dock-prompt"][data-kind="question"] [data-slot="question-option"][data-picked="true"] [data-slot="option-label"] {
+  font-weight: 500;
+  color: var(--black-82, #000000D1);
+}
+
+:root[data-color-scheme="dark"] [data-component="dock-prompt"][data-kind="question"] [data-slot="option-label"] {
+  color: rgba(255, 255, 255, 0.64);
+}
+
+:root[data-color-scheme="dark"] [data-component="dock-prompt"][data-kind="question"] [data-slot="question-option"][data-picked="true"] [data-slot="option-label"] {
+  color: rgba(255, 255, 255, 0.82);
+}
+
+[data-component="dock-prompt"][data-kind="question"] [data-slot="option-label-text"] {
+  user-select: text;
+  -webkit-user-select: text;
+  cursor: pointer;
+}
+
+[data-component="dock-prompt"][data-kind="question"] [data-slot="option-label-tag"] {
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 8px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--icon-interactive-base) 28%, transparent);
+  background: color-mix(in srgb, var(--icon-interactive-base) 9%, transparent);
+  color: var(--icon-interactive-base);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 20px;
+}
+
+[data-component="dock-prompt"][data-kind="question"] [data-slot="option-description"] {
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 22px;
+  color: var(--black-28, #00000047);
+  user-select: text;
+  -webkit-user-select: text;
+  cursor: pointer;
+  display: block;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+[data-component="dock-prompt"][data-kind="question"] [data-slot="question-option"][data-picked="true"] [data-slot="option-description"] {
+  color: var(--black-46, #00000075);
+}
+
+:root[data-color-scheme="dark"] [data-component="dock-prompt"][data-kind="question"] [data-slot="option-description"] {
+  color: rgba(255, 255, 255, 0.28);
+}
+
+:root[data-color-scheme="dark"] [data-component="dock-prompt"][data-kind="question"] [data-slot="question-option"][data-picked="true"] [data-slot="option-description"] {
+  color: rgba(255, 255, 255, 0.46);
+}
+
+/* [data-component="dock-prompt"][data-kind="question"] [data-slot="question-option"][data-custom="true"] [data-slot="question-option-main"] {
+  gap: 12px;
+} */
+
+[data-component="dock-prompt"][data-kind="question"] [data-slot="question-custom-input"] {
+  background: transparent;
+  min-height: 28px;
+  max-height: 84px;
+  line-height: 28px;
+  color: var(--neutral-700, rgba(0, 0, 0, 0.82));
+  box-sizing: border-box;
+  border: none;
+  resize: none;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overflow-wrap: break-word;
+  white-space: pre-wrap;
+
+  &:focus-visible {
+    outline: 0px solid var(--primary-600, #495dff);
+    outline-offset: 0px;
+  }
+}
+
+[data-component="dock-prompt"][data-kind="question"] [data-slot="question-footer"] {
+  margin: 0 16px;
+  padding: 12px 0;
+  position: relative;
+  z-index: 2;
+  border-top: 0;
+  gap: 8px;
+}
+
+/* Raise DockTray above DockShell so the unanswered popup (inside footer/tray)
+   renders above the options list (inside body/shell, z-index: 10) */
+[data-component="dock-prompt"][data-kind="question"] [data-dock-surface="tray"] {
+  z-index: 20;
+}
+
+[data-component="sidebar-nav"] [data-slot="sidebar-scroll"] {
+  scrollbar-color: rgba(0, 0, 0, 0.12) transparent;
+  scrollbar-width: thin;
+}
+
+[data-component="sidebar-nav"] [data-slot="sidebar-scroll"]::-webkit-scrollbar {
+  width: 6px;
+}
+
+[data-component="sidebar-nav"] [data-slot="sidebar-scroll"]::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+[data-component="sidebar-nav"] [data-slot="sidebar-scroll"]::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.12);
+  border-radius: 999px;
+  border-right: 2px solid transparent;
+  -webkit-background-clip: content-box;
+  background-clip: content-box;
+}
+
+[data-component="sidebar-nav"] [data-slot="sidebar-scroll"]::-webkit-scrollbar-thumb:hover {
+  border-right: none;
+}
+
+[data-component="dock-prompt"][data-kind="question"]
+  [data-slot="question-footer"]
+  > [data-component="button"][data-variant="ghost"] {
+  color: var(--neutral-600, rgba(0, 0, 0, 0.64));
+  border: none;
+
+  &:hover {
+    background: initial;
+    color: var(--neutral-800, rgba(0, 0, 0, 0.94));
+  }
+}
+
+[data-component="dock-prompt"][data-kind="question"]
+  [data-slot="question-footer-actions"]
+  [data-component="button"][data-variant="primary"]:disabled {
+  opacity: 1;
+  background: var(--button-primary-bg-disabled, #1b55f580);
+  color: var(--button-primary-text-disabled, #fff);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-component="dock-prompt"][data-kind="question"] [data-slot="question-options"] {
+    scroll-behavior: auto;
+  }
+
+  [data-component="dock-prompt"][data-kind="question"] [data-slot="question-section"] {
+    transform: none;
+    transition: none;
+  }
+
+  [data-component="dock-prompt"][data-kind="question"] [data-slot="question-progress-nav"] {
+    transform: none;
+    transition:
+      background-color 120ms ease-out,
+      color 120ms ease-out,
+      opacity 120ms ease-out;
+  }
+}
+
+/* Floating popup for unanswered question numbers */
+[data-component="dock-prompt"][data-kind="question"] [data-slot="question-confirm-area"] {
+  position: relative;
+  display: inline-flex;
+}
+
+[data-component="dock-prompt"][data-kind="question"] [data-slot="question-unanswered-popup"] {
+  position: absolute;
+  bottom: 100%;
+  right: 0;
+  background: var(--surface-raised-base, #ffffff);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+  border-radius: 8px;
+  padding: 12px 16px;
+  margin-bottom: 8px;
+  animation: fadeIn 200ms ease;
+  z-index: 10;
+  min-width: 180px;
+}
+
+:root[data-color-scheme="dark"]
+  [data-component="dock-prompt"][data-kind="question"]
+  [data-slot="question-unanswered-popup"] {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.06);
+}
+
+[data-component="dock-prompt"][data-kind="question"] [data-slot="popup-hint"] {
+  display: block;
+  font-size: 13px;
+  color: var(--text-weak, #666666);
+  margin-bottom: 8px;
+  white-space: nowrap;
+}
+
+[data-component="dock-prompt"][data-kind="question"] [data-slot="popup-numbers"] {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  max-height: 90px;
+  overflow-y: auto;
+}
+
+[data-component="dock-prompt"][data-kind="question"] [data-slot="popup-number-btn"] {
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 0.5px solid var(--border-base, #d0d5dd);
+  border-radius: 4px;
+  background: var(--surface-base, #ffffff);
+  color: var(--text-base, #333333);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+[data-component="dock-prompt"][data-kind="question"] [data-slot="popup-number-btn"]:hover {
+  background: var(--surface-base-hover, #f5f5f5);
+  border-color: var(--border-strong-base, #999999);
+}
+
+[data-component="dock-prompt"][data-kind="question"] [data-slot="popup-number-btn"]:focus-visible {
+  outline: 2px solid var(--brand-focus, #4f6ef7);
+  outline-offset: 2px;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* Session header icons: 32x32 hover/selected surface */
+.session-header-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+}
+
+.session-header-icon:not(.session-header-icon--active):hover,
+.session-header-icon:not(.session-header-icon--active):focus-visible {
+  background: var(--icon-bg-active);
+}
+
+.session-header-icon[data-selected],
+.session-preview-header-icon[data-selected] {
+  background: var(--icon-bg-active);
+  [data-component="icon"] {
+    color: var(--icon-fill-active);
+  }
+}
+
+/* Desktop preview header icons: 32x32 hover/selected surface */
+.session-preview-header-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+}
+
+.session-preview-header-icon:hover,
+.session-preview-header-icon:focus-visible {
+  background: var(--icon-bg-active);
+}
+
+.group\/prompt-input[data-dock-surface="container"] {
+  border-color: var(--session-down-border-color);
+  box-shadow: var(--prompt-input-shadow-normal);
+}
+
+.group\/prompt-input[data-dock-surface="container"]:focus-within {
+  border-color: var(--neutral-200, rgba(0, 0, 0, 0.12));
+  box-shadow: var(--prompt-input-shadow-active);
+}
+
+/* 会话中(有 session id,见 prompt-input.tsx 的 data-in-session):阴影换成 1px 细边框;
+   新会话(无 id)保持阴影展示。 */
+.group\/prompt-input[data-dock-surface="container"][data-in-session],
+.group\/prompt-input[data-dock-surface="container"][data-in-session]:focus-within {
+  border: 1px solid var(--border-color-black-subtle, rgba(0, 0, 0, 0.06));
+  box-shadow: none;
+}
+
+/* Delete session dialog */
+
+/* Override dialog container width so the 456px content is centered */
+[data-component="dialog"]:has([data-component="delete-session-dialog"]) [data-slot="dialog-container"] {
+  width: 456px;
+}
+
+/* Visually hide Dialog built-in header (keep Kobalte.Title for a11y aria-labelledby) */
+[data-slot="dialog-content"]:has([data-component="delete-session-dialog"]) > [data-slot="dialog-header"] {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+[data-component="delete-session-dialog"] {
+  display: flex;
+  width: 456px;
+  padding: 20px;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 24px;
+  border-radius: 24px;
+  background: var(--surface-raised-stronger-non-alpha, #fff);
+}
+
+[data-component="delete-session-dialog"] [data-slot="header"] {
+  display: flex;
+  width: 100%;
+  justify-content: space-between;
+  align-items: center;
+}
+
+[data-component="delete-session-dialog"] [data-slot="title"] {
+  color: var(--text-strong, rgba(0, 0, 0, 0.82));
+  font-family: var(--family-title, "Microsoft YaHei");
+  font-size: var(--size-6, 20px);
+  font-style: normal;
+  font-weight: 600;
+  line-height: var(--line-height-6, 30px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+  min-width: 0;
+}
+
+[data-component="delete-session-dialog"] [data-slot="close"] {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  background: none;
+  border: none;
+  cursor: pointer;
+  flex-shrink: 0;
+  color: var(--text-weak, rgba(0, 0, 0, 0.48));
+}
+
+[data-component="delete-session-dialog"] [data-slot="body"] {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+}
+
+[data-component="delete-session-dialog"] [data-slot="confirm"] {
+  color: var(--text-strong, rgba(0, 0, 0, 0.82));
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 22px;
+  word-break: break-word;
+}
+
+[data-component="delete-session-dialog"] [data-slot="desc"] {
+  color: var(--text-weak, rgba(0, 0, 0, 0.48));
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 18px;
+  word-break: break-word;
+}
+
+[data-component="delete-session-dialog"] [data-slot="footer"] {
+  display: flex;
+  width: 100%;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 12px;
+}
+
+[data-component="delete-session-dialog"] [data-slot="btn-cancel"] {
+  display: block;
+  min-width: 60px;
+  max-width: 120px;
+  padding: 8px 16px;
+  flex-shrink: 0;
+  border-radius: 8px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: var(--text-base, rgba(0, 0, 0, 0.64));
+  text-align: center;
+  font-family: var(--family-body, "Microsoft YaHei");
+  font-size: var(--size-3, 14px);
+  font-style: normal;
+  font-weight: 400;
+  line-height: var(--line-height-3, 22px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+[data-component="delete-session-dialog"] [data-slot="btn-delete"] {
+  display: block;
+  width: 88px;
+  padding: 8px 16px;
+  flex-shrink: 0;
+  border-radius: 8px;
+  background: var(--primary-600, #495dff);
+  border: none;
+  cursor: pointer;
+  color: var(--Buttons-Primary-Text-Color-1, #fff);
+  text-align: center;
+  font-feature-settings:
+    "liga" off,
+    "clig" off;
+  font-family: var(--family-body, "PingFang SC");
+  font-size: 14px;
+  font-style: normal;
+  font-weight: 500;
+  line-height: 20px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+[data-component="session-todo-dock"] {
+  border: none;
+  border-radius: 16px;
+  background: var(--todo-docker-bg);
+  box-shadow: none;
+  padding: 16px;
+  z-index: 100;
+}
+
+[data-component="session-todo-dock"] [data-action="session-todo-toggle-button"] {
+  border-radius: 4px;
+  color: var(--text-weaker);
+}
+
+[data-component="session-todo-dock"] [data-action="session-todo-toggle-button"]:hover {
+  background: color-mix(in srgb, var(--session-todo-accent) 8%, var(--surface-base));
+  color: color-mix(in srgb, var(--session-todo-accent) 68%, var(--text-base));
+}
+
+[data-component="session-todo-dock"] [data-slot="session-todo-list"] {
+  padding-top: 4px;
+}
+
+[data-component="session-todo-dock"] [data-slot="session-todo-scroll"] {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--todo-docker-num) 30%, transparent) transparent;
+}
+
+[data-component="session-todo-dock"] [data-slot="session-todo-scroll"]::-webkit-scrollbar {
+  width: 6px;
+}
+
+[data-component="session-todo-dock"] [data-slot="session-todo-scroll"]::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+[data-component="session-todo-dock"] [data-slot="session-todo-scroll"]::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--todo-docker-num) 22%, transparent);
+  border-radius: 999px;
+}
+
+[data-component="session-todo-dock"] [data-slot="session-todo-scroll"]:hover::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--todo-docker-num) 45%, transparent);
+}
+
+[data-component="session-todo-dock"] .session-todo-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+[data-component="session-todo-dock"] .session-todo-item-num {
+  position: relative;
+  width: 24px;
+  height: 24px;
+  min-width: 24px;
+  border-radius: 999px;
+  background: var(--todo-docker-num-bg);
+  color: var(--todo-docker-num);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: 500;
+  letter-spacing: 0;
+  flex: 0 0 auto;
+}
+
+[data-component="session-todo-dock"] .session-todo-item-check {
+  color: var(--todo-docker-check);
+}
+
+[data-component="session-todo-dock"] .session-todo-item-spinner {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  display: block;
+  transform-origin: center;
+  animation: session-todo-item-spin 1s linear infinite;
+}
+
+[data-component="session-todo-dock"] .session-todo-item-spinner svg {
+  position: absolute;
+  top: 0;
+  right: 0;
+}
+
+@keyframes session-todo-item-spin {
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+[data-component="session-todo-dock"] .session-todo-item[data-state="pending"] {
+  opacity: 0.94;
+}
+
+[data-component="session-todo-dock"] .session-todo-item[data-state="completed"] {
+  opacity: 0.76;
+}
+
+[data-component="session-todo-dock"] .session-todo-item [data-component="text-strikethrough"] {
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+[data-component="session-todo-dock"] .session-todo-item[data-state="completed"] [data-component="text-strikethrough"] {
+  color: var(--text-weaker);
+}
+
+/* ── session-followup-dock ── */
+[data-component="session-followup-dock"] {
+  border: none;
+  border-radius: 16px;
+  background: var(--todo-docker-bg);
+  box-shadow: none;
+  padding: 16px;
+  z-index: 100;
+}
+
+/* ── session-revert-dock ── */
+[data-component="session-revert-dock"] {
+  border: none;
+  border-radius: 16px;
+  background: var(--todo-docker-bg);
+  box-shadow: none;
+  padding: 16px;
+  z-index: 100;
+}
+
+[data-component="session-revert-dock"] [data-slot="session-revert-list"] {
+  scrollbar-width: thin;
+}
+
+[data-component="session-revert-dock"] [data-slot="session-revert-list"]::-webkit-scrollbar {
+  width: 4px;
+}
+
+[data-component="session-revert-dock"] [data-slot="session-revert-list"]::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+[data-component="session-revert-dock"] [data-slot="session-revert-list"]::-webkit-scrollbar-thumb {
+  background: transparent;
+  border-radius: 999px;
+  transition: background 200ms ease;
+}
+
+[data-component="session-revert-dock"] [data-slot="session-revert-list"]:hover::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--neutral-500) 30%, transparent);
+}
+
+[data-component="session-revert-dock"] [data-slot="session-revert-list"]:hover::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, var(--neutral-500) 55%, transparent);
+}
+
+/* Model selector popover style overrides */
+[data-component="model-selector-popover"] {
+  display: flex;
+  padding: 6px;
+  align-items: center;
+  border-radius: 20px;
+  border: 0.5px solid rgba(0, 0, 0, 0.12);
+  background: #fff;
+  box-shadow: 0 4px 12px 0 var(--neutral-130, rgba(0, 0, 0, 0.08));
+}
+
+[data-component="model-selector-popover"] [data-component="list"] {
+  width: 100%;
+  padding: 0;
+  gap: 10px;
+}
+
+[data-component="model-selector-popover"] [data-slot="list-search-wrapper"] {
+  margin: var(--2x-small, 4px) 4px var(--2x-small, 4px) var(--2x-small, 4px);
+  gap: 10px;
+}
+
+[data-component="model-selector-popover"] [data-slot="list-search"] {
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--neutral-400);
+  background: #fff;
+  gap: 8px;
+}
+
+[data-component="model-selector-popover"] [data-slot="list-search"]:focus-within {
+  border-color: var(--primary-600);
+}
+
+[data-component="model-selector-popover"] [data-slot="list-search"] [data-component="icon"] {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  aspect-ratio: 1/1;
+  color: rgba(0, 0, 0, 0.28);
+}
+
+[data-component="model-selector-popover"]
+  [data-slot="list-search"]
+  [data-slot="list-search-input"][data-slot="input-input"] {
+  overflow: hidden;
+  color: var(--neutral-700, rgba(0, 0, 0, 0.82));
+  text-overflow: ellipsis;
+  font-family: var(--family-body, "Microsoft YaHei");
+  font-size: var(--font-size-x-small, 12px);
+  font-style: normal;
+  font-weight: 400;
+  line-height: var(--line-height-2, 18px);
+}
+
+[data-component="model-selector-popover"]
+  [data-slot="list-search"]
+  [data-slot="list-search-input"][data-slot="input-input"]::placeholder {
+  overflow: hidden;
+  color: var(--neutral-400, rgba(0, 0, 0, 0.28));
+  text-overflow: ellipsis;
+  font-family: var(--family-body, "Microsoft YaHei");
+  font-size: var(--font-size-x-small, 12px);
+  font-style: normal;
+  font-weight: 400;
+  line-height: var(--line-height-2, 18px);
+}
+
+.model-selector-action-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  aspect-ratio: 1/1;
+  flex-shrink: 0;
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+}
+
+.model-selector-action-btn:hover {
+  opacity: 0.7;
+}
+
+[data-component="model-selector-popover"] [data-slot="list-scroll"] {
+  gap: 0;
+}
+
+[data-component="model-selector-popover"] [data-slot="list-header"] {
+  padding: 10px 8px;
+  color: var(--neutral-gray-700, #989eac);
+  font-family: var(--family-body, "Microsoft YaHei");
+  font-size: var(--font-size-small, 14px);
+  font-style: normal;
+  font-weight: 600;
+  line-height: var(--line-height-3, 22px);
+}
+
+[data-component="model-selector-popover"] [data-slot="list-items"] {
+  padding: 0;
+  gap: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+[data-component="model-selector-popover"] [data-slot="list-item"] {
+  display: flex;
+  padding: 10px 8px;
+  align-items: center;
+  gap: var(--x-small, 8px);
+  align-self: stretch;
+  border-radius: 16px;
+  cursor: pointer;
+}
+
+[data-component="model-selector-popover"] [data-slot="list-item"][data-active="true"] {
+  background: rgba(0, 0, 0, 0.03);
+}
+
+[data-component="model-selector-popover"] [data-slot="list-item"] [data-component="tag"] {
+  display: flex;
+  padding: 0 6px;
+  justify-content: center;
+  align-items: center;
+  gap: 10px;
+  border-radius: 999px;
+  border: none;
+  background: var(--success-50, #e6f9ed);
+  color: var(--success-600, #04b545);
+  text-align: center;
+  font-family: var(--family-body, "Microsoft YaHei");
+  font-size: var(--font-size-2x-small, 10px);
+  font-style: normal;
+  font-weight: 400;
+  line-height: var(--line-height-1, 15px);
+  height: auto;
+}
+
+/* Model select dialog style overrides (scoped to model selection only) */
+[data-component="dialog"]:has(.dialog-select-model) [data-slot="dialog-container"] {
+  width: 720px;
+  height: 560px;
+  max-width: calc(100vw - 16px);
+  max-height: calc(100vh - 16px);
+}
+
+[data-slot="dialog-content"].dialog-select-model {
+  padding: 20px;
+  border-radius: 24px;
+  background: var(--neutral-0);
+  border: 1px solid var(--neutral-200);
+  box-shadow: 0 6px 12px 0 var(--neutral-130);
+}
+
+[data-slot="dialog-content"].dialog-select-model [data-slot="dialog-header"] {
+  padding: 0;
+  margin-bottom: 16px;
+}
+
+[data-slot="dialog-content"].mcp-dialog [data-slot="dialog-title"] {
+  color: var(--neutral-700, rgba(0, 0, 0, 0.82));
+  font-size: 20px;
+  line-height: 1.5;
+  font-weight: 600;
+  overflow: hidden;
+  min-width: 0;
+}
+
+[data-slot="dialog-content"].mcp-dialog label {
+  color: var(--neutral-600, rgba(0, 0, 0, 0.64));
+  font-size: 14px;
+  line-height: 1.5;
+  font-weight: 400;
+}
+
+[data-slot="dialog-content"].dialog-select-model [data-slot="dialog-title"] {
+  color: var(--neutral-700, rgba(0, 0, 0, 0.82));
+  font-family: var(--family-body, "Microsoft YaHei");
+  font-size: var(--font-size-small, 14px);
+  font-style: normal;
+  font-weight: 600;
+  line-height: var(--line-height-3, 22px);
+}
+
+[data-slot="dialog-content"].dialog-select-model [data-slot="dialog-close-button"] {
+  width: 24.781px;
+  height: 24.781px;
+  aspect-ratio: 1/1;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+
+[data-slot="dialog-content"].dialog-select-model [data-slot="dialog-body"] {
+  scrollbar-width: thin;
+  scrollbar-color: var(--neutral-200) transparent;
+}
+
+[data-slot="dialog-content"].dialog-select-model [data-slot="dialog-body"]::-webkit-scrollbar {
+  width: 10px;
+}
+
+[data-slot="dialog-content"].dialog-select-model [data-slot="dialog-body"]::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+[data-slot="dialog-content"].dialog-select-model [data-slot="dialog-body"]::-webkit-scrollbar-thumb {
+  background-color: var(--neutral-200);
+  border-radius: 999px;
+  border: 3px solid transparent;
+  -webkit-background-clip: content-box;
+  background-clip: content-box;
+  min-height: 72px;
+}
+
+[data-slot="dialog-content"].dialog-select-model [data-slot="dialog-body"]::-webkit-scrollbar-thumb:hover {
+  background-color: var(--neutral-300);
+}
+
+/* MCP dialog: custom thin scrollbar for inner scrolling area */
+[data-slot="dialog-content"].mcp-dialog .mcp-dialog-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: var(--neutral-200) transparent;
+  scrollbar-gutter: stable;
+}
+
+[data-slot="dialog-content"].mcp-dialog .mcp-dialog-scroll::-webkit-scrollbar {
+  width: 10px;
+}
+
+[data-slot="dialog-content"].mcp-dialog .mcp-dialog-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+[data-slot="dialog-content"].mcp-dialog .mcp-dialog-scroll::-webkit-scrollbar-thumb {
+  background-color: var(--neutral-200);
+  border-radius: 999px;
+  border: 3px solid transparent;
+  -webkit-background-clip: content-box;
+  background-clip: content-box;
+  min-height: 48px;
+}
+
+[data-slot="dialog-content"].mcp-dialog .mcp-dialog-scroll::-webkit-scrollbar-thumb:hover {
+  background-color: var(--neutral-300);
+}
+
+/* 更新日志待发布列表：细弱滚动条（参考 env-form-scroll），
+ * 嵌在小高度米色卡片内，原生滚动条过于突兀 */
+.changelog-pending-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: var(--neutral-200) transparent;
+}
+
+.changelog-pending-scroll::-webkit-scrollbar {
+  width: 8px;
+}
+
+.changelog-pending-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.changelog-pending-scroll::-webkit-scrollbar-thumb {
+  background-color: var(--neutral-200);
+  border-radius: 999px;
+  border: 3px solid transparent;
+  -webkit-background-clip: content-box;
+  background-clip: content-box;
+}
+
+.changelog-pending-scroll::-webkit-scrollbar-thumb:hover {
+  background-color: var(--neutral-300);
+}
+
+@layer components {
+  [data-component="dialog"] [data-slot="dialog-container"] .dialog-rename-reset[data-slot="dialog-content"] {
+    background: transparent;
+    box-shadow: none;
+    border-radius: 0;
+    padding: 0;
+    min-height: 0;
+    overflow: visible;
+    width: fit-content;
+    min-width: 0;
+  }
+
+  [data-component="dialog-body"]:has(.dialog-rename-reset) {
+    border-radius: 24px;
+  }
+
+  [data-component="dialog"] [data-slot="dialog-container"]:has(.dialog-rename-reset) {
+    width: fit-content;
+    box-shadow: 0 6px 16px 0 var(--neutral-200);
+    border-radius: 24px;
+    overflow: hidden;
+  }
+
+  [data-component="dialog"] [data-slot="dialog-container"]:has(.dialog-rename-reset).dialog-body {
+    border-radius: 24px;
+  }
+
+  .sidebar-session-item.active {
+    background: #fff;
+    color: rgba(0, 0, 0, 0.94);
+    box-shadow: 0 2px 6px 0 rgba(6, 6, 6, 0.04);
+  }
+
+  [data-component="getting-started"] {
+    container-type: inline-size;
+    container-name: getting-started;
+  }
+
+  [data-component="getting-started-actions"] {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem; /* gap-3 */
+  }
+
+  [data-component="getting-started-actions"] > [data-component="button"] {
+    width: 100%;
+  }
+
+  @container getting-started (min-width: 17rem) {
+    [data-component="getting-started-actions"] {
+      flex-direction: row;
+      align-items: center;
+    }
+
+    [data-component="getting-started-actions"] > [data-component="button"] {
+      width: auto;
+    }
+  }
+}
+
+.domain-dropdown[data-open] {
+  animation: domain-dropdown-open 0.15s ease-out forwards;
+}
+
+.domain-dropdown[data-closing] {
+  animation: domain-dropdown-close 0.12s ease-in forwards;
+}
+
+@keyframes domain-dropdown-open {
+  from {
+    opacity: 0;
+    transform: scaleY(0.85);
+  }
+  to {
+    opacity: 1;
+    transform: scaleY(1);
+  }
+}
+
+@keyframes domain-dropdown-close {
+  from {
+    opacity: 1;
+    transform: scaleY(1);
+  }
+  to {
+    opacity: 0;
+    transform: scaleY(0.85);
+  }
+}
+
+/* Session status indicator dot (pulse animation) */
+.status-dot {
+  position: relative;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--status-dot-bg);
+  animation: status-pulse 1.5s infinite;
+}
+
+.status-dot::after {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--status-dot-color);
+}
+
+.status-dot[data-variant="running"] {
+  --status-dot-color: #2970ff;
+  --status-dot-bg: rgba(41, 112, 255, 0.1);
+  --status-dot-shadow-start: rgba(41, 112, 255, 0.5);
+  --status-dot-shadow-end: rgba(41, 112, 255, 0);
+}
+
+.status-dot[data-variant="clarification"] {
+  --status-dot-color: #ff5522;
+  --status-dot-bg: rgba(255, 85, 34, 0.1);
+  --status-dot-shadow-start: rgba(255, 85, 34, 0.5);
+  --status-dot-shadow-end: rgba(255, 85, 34, 0);
+  animation: none;
+}
+
+.status-dot[data-variant="error"] {
+  --status-dot-color: #ff5522;
+  --status-dot-bg: rgba(255, 85, 34, 0.1);
+  --status-dot-shadow-start: rgba(255, 85, 34, 0.5);
+  --status-dot-shadow-end: rgba(255, 85, 34, 0);
+  animation: none;
+}
+
+.status-dot[data-variant="unread"] {
+  --status-dot-color: #04b545;
+  --status-dot-bg: rgba(4, 181, 69, 0.1);
+  --status-dot-shadow-start: rgba(4, 181, 69, 0.5);
+  --status-dot-shadow-end: rgba(4, 181, 69, 0);
+  animation: none;
+}
+
+.status-dot[data-variant="completed"] {
+  --status-dot-color: #04b545;
+  --status-dot-bg: rgba(4, 181, 69, 0.1);
+  --status-dot-shadow-start: rgba(4, 181, 69, 0.5);
+  --status-dot-shadow-end: rgba(4, 181, 69, 0);
+  animation: none;
+}
+
+@keyframes status-pulse {
+  0% {
+    box-shadow: 0 0 0 0 var(--status-dot-shadow-start);
+  }
+  70% {
+    box-shadow: 0 0 0 4px var(--status-dot-shadow-end);
+  }
+  100% {
+    box-shadow: 0 0 0 0 var(--status-dot-shadow-end);
+  }
+}
+
+/* TextShimmer 兼容 shim：镜像 @kcode-ui components/text-shimmer.css 的规则。
+ * 宿主端(lingee)内核版本较低，携带的 kcode-ui 组件样式里没有 text-shimmer 这套 CSS，
+ * 会话区「处理中/处理完成」「正在理解」等 shimmer 文本会渲染成错位的双层文本。
+ * 这里随 kcode-web 包一起下发同样规则兜底：内核较新时两份规则取值相同，无副作用；
+ * 内核较旧时由本 shim 接管。升级内核包含 text-shimmer 后可删除。
+ * 注意与 kcode-ui 源文件保持同步。 */
+[data-component="text-shimmer"] {
+  --text-shimmer-step: 45ms;
+  --text-shimmer-duration: 1200ms;
+  --text-shimmer-swap: 220ms;
+  --text-shimmer-index: 0;
+  --text-shimmer-angle: 90deg;
+  --text-shimmer-spread: 5.2ch;
+  --text-shimmer-size: 360%;
+  --text-shimmer-base-color: var(--neutral-600);
+  --text-shimmer-peak-color: var(--neutral-600);
+  --text-shimmer-sweep: linear-gradient(
+    var(--text-shimmer-angle),
+    transparent calc(50% - var(--text-shimmer-spread)),
+    var(--text-shimmer-peak-color) 50%,
+    transparent calc(50% + var(--text-shimmer-spread))
+  );
+  --text-shimmer-base: linear-gradient(var(--text-shimmer-base-color), var(--text-shimmer-base-color));
+
+  display: inline-flex;
+  align-items: baseline;
+  font: inherit;
+  letter-spacing: inherit;
+  line-height: inherit;
+}
+
+[data-component="text-shimmer"] [data-slot="text-shimmer-char"] {
+  display: inline-grid;
+  white-space: pre;
+  font: inherit;
+  letter-spacing: inherit;
+  line-height: 22px;
+  font-weight: 400;
+}
+
+[data-component="text-shimmer"] [data-slot="text-shimmer-char-base"],
+[data-component="text-shimmer"] [data-slot="text-shimmer-char-shimmer"] {
+  grid-area: 1 / 1;
+  white-space: pre;
+  transition: opacity var(--text-shimmer-swap) ease-out;
+  font: inherit;
+  letter-spacing: inherit;
+  line-height: inherit;
+}
+
+[data-component="text-shimmer"] [data-slot="text-shimmer-char-base"] {
+  color: inherit;
+  opacity: 1;
+}
+
+[data-component="text-shimmer"] [data-slot="text-shimmer-char-shimmer"] {
+  color: var(--text-weaker);
+  opacity: 0;
+}
+
+/* 非激活时 shimmer 层不可见且不拦截鼠标事件，
+ * 避免与 char-base 重叠导致标题文字无法被选中复制。 */
+[data-component="text-shimmer"]:not([data-active="true"]) [data-slot="text-shimmer-char-shimmer"] {
+  pointer-events: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+[data-component="text-shimmer"][data-active="true"] [data-slot="text-shimmer-char-shimmer"] {
+  opacity: 1;
+}
+
+[data-component="text-shimmer"] [data-slot="text-shimmer-char-shimmer"][data-run="true"] {
+  animation-name: text-shimmer-pulse;
+  animation-duration: var(--text-shimmer-duration);
+  animation-iteration-count: infinite;
+  animation-timing-function: ease-in-out;
+  animation-fill-mode: both;
+  animation-delay: calc(var(--text-shimmer-step) * var(--text-shimmer-index) * -1);
+}
+
+@keyframes text-shimmer-pulse {
+  0%,
+  100% {
+    opacity: 0.3;
+  }
+
+  50% {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-component="text-shimmer"] [data-slot="text-shimmer-char-base"],
+  [data-component="text-shimmer"] [data-slot="text-shimmer-char-shimmer"] {
+    transition-duration: 0ms;
+  }
+
+  [data-component="text-shimmer"] [data-slot="text-shimmer-char-shimmer"] {
+    animation: none !important;
+    color: inherit;
+    -webkit-text-fill-color: currentColor;
+    background-image: none;
+  }
+
+  [data-component="text-shimmer"] [data-slot="text-shimmer-char-base"] {
+    opacity: 1 !important;
+  }
+}
+
+aside {
+  display: none !important;
+}
+
+[data-slot="session-turn-list"]
+  [data-component="collapsible"].tool-stage-collapsible
+  [data-slot="collapsible-content"] {
+  animation: none !important;
+  display: grid !important;
+  grid-template-rows: 0fr;
+  overflow: hidden !important;
+  border: none !important;
+  background: transparent !important;
+  opacity: 0;
+  transition:
+    grid-template-rows 280ms cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 220ms ease;
+}
+
+[data-slot="session-turn-list"]
+  [data-component="collapsible"].tool-stage-collapsible
+  [data-slot="collapsible-content"][data-expanded] {
+  animation: none !important;
+}
+
+[data-slot="session-turn-list"]
+  [data-component="collapsible"].tool-stage-collapsible
+  [data-slot="collapsible-content"]:not([data-expanded]) {
+  animation: none !important;
+}
+
+[data-slot="session-turn-list"]
+  [data-component="collapsible"].tool-stage-collapsible
+  [data-slot="collapsible-content"]
+  > [data-slot="stage-collapsible-inner"] {
+  min-height: 0;
+  overflow: hidden;
+}
+
+[data-slot="session-turn-list"] [data-component="collapsible"].tool-stage-collapsible[data-stage-motion="opening"],
+[data-slot="session-turn-list"] [data-component="collapsible"].tool-stage-collapsible[data-stage-motion="open"],
+[data-slot="session-turn-list"] [data-component="collapsible"].tool-stage-collapsible[data-stage-motion="closing"] {
+  border-radius: 16px !important;
+}
+
+[data-slot="session-turn-list"]
+  [data-component="collapsible"].tool-stage-collapsible[data-stage-motion="opening"]
+  [data-slot="collapsible-content"],
+[data-slot="session-turn-list"]
+  [data-component="collapsible"].tool-stage-collapsible[data-stage-motion="open"]
+  [data-slot="collapsible-content"] {
+  grid-template-rows: 1fr;
+  opacity: 1;
+}
+
+/* 技能详情弹窗内 Markdown 标题字体大小限制为不超过 16px */
+[data-component="markdown"].skill-detail-markdown h1 {
+  font-size: 14px;
+}
+
+[data-component="markdown"].skill-detail-markdown h2,
+[data-component="markdown"].skill-detail-markdown h3,
+[data-component="markdown"].skill-detail-markdown h4,
+[data-component="markdown"].skill-detail-markdown h5,
+[data-component="markdown"].skill-detail-markdown h6 {
+  font-size: 12px;
+}
+
+[data-component="markdown"].skill-detail-markdown {
+  color: var(--neutral-600);
+}
+
+[data-component="markdown"].skill-detail-markdown ul {
+  padding: 12px 16px;
+  font-size: 14px;
+  line-height: 22px;
+  border-radius: 16px;
+  background: var(--gray-blue-50);
+  list-style-position: inside;
+}
+
+[data-component="markdown"].skill-detail-markdown li::marker {
+  margin-inline-end: 8px;
+}
+
+[data-component="markdown"].skill-detail-markdown ul ul {
+  padding-block: 0;
+}
+
+/* 技能详情内容滚动区域滚动条美化 */
+.skill-detail-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0, 0, 0, 0.12) transparent;
+}
+
+.skill-detail-scroll::-webkit-scrollbar {
+  width: 6px;
+}
+
+.skill-detail-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.skill-detail-scroll::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.12);
+  border-radius: 999px;
+  border-right: 2px solid transparent;
+  -webkit-background-clip: content-box;
+  background-clip: content-box;
+}
+
+.skill-detail-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.22);
+  border-right: 2px solid transparent;
+  -webkit-background-clip: content-box;
+  background-clip: content-box;
+}
+
+/* ── kcode 右键菜单基础样式（复用于文件树、页签栏等所有场景，不影响全局 context-menu）── */
+[data-component="context-menu-content"].kcode-ctx-content {
+  border-radius: 20px;
+  max-width: 280px;
+  /* 与 dropdown 菜单使用相同的 neutral 主题变量，任意主题下明暗色自动一致 */
+  background-color: var(--neutral-0, #fff);
+  border: 0.5px solid var(--neutral-200, rgba(0, 0, 0, 0.12));
+  box-shadow: 0 4px 12px 0 var(--neutral-130, rgba(0, 0, 0, 0.08));
+}
+
+[data-component="context-menu-content"].kcode-ctx-content [data-slot="context-menu-item"],
+[data-component="context-menu-content"].kcode-ctx-content [data-slot="context-menu-sub-trigger"] {
+  height: 32px;
+  padding: 0 8px;
+  gap: 4px;
+  border-radius: 999px;
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 20px;
+  color: var(--neutral-700, rgba(0, 0, 0, 0.82));
+  cursor: pointer;
+}
+
+[data-component="context-menu-content"].kcode-ctx-content [data-slot="context-menu-item"]:hover,
+[data-component="context-menu-content"].kcode-ctx-content [data-slot="context-menu-item"][data-highlighted] {
+  background-color: var(--neutral-50, rgba(0, 0, 0, 0.03));
+  color: var(--neutral-800, rgba(0, 0, 0, 0.94));
+}
+
+[data-component="context-menu-content"].kcode-ctx-content [data-slot="context-menu-item-label"] {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 分割线左右边距与菜单项文字左右边距对齐（菜单项 padding: 0 8px），避免通栏滴到圆角边框（覆盖共享样式里的 margin: 4px -4px 贴边行为）；
+   颜色改用与本菜单容器边框一致的 --neutral-200（浅色: black-12%，暗色: white-12% 半透明），
+   而不是共享 context-menu.css 里的 --border-weak-base（暗色下是纯灰 #797f91，在深色背景上过于醒目） */
+[data-component="context-menu-content"].kcode-ctx-content [data-slot="context-menu-separator"] {
+  margin: 4px 8px;
+  border-top-color: var(--neutral-200, rgba(0, 0, 0, 0.12));
+}
+
+/* 危险操作（如删除）：红色文字，hover 时保持红色语义 */
+[data-component="context-menu-content"].kcode-ctx-content [data-slot="context-menu-item"].filetree-ctx-item--danger,
+[data-component="context-menu-content"].kcode-ctx-content
+  [data-slot="context-menu-item"].filetree-ctx-item--danger:hover,
+[data-component="context-menu-content"].kcode-ctx-content
+  [data-slot="context-menu-item"].filetree-ctx-item--danger[data-highlighted] {
+  color: var(--danger-base, #e53535);
+}
+
+/* 各场景的 min-width 差异覆盖 */
+[data-component="context-menu-content"].filetree-ctx-content {
+  min-width: 150px;
+}
+[data-component="context-menu-content"].tab-ctx-content {
+  min-width: 160px;
+}
+/* ========================================================================
+ * 通用自定义滚动条（隐藏原生滚动条 + 自定义 DOM thumb）
+ * - 默认隐藏；滚动中 / hover 热区 / 拖动中 → 显示；停止 1s 后隐藏
+ * - hover thumb 本体或拖动中 → thumb 加粗为 6px（默认 4px）
+ * - 右边距 2px，圆角 4px，颜色 #000 12%（暗黑模式 #fff 18%）
+ * 由 <CustomScrollContainer> 组件使用
+ * ====================================================================== */
+.custom-scroll-native {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.custom-scroll-native::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+.custom-scrollbar {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 12px; /* hover 热区：thumb 6px + 4px 容错 + 2px 右边距 */
+  z-index: 20;
+  opacity: 0;
+  /* 热区始终可交互：否则隐藏状态下无法触发 mouseEnter、永远不会显示 */
+  pointer-events: auto;
+  transition: opacity 200ms ease;
+}
+.custom-scrollbar[data-visible="true"] {
+  opacity: 1;
+}
+
+.custom-scrollbar-thumb {
+  --thumb-color: rgba(0, 0, 0, 0.12);
+  position: absolute;
+  right: 2px; /* 右边距 2px */
+  width: 4px; /* 默认 4px */
+  background: var(--thumb-color);
+  border-radius: 4px;
+  cursor: default;
+  transition: width 150ms ease;
+}
+.custom-scrollbar-thumb[data-thick="true"] {
+  width: 6px; /* hover/拖动 6px */
+}
+
+:root[data-color-scheme="dark"] .custom-scrollbar-thumb {
+  --thumb-color: rgba(255, 255, 255, 0.18);
+}
+
+/* 文件树滚动条兜底样式：仅当某个 FileTree 实例自身发生原生滚动时生效
+   （会话侧栏与文件树视图两处已由 CustomScrollContainer 接管，不走这里）。
+   默认全透明（不常驻），悬停树区域时显示 4px 半透明圆角条，视觉规格与会话区一致。
+   注意：不要设置 scrollbar-width: thin/none，否则 Chromium 会丢弃 ::-webkit-scrollbar 样式。 */
+[data-component="filetree"]::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+/* 文件树行状态色：悬停 3% 黑、选中 4% 黑，亮/暗模式各有关照。
+   不用 --surface-base-hover / --surface-base-active：运行时主题引擎把两者解析成同一个值，选中行无法区分。 */
+[data-component="filetree"] {
+  --filetree-row-hover: rgb(0 0 0 / 3%);
+  --filetree-row-selected: rgb(0 0 0 / 4%);
+}
+:root[data-color-scheme="dark"] [data-component="filetree"] {
+  --filetree-row-hover: rgb(255 255 255 / 3%);
+  --filetree-row-selected: rgb(255 255 255 / 4%);
+}
+
+/* 文件树背景色与终端面板保持一致 */
+#file-tree-panel,
+#file-tree-panel > div {
+  background-color: var(--background-page);
+}
+
+/* 文件树面板搜索框：占满宽度（修复左右边距不一致），紧凑高度匹配文件树节点行 */
+#file-tree-panel [data-component="form-search"],
+.vcs-history-file-tree [data-component="form-search"] {
+  display: flex;
+  width: 100%;
+}
+#file-tree-panel [data-slot="form-search-wrapper"],
+.vcs-history-file-tree [data-slot="form-search-wrapper"] {
+  flex: 1;
+  width: 100%;
+  height: 28px;
+  border-radius: 14px;
+  padding: 0 8px;
+}
+#file-tree-panel [data-slot="form-search-field"],
+.vcs-history-file-tree [data-slot="form-search-field"] {
+  font-size: 12px;
+}
+[data-scope="filetree"] {
+  background-color: var(--background-page);
+}
+
+/* Wiki 面板背景色同步 */
+#wiki-panel {
+  --main-bg: var(--background-page);
+}
+[data-component="filetree"]::-webkit-scrollbar-track {
+  background: transparent;
+}
+[data-component="filetree"]::-webkit-scrollbar-corner {
+  background: transparent;
+}
+[data-component="filetree"]::-webkit-scrollbar-thumb {
+  background-color: transparent;
+  border: 2px solid transparent;
+  -webkit-background-clip: content-box;
+  background-clip: content-box;
+  border-radius: 9999px;
+}
+[data-component="filetree"]:hover::-webkit-scrollbar-thumb {
+  background-color: rgba(0, 0, 0, 0.12);
+}
+[data-component="filetree"]:hover::-webkit-scrollbar-thumb:hover {
+  border: 1px solid transparent;
+}
+:root[data-color-scheme="dark"] [data-component="filetree"]:hover::-webkit-scrollbar-thumb {
+  background-color: var(--border-weak-base);
+}
+:root[data-color-scheme="dark"] [data-component="filetree"]:hover::-webkit-scrollbar-thumb:hover {
+  background-color: var(--border-strong-base);
+}
+
+/* VSCode 风格文件标签选中态：顶部主题色高亮条 + 背景区分，让当前文件更醒目。
+   仅作用于带 .editor-file-tabs 的文件标签区（侧边面板 / 文件树视图），
+   颜色用主题 token，明暗两种主题自动适配，不影响其他 Tabs。 */
+[data-component="tabs"].editor-file-tabs [data-slot="tabs-trigger-wrapper"]:has([data-selected]) {
+  background-color: var(--background-base);
+  /* 左右各 1px 淡色分隔线（VSCode 风格），用 inset 阴影避免挤压布局 */
+  box-shadow:
+    inset 1px 0 0 var(--session-down-border-color),
+    inset -1px 0 0 var(--session-down-border-color);
+}
+
+[data-component="tabs"].editor-file-tabs [data-slot="tabs-trigger-wrapper"]:has([data-selected])::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background-color: var(--primary-600);
+  pointer-events: none;
+}
+
+/* ── ASR 波形动画（prompt-input 语音识别麦克风按钮）── */
+@keyframes asr-waveform {
+  0%,
+  100% {
+    transform: scaleY(0.5);
+  }
+  50% {
+    transform: scaleY(1);
+  }
+}
+/* class 引用防止 Lightning CSS tree-shake 掉 keyframes */
+.asr-waveform-active {
+  animation: asr-waveform 1.2s ease-in-out infinite;
+}
+
+/* ── 提示词增强按钮 spin 动画 ── */
+@keyframes enhance-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* class 引用防止 Lightning CSS tree-shake 掉 keyframes */
+.enhance-spinner {
+  animation: enhance-spin 0.8s linear infinite;
+}
+
+/* ── 提示词增强按钮颜色（亮暗模式自适应）── */
+/* 亮色：black-82；暗色：white-82 —— 与设计稿底栏图标 black 0.82 统一 */
+[data-action="prompt-enhance"] {
+  color: var(--neutral-700);
+}
+[data-action="prompt-enhance"].enhance-btn--idle,
+[data-action="prompt-enhance"].enhance-btn--applied {
+  color: var(--neutral-700);
+}
+[data-action="prompt-enhance"].enhance-btn--disabled {
+  color: var(--enhance-btn-disabled);
+}
+
+/* ── 提示词增强：加载中文本流动光效（只作用于文字本身）── */
+@keyframes enhance-text-flow {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+.enhance-text-shimmer {
+  background: linear-gradient(
+    90deg,
+    var(--prompt-input-text) 30%,
+    var(--enhance-shimmer-overlay) 50%,
+    var(--prompt-input-text) 70%
+  );
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: enhance-text-flow 1.5s linear infinite;
+}
+/* 增强 shimmer 时保持附件 pill 的原有颜色 */
+.enhance-text-shimmer [data-type="file"],
+.enhance-text-shimmer [data-type="agent"] {
+  -webkit-text-fill-color: initial;
+  background: none;
+}
+
+/* 禁用 prompt-submit 按钮的 stop-pulse 呼吸动画 */
+[data-action="prompt-submit"][data-icon="stop"] [data-slot="icon-svg"] path {
+  animation: none;
+}
+
+/* 技能 pill：关闭按钮默认隐藏，hover 时替换图标位置显示 */
+[data-type="agent"] .pill-icon,
+[data-type="agent"] .pill-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+[data-type="agent"] .pill-close { display: none; }
+[data-type="agent"]:hover .pill-close { display: inline-flex; }
+[data-type="agent"]:hover .pill-icon { display: none; }
+
+/* 苍穹应用技能 pill：下拉只挂载到探测选中的第一个 trigger 容器（Portal），
+   其余 pill 的容器为空，此时隐藏其竖分割线，避免残留孤立分隔符 */
+[data-type="agent"]:has(> [data-cosmic-app-trigger]:empty) > [data-cosmic-app-divider] {
+  display: none;
+}
+/* 技能 pill 分割线/应用名颜色：pill 背景为浅色（两种主题一致），内部统一深色系；
+   暗色选择器仅用于覆盖暗色主题注入的浅色系变量值 */
+[data-type="agent"] {
+  --skill-pill-divider-bg: var(--primary-200, rgba(0, 0, 0, 0.1));
+  --skill-pill-app-text: var(--neutral-800, currentColor);
+}
+:root[data-color-scheme="dark"] [data-type="agent"] {
+  --skill-pill-divider-bg: rgba(0, 0, 0, 0.15);
+  --skill-pill-app-text: rgba(0, 0, 0, 0.85);
+}
+
+/* 苍穹应用选择器滚动条：补偿面板 4px padding 使 thumb 距右边框 2px；宽度固定 4px（hover/drag 不变粗） */
+.cosmic-app-popover .custom-scrollbar {
+  right: -4px;
+}
+.cosmic-app-popover .custom-scrollbar-thumb[data-thick="true"] {
+  width: 4px;
+}
+
+/* 苍穹应用选择器面板：亮色沿用组件内 fallback 值，仅暗色覆盖 */
+:root[data-color-scheme="dark"] .cosmic-app-popover {
+  --cosmic-app-panel-bg: #1c1c1c;
+  --cosmic-app-panel-border: rgba(255, 255, 255, 0.1);
+  --cosmic-app-panel-shadow: rgba(0, 0, 0, 0.4);
+  --cosmic-app-panel-input-bg: rgba(255, 255, 255, 0.06);
+  --cosmic-app-panel-text-strong: rgba(255, 255, 255, 0.9);
+  --cosmic-app-panel-text: rgba(255, 255, 255, 0.75);
+  --cosmic-app-panel-text-dim: rgba(255, 255, 255, 0.5);
+  --cosmic-app-panel-text-weak: rgba(255, 255, 255, 0.4);
+  --cosmic-app-panel-hover: rgba(255, 255, 255, 0.06);
+}
+
+/* 禁用状态点击发送按钮：左右晃动反馈 */
+@keyframes prompt-submit-shake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  15% {
+    transform: translateX(-4px);
+  }
+  30% {
+    transform: translateX(4px);
+  }
+  45% {
+    transform: translateX(-3px);
+  }
+  60% {
+    transform: translateX(3px);
+  }
+  75% {
+    transform: translateX(-2px);
+  }
+}
+.prompt-submit-shake {
+  animation: prompt-submit-shake 0.4s ease-in-out;
+}
+
+/* 会话条(非新会话)已移入包裹容器内顶部(与新会话底部 header 对称),背景由包裹容器统一提供 */
+
+/* 「worktree」勾选框:未选态收紧为 14px 小方框,圆角+主题边框+略亮填充(暗黑下不发黑),明暗都干净醒目。
+   覆盖 [data-component="checkbox"] 的 cursor:default,使整个勾选区显示手型。 */
+.worktree-checkbox[data-component="checkbox"] {
+  cursor: pointer;
+}
+.worktree-checkbox[data-disabled][data-component="checkbox"] {
+  cursor: not-allowed;
+}
+.worktree-checkbox [data-slot="checkbox-checkbox-label"] {
+  cursor: pointer;
+}
+.worktree-checkbox[data-disabled] [data-slot="checkbox-checkbox-label"] {
+  cursor: not-allowed;
+}
+.worktree-checkbox [data-slot="checkbox-checkbox-control"] {
+  width: 14px;
+  height: 14px;
+  border-radius: 4px;
+  border-color: var(--border-base);
+  background-color: var(--surface-raised-base);
+  margin-top: 0;
+}
+/* 「worktree」勾选框选中态用主题色(默认 @kcode/ui checkbox 选中是中性灰,不够醒目)。
+   区分两种「已勾选」语义:用户手动勾选「新建 worktree」用醒目主题蓝;选中已占用分支后
+   自动锁定的「复用」态用浅紫色(--fg-color-primary-muted),与手动新建区分开——对勾图标
+   两种状态都保持默认的白色打勾,不换图标形状,只换背景色。 */
+.worktree-checkbox[data-checked]:not([data-disabled]) [data-slot="checkbox-checkbox-control"] {
+  border: none !important;
+  background-color: var(--primary-600) !important;
+}
+.worktree-checkbox[data-checked][data-disabled] [data-slot="checkbox-checkbox-control"] {
+  border: none !important;
+  background-color: var(--fg-color-primary-muted, #b7c1ff) !important;
+}
+.worktree-checkbox[data-checked] [data-slot="checkbox-checkbox-indicator"] {
+  color: #fff !important;
+}
+
+/* 新会话头部「项目块/分支块」图标与文字、worktree 勾选框文案的暗黑适配:
+   浅色下取黑色 64%/82% 透明度,暗黑下切换为等透明度的白色,保证深色背景下的对比度。 */
+:root {
+  --fg-color-black-muted: rgba(0, 0, 0, 0.64);
+  --fg-color-black-muted-hover: var(--black-94);
+  --fg-color-black-full: rgba(0, 0, 0, 1);
+  --text-color-secondary-82: rgba(0, 0, 0, 0.82);
+  --dropdown-fg-color-text-grouplabel: rgba(0, 0, 0, 0.46);
+  --enhance-shimmer-overlay: rgba(0, 0, 0, 0.15);
+  --enhance-btn-disabled: rgba(0, 0, 0, 0.28);
+  /* 会话区 Spec 卡片背景:浅色为半透明白,暗黑切换为半透明白色叠加以贴合深色底。 */
+  --spec-result-card-bg: rgba(255, 255, 255, 0.82);
+}
+
+/* 修复 dialog 遮罩层被左侧导航栏合成层覆盖的问题。
+   sidebar-nav-desktop 使用 transform-gpu / will-change-transform 会被提升为独立合成层，
+   而 overlay 的 fixed 定位不一定会进入合成层，导致 z-index:50 压不住 z-index:10。
+   给 overlay 也强制提升合成层，使两者在同一维度按 z-index 比较。 */
+[data-component="dialog-overlay"] {
+  transform: translateZ(0);
+}
+
+/* 任务详情抽屉：隐藏黑色蒙版（遮罩保持透明，但仍可点击遮罩关闭），并从右侧滑入。
+   动效挂在抽屉内容的标记类 .task-detail-drawer 上（见 task-detail-drawer.tsx），
+   只影响该抽屉，不改动其它弹窗。关闭动效与 DialogProvider 的 100ms 销毁计时对齐。 */
+[data-component="dialog-overlay"].task-detail-drawer-overlay {
+  background: transparent;
+}
+
+[data-slot="dialog-content"].task-detail-drawer {
+  animation: taskDetailDrawerHide 100ms ease-in forwards;
+}
+
+[data-slot="dialog-content"].task-detail-drawer[data-expanded] {
+  animation: taskDetailDrawerShow 240ms cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+/* 标题区与内容区之间的分隔线。通用 Dialog 的 header 不带边框（居中弹窗不需要），
+   抽屉是常驻面板，标题要和下方内容分开。
+   内容区高度由 dialog-body 的 flex:1 决定（不再硬写 calc(100vh - 57px)），
+   所以这 1px 不会把底部操作区顶出可视区。 */
+[data-slot="dialog-content"].task-detail-drawer [data-slot="dialog-header"] {
+  border-bottom: 1px solid var(--border-weak-base);
+}
+
+/* 抽屉左沿的拖拽条：ResizeHandle 默认用 translateX(-50%) 压在边界上，但抽屉的
+   [data-slot="dialog-body"] 是 overflow: hidden，外侧那一半会被裁掉、热区只剩 4px。
+   这里让它整条落在抽屉内侧，保住完整的 8px 可拖区域。 */
+[data-slot="dialog-content"].task-detail-drawer [data-component="resize-handle"].task-detail-drawer-resize {
+  transform: none;
+}
+
+@keyframes taskDetailDrawerShow {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+@keyframes taskDetailDrawerHide {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(100%);
+  }
+}
+
+/* 产物验收抽屉：与任务详情抽屉同款右侧滑入、遮罩透明；复用上面同一组 keyframes，不重复定义动效。
+   宽度与任务详情抽屉一致：由组件按 layout.taskDrawer 记忆值推导后经内联 style 提供，这里只管滑入与标题分隔线。 */
+[data-component="dialog-overlay"].task-acceptance-drawer-overlay {
+  background: transparent;
+}
+
+[data-slot="dialog-content"].task-acceptance-drawer {
+  animation: taskDetailDrawerHide 100ms ease-in forwards;
+}
+
+[data-slot="dialog-content"].task-acceptance-drawer[data-expanded] {
+  animation: taskDetailDrawerShow 240ms cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+[data-slot="dialog-content"].task-acceptance-drawer [data-slot="dialog-header"] {
+  border-bottom: 1px solid var(--border-weak-base);
+}
+
+[data-slot="dialog-content"].task-acceptance-drawer [data-component="resize-handle"].task-acceptance-drawer-resize {
+  transform: none;
+}
+
+:root[data-color-scheme="dark"] {
+  --fg-color-black-muted: rgba(255, 255, 255, 0.64);
+  --fg-color-black-muted-hover: var(--white-94);
+  --fg-color-black-full: rgba(255, 255, 255, 1);
+  --text-color-secondary-82: rgba(255, 255, 255, 0.82);
+  --dropdown-fg-color-text-grouplabel: rgba(255, 255, 255, 0.46);
+  --enhance-shimmer-overlay: rgba(255, 255, 255, 0.15);
+  --enhance-btn-disabled: rgba(255, 255, 255, 0.28);
+  --spec-result-card-bg: rgba(255, 255, 255, 0.06);
+}
+
+/* 会话上下文用量颜色使用显式明暗变量，兼容 Lingee 宿主的旧版 Chromium。 */
+:root {
+  --session-context-system-color: #6366f1;
+  --session-context-system-tool-color: #16a34a;
+  --session-context-mcp-tool-color: #8b5cf6;
+  --session-context-message-color: #f59e0b;
+  --session-context-other-color: #94a3b8;
+  --session-context-track-color: rgba(15, 23, 42, 0.1);
+  --session-context-shadow-color: rgba(0, 0, 0, 0.08);
+}
+
+:root[data-color-scheme="dark"] {
+  --session-context-system-color: var(--syntax-info, #00a3f4);
+  --session-context-system-tool-color: var(--syntax-success, #08cc50);
+  --session-context-mcp-tool-color: var(--syntax-property, #2cbdff);
+  --session-context-message-color: var(--syntax-warning, #f59e0b);
+  --session-context-other-color: var(--syntax-comment, #989eac);
+  --session-context-track-color: rgba(255, 255, 255, 0.1);
+  --session-context-shadow-color: rgba(0, 0, 0, 0.45);
+}
+
+[data-component="spec-result-card"] {
+  background: var(--spec-result-card-bg);
+}
+
+/* 终端面板背景色与终端 canvas 保持一致 */
+#terminal-panel,
+#terminal-panel [data-component="tabs"] {
+  background-color: var(--background-page);
+}
+
+/* 用户消息气泡圆角统一为 16px */
+[data-component="user-message"] [data-slot="user-message-text"] {
+  border-radius: 16px;
+}
+
+/* 与 Lingee 宿主 miniapp-loading-logo 保持一致的会话加载标识。 */
+.session-loading-logo {
+  position: relative;
+  width: 120px;
+  height: 36px;
+  overflow: hidden;
+  background: url("/lingee-loading.png") no-repeat center / contain;
+}
+
+.session-loading-logo::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    110deg,
+    rgba(255, 255, 255, 0) 0%,
+    rgba(255, 255, 255, 0) 40%,
+    rgba(255, 255, 255, 0.6) 50%,
+    rgba(255, 255, 255, 0) 60%,
+    rgba(255, 255, 255, 0) 100%
+  );
+  animation: session-loading-shimmer 1.5s linear infinite;
+}
+
+@keyframes session-loading-shimmer {
+  from {
+    transform: translateX(-100%);
+  }
+
+  to {
+    transform: translateX(100%);
+  }
+}
+/* 历史列表按右侧面板自身宽度收放元数据，优先保证提交标题与图谱可读。 */
+.vcs-history-branch-title {
+  color: rgba(0, 0, 0, 0.94);
+  font-family: var(--font-family-sans);
+  font-size: 16px;
+  font-style: normal;
+  font-weight: 500;
+  line-height: 28px;
+  letter-spacing: 0;
+}
+
+.vcs-history-restore-commit-card {
+  background-color: rgba(0, 0, 0, 0.02);
+}
+
+.vcs-history-restore-hash {
+  display: inline-flex;
+  height: 20px;
+  align-items: center;
+  border-radius: 4px;
+  padding-inline: 6px;
+  color: rgba(0, 0, 0, 0.46);
+  background-color: rgba(0, 0, 0, 0.03);
+  font-family: var(--font-family-sans);
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 18px;
+}
+
+.vcs-history-restore-command-card {
+  border-color: rgba(0, 0, 0, 0.06);
+}
+
+:root[data-color-scheme="dark"] .vcs-history-branch-title {
+  color: rgba(255, 255, 255, 0.94);
+}
+
+:root[data-color-scheme="dark"] .vcs-history-restore-commit-card {
+  background-color: rgba(255, 255, 255, 0.04);
+}
+
+:root[data-color-scheme="dark"] .vcs-history-restore-hash {
+  color: rgba(255, 255, 255, 0.46);
+  background-color: rgba(255, 255, 255, 0.06);
+}
+
+:root[data-color-scheme="dark"] .vcs-history-restore-command-card {
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+/* 行状态色按设计稿定为局部 Token，不要换回 --surface-base-hover / --surface-base-active：
+   运行时主题引擎（kcode-ui/src/theme/resolve.ts）把这两个公共 Token 都解析成
+   neutralAlpha[2]，悬停态与选中态会变成同一个值，选中行无法区分。 */
+.vcs-history-rows {
+  --vcs-history-row-hover: rgb(0 0 0 / 3%);
+  --vcs-history-row-selected: rgb(0 0 0 / 4%);
+  --vcs-history-hash-background: rgb(0 0 0 / 3%);
+
+  container: vcs-history-rows / inline-size;
+}
+
+:root[data-color-scheme="dark"] .vcs-history-rows {
+  --vcs-history-row-hover: rgb(255 255 255 / 3%);
+  --vcs-history-row-selected: rgb(255 255 255 / 4%);
+  --vcs-history-hash-background: rgb(255 255 255 / 3%);
+}
+
+.vcs-history-commit-content {
+  --vcs-history-row-background: transparent;
+
+  background-color: var(--vcs-history-row-background);
+}
+
+.vcs-history-commit-content:not([data-selected]):is(:hover, :focus-within) {
+  --vcs-history-row-background: var(--vcs-history-row-hover);
+}
+
+.vcs-history-commit-content[data-selected] {
+  --vcs-history-row-background: var(--vcs-history-row-selected);
+}
+
+/* 历史列表与详情区域的拖拽分隔线在悬浮和拖动时保持中性色，避免出现品牌色边框。 */
+[data-component="resize-handle"].vcs-history-split-handle::after {
+  border-radius: 999px;
+  background-color: var(--border-base);
+}
+
+.vcs-history-commit-grid {
+  grid-template-columns: minmax(0, 1fr) minmax(80px, 96px);
+}
+
+.vcs-history-commit-author {
+  display: flex;
+}
+
+.vcs-history-commit-hash,
+.vcs-history-commit-time {
+  display: none;
+}
+
+/* 哈希徽章底色叠加在行背景之上，与行状态色同为局部 Token，保证任意行状态下都有
+   约 3% 的相对色差；用公共 --surface-base-active 会随运行时主题漂移，可能与选中行同色。 */
+.vcs-history-commit-hash {
+  background-color: var(--vcs-history-hash-background);
+}
+
+/* 恢复操作只跟随当前悬浮行显示，避免选中行和悬浮行同时出现两个入口。 */
+.vcs-history-restore-action {
+  z-index: 1;
+  width: 86px;
+  justify-content: flex-end;
+  visibility: hidden;
+  pointer-events: none;
+  opacity: 0;
+  background:
+    linear-gradient(var(--vcs-history-row-background), var(--vcs-history-row-background)), var(--background-page);
+  transition: opacity 120ms ease;
+}
+
+/* 操作文字左侧使用渐变蒙层，让原有元数据自然淡出而不是直接消失。 */
+.vcs-history-restore-action::before {
+  position: absolute;
+  inset-block: 0;
+  right: 100%;
+  width: 36px;
+  content: "";
+  pointer-events: none;
+  background:
+    linear-gradient(to right, transparent, var(--vcs-history-row-background)),
+    linear-gradient(to right, transparent, var(--background-page));
+}
+
+.vcs-history-commit-row:hover .vcs-history-restore-action,
+.vcs-history-restore-action:focus-within {
+  visibility: visible;
+  pointer-events: auto;
+  opacity: 1;
+}
+
+.vcs-history-restore-button {
+  box-sizing: border-box;
+  display: inline-flex;
+  width: 86px;
+  min-width: 86px;
+  height: 24px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--brand-button-primary-base);
+  border-radius: 8px;
+  padding: 0 8px;
+  color: var(--brand-button-primary-base);
+  background: transparent;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: var(--font-weight-normal);
+  line-height: 18px;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    color 120ms ease,
+    border-color 120ms ease,
+    background-color 120ms ease;
+}
+
+.vcs-history-restore-button:hover {
+  border-color: var(--brand-button-primary-hover);
+  color: var(--brand-button-primary-hover);
+  background-color: var(--brand-button-ghost-base);
+}
+
+.vcs-history-restore-button:active {
+  border-color: var(--brand-button-primary-active);
+  color: var(--brand-button-primary-active);
+  background-color: var(--brand-button-ghost-active);
+}
+
+.vcs-history-restore-button:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--brand-button-primary-base) 28%, transparent);
+  outline-offset: 1px;
+}
+
+@container vcs-history-rows (min-width: 520px) {
+  .vcs-history-commit-grid {
+    grid-template-columns: minmax(0, 1fr) 80px 64px;
+  }
+
+  .vcs-history-commit-hash {
+    display: inline-flex;
+  }
+
+}
+
+@container vcs-history-rows (min-width: 680px) {
+  .vcs-history-commit-grid {
+    grid-template-columns: minmax(0, 1fr) 80px 64px 116px;
+  }
+
+  .vcs-history-commit-time {
+    display: block;
+  }
+
+}
+
+/* 提交详情栏优先展示作者、哈希和变更统计，面板变宽后再补充时间与提交说明。 */
+.vcs-history-details-header {
+  container: vcs-history-details / inline-size;
+}
+
+.vcs-history-details-time,
+.vcs-history-details-message {
+  display: none;
+}
+
+@container vcs-history-details (min-width: 640px) {
+  .vcs-history-details-time {
+    display: block;
+  }
+}
+
+@container vcs-history-details (min-width: 820px) {
+  .vcs-history-details-message {
+    display: block;
+  }
+}
+
+/* 历史详情使用独立文件标题栏，避免通用审查组件的标题被浮层滚动条遮挡。 */
+.vcs-history-diff-file-header {
+  color: rgba(0, 0, 0, 0.64);
+  font-family: var(--font-family-sans);
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 18px;
+}
+
+.vcs-history-diff-status {
+  display: inline-flex;
+  height: 20px;
+  align-items: center;
+  border-radius: 4px;
+  padding-inline: 4px;
+  background-color: rgba(0, 0, 0, 0.03);
+  line-height: 18px;
+}
+
+/* 该页面已经在滚动区域外展示文件信息，隐藏组件内重复的标题。 */
+.vcs-history-review [data-slot="accordion-header"] {
+  display: none;
+}
+
+/* 为浮层滚动条保留固定槽位，代码内容和变更统计不会再延伸到滚动条下方。 */
+.vcs-history-review-scroll > .scroll-view__viewport {
+  width: calc(100% - 12px);
+}
+
+.vcs-history-review-scroll > .scroll-view__thumb::after {
+  width: 6px;
+  background-color: rgba(0, 0, 0, 0.28);
+}
+
+.vcs-history-review-scroll > .scroll-view__thumb:hover::after,
+.vcs-history-review-scroll > .scroll-view__thumb[data-dragging="true"]::after {
+  width: 6px;
+  background-color: rgba(0, 0, 0, 0.36);
+}
+
+:root[data-color-scheme="dark"] .vcs-history-diff-file-header {
+  color: rgba(255, 255, 255, 0.64);
+}
+
+:root[data-color-scheme="dark"] .vcs-history-diff-status {
+  background-color: rgba(255, 255, 255, 0.06);
+}
+
+:root[data-color-scheme="dark"] .vcs-history-review-scroll > .scroll-view__thumb::after {
+  background-color: rgba(255, 255, 255, 0.28);
+}
+
+:root[data-color-scheme="dark"] .vcs-history-review-scroll > .scroll-view__thumb:hover::after,
+:root[data-color-scheme="dark"] .vcs-history-review-scroll > .scroll-view__thumb[data-dragging="true"]::after {
+  background-color: rgba(255, 255, 255, 0.36);
+}
+
+.prompt-local-test-agent {
+  --icon-fill: currentColor;
+  background-color: #F5F1FE;
+  color: #7530EA;
+}
+
+:root[data-color-scheme="dark"] .prompt-local-test-agent {
+  --icon-fill: currentColor;
+  background-color: rgba(127, 42, 243, 0.15);
+  color: #B37EFF;
+}
+
+.prompt-local-test-agent [data-component="icon"] {
+  color: currentColor !important;
+  --icon-fill: currentColor !important;
+}
+
+.prompt-local-test-agent [data-component="icon"] svg {
+  color: currentColor !important;
+  fill: currentColor !important;
+}
+
+/* 处理中(processing)蓝色系 tag，按设计稿 token（未定义时用 rgba 兜底）。设计暂未覆盖暗色，统一用亮色。 */
+.session-title-local-test-badge {
+  background-color: var(--tag-tint-bg-color-processing-default, rgba(77, 137, 255, 0.08));
+  color: var(--tag-tint-fg-color-text-processing-default, rgba(41, 112, 255, 1));
+}
+
+.session-title-local-test-badge svg {
+  color: var(--tag-tint-fg-color-text-processing-default, rgba(41, 112, 255, 1));
+  fill: var(--tag-tint-fg-color-text-processing-default, rgba(41, 112, 255, 1));
+}
+
+[data-component="turn-navigator-list"] {
+  --turn-nav-dot-default: rgba(0, 0, 0, 0.12);
+  --turn-nav-dot-hover: rgba(0, 0, 0, 0.28);
+  --turn-nav-dot-active: rgba(0, 0, 0, 0.64);
+  scrollbar-width: none;
+}
+
+[data-component="turn-navigator-list"]::-webkit-scrollbar {
+  display: none;
+}
+
+:root[data-color-scheme="dark"] [data-component="turn-navigator-list"] {
+  --turn-nav-dot-default: rgba(255, 255, 255, 0.12);
+  --turn-nav-dot-hover: rgba(255, 255, 255, 0.28);
+  --turn-nav-dot-active: rgba(255, 255, 255, 0.64);
+}
+
+@supports (color: light-dark(red, blue)) {
+  [data-component="turn-navigator-list"] {
+    --turn-nav-dot-default: light-dark(rgba(0, 0, 0, 0.12), rgba(255, 255, 255, 0.12));
+    --turn-nav-dot-hover: light-dark(rgba(0, 0, 0, 0.28), rgba(255, 255, 255, 0.28));
+    --turn-nav-dot-active: light-dark(rgba(0, 0, 0, 0.64), rgba(255, 255, 255, 0.64));
+  }
+}
+
+/* file-selection-toolbar: light-dark() fallback for low-version browsers */
+:root[data-color-scheme="dark"] .file-selection-toolbar {
+  border-color: rgba(255, 255, 255, 0.08);
+  background-color: #252526;
+  color: rgba(255, 255, 255, 0.82);
+  box-shadow: 0 4px 12px 0 rgba(0, 0, 0, 0.4);
+}
+
+:root[data-color-scheme="dark"] .file-selection-toolbar-btn:hover {
+  background-color: rgba(255, 255, 255, 0.07);
+  color: rgba(255, 255, 255, 0.95);
+}
+
+@supports (color: light-dark(red, blue)) {
+  .file-selection-toolbar {
+    border-color: light-dark(rgba(0, 0, 0, 0.1), rgba(255, 255, 255, 0.08));
+    background-color: light-dark(#f3f3f3, #252526);
+    color: light-dark(#424242, rgba(255, 255, 255, 0.82));
+    box-shadow: 0 4px 12px 0 light-dark(rgba(0, 0, 0, 0.12), rgba(0, 0, 0, 0.4));
+  }
+
+  .file-selection-toolbar-btn:hover {
+    background-color: light-dark(rgba(0, 0, 0, 0.05), rgba(255, 255, 255, 0.07));
+    color: light-dark(#1f1f1f, rgba(255, 255, 255, 0.95));
+  }
+}
+
+[data-component="turn-navigator-list"][data-overflow-top] {
+  -webkit-mask-image: linear-gradient(to bottom, transparent, black 24px);
+  mask-image: linear-gradient(to bottom, transparent, black 24px);
+}
+
+[data-component="turn-navigator-list"][data-overflow-bottom] {
+  -webkit-mask-image: linear-gradient(to top, transparent, black 24px);
+  mask-image: linear-gradient(to top, transparent, black 24px);
+}
+
+[data-component="turn-navigator-list"][data-overflow-top][data-overflow-bottom] {
+  -webkit-mask-image: linear-gradient(to bottom, transparent, black 24px, black calc(100% - 24px), transparent);
+  mask-image: linear-gradient(to bottom, transparent, black 24px, black calc(100% - 24px), transparent);
+}
+
+[data-slot="turn-nav-dot"] {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--turn-nav-dot-default);
+  transition:
+    width 150ms ease,
+    height 150ms ease,
+    background 150ms ease;
+}
+
+[data-nav-item-id]:hover [data-slot="turn-nav-dot"] {
+  width: 8px;
+  height: 8px;
+  background: var(--turn-nav-dot-hover);
+}
+
+[data-slot="turn-nav-dot"][data-active] {
+  width: 8px;
+  height: 8px;
+  background: var(--turn-nav-dot-active);
+}
+
+/* 输入框附件行：箭头按钮（24×24 圆形，z-index:10）+ 容器伪元素渐变透视遮罩（86×48，z-index:5）。
+   遮罩在按钮背后（覆盖按钮位置），按钮浮在最上层。
+   容器 ::before = 左遮罩、::after = 右遮罩，由 data-can-scroll-left/right 属性控制显隐。
+   渐变方向按侧镜像：右侧 270deg（白在靠近边缘端、透明在卡片端）、左侧 90deg 镜像。
+   色值由 --prompt-attachments-fade-color 控制：浅色 #FFFFFF、暗色跟随 --neutral-50。 */
+:root {
+  --prompt-attachments-fade-color: #FFFFFF;
+  --prompt-attachments-fade-edge: rgba(255, 255, 255, 0);
+  /* hood 上挂时输入框外框的向上阴影:浅色黑 3%,暗黑段切为白 3% */
+  --shadow-colorblack-subtle: #00000008;
+  --hood-bg: var(--white-64, #FFFFFFA3);
+  /* 输入框上挂区域(项目/分支行)文字:浅色沿用 neutral-600 链路(nova 注入时 black-64,否则黑色 fallback) */
+  --hood-fg: var(--neutral-600, rgba(0, 0, 0, 0.64));
+}
+:root[data-color-scheme="dark"] {
+  --prompt-attachments-fade-color: rgb(38,38,38);
+  --prompt-attachments-fade-edge: rgba(38,38,38, 0);
+  --shadow-colorblack-subtle: #FFFFFF08;
+  --hood-bg: var(--neutral-50);
+  --hood-fg: rgba(255, 255, 255, 0.64);
+  /* 暗黑兜底:非 nova 主题下 --border-color-black-subtle 未定义会退回黑色 fallback,深底上不可见 */
+  --border-color-black-subtle: rgba(255, 255, 255, 0.06);
+}
+
+[data-component="prompt-attachments"] [data-slot="prompt-attachments-arrow"] {
+  position: absolute;
+  top: 28px;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border-radius: 24px;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  box-shadow: 0px 3px 6px 0px rgba(0, 0, 0, 0.03);
+  background: #fff;
+  color: #fff;
+  cursor: pointer;
+}
+
+[data-component="prompt-attachments"] {
+  padding: 16px 16px 0;
+}
+
+[data-component="prompt-attachments"] [data-slot="prompt-attachments-arrow"]:hover {
+  color: var(--neutral-900);
+}
+
+[data-component="prompt-attachments"] [data-slot="prompt-attachments-arrow"][data-side="left"] {
+  left: 22px;
+}
+
+[data-component="prompt-attachments"] [data-slot="prompt-attachments-arrow"][data-side="right"] {
+  right: 22px;
+}
+
+/* 左右渐变透视遮罩：容器伪元素，位于按钮（z-index:10）背后、卡片之上 */
+[data-component="prompt-attachments"]::before,
+[data-component="prompt-attachments"]::after {
+  content: "";
+  position: absolute;
+  top: 16px;
+  width: 86px;
+  height: 48px;
+  z-index: 5;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+[data-component="prompt-attachments"]::before {
+  left: 13px;
+  background: linear-gradient(90deg, var(--prompt-attachments-fade-color) 29.81%, var(--prompt-attachments-fade-edge) 100%);
+}
+[data-component="prompt-attachments"][data-can-scroll-left]::before {
+  opacity: 1;
+}
+
+[data-component="prompt-attachments"]::after {
+  right: 13px;
+  background: linear-gradient(270deg, var(--prompt-attachments-fade-color) 29.81%, var(--prompt-attachments-fade-edge) 100%);
+}
+[data-component="prompt-attachments"][data-can-scroll-right]::after {
+  opacity: 1;
+}
+
+:root[data-color-scheme="dark"] [data-component="prompt-attachments"] [data-slot="prompt-attachments-arrow"] {
+  background: none;
+  border-color: rgba(255, 255, 255, 0.12);
+  box-shadow: 0px 3px 6px 0px rgba(0, 0, 0, 0.4);
+}
+

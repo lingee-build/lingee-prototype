@@ -1,0 +1,199 @@
+/* 刷新按钮一次性 360° 旋转动画：~600ms 完成一周后停止；
+ * 使用 ease-in-out 让起始与收尾都更平滑。 */
+@keyframes dev-page-refresh-spin-once {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.dev-page-refresh-spin {
+  transform-origin: center;
+  transform-box: fill-box;
+  animation: dev-page-refresh-spin-once 600ms ease-in-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dev-page-refresh-spin {
+    animation: none;
+  }
+}
+
+/* 与工作-智能体页面统一开发列表的页签文本和元素卡片层级。 */
+.dev-page-title {
+  font-weight: 600;
+}
+
+/* 开发类页面页签：轨道 4% 黑、选中 64% 白、悬停 46% 白（亮色）；
+ * neutral-65 / neutral-0 随主题切换，暗色下为 4% 白与暗色底的同比例混合。
+ * 仅覆盖本场景，不改 kcode-ui SegmentedControl 默认色。 */
+.dev-page-tabs[data-component="segmented-control"] [data-slot="segmented-control-list"] {
+  background-color: var(--neutral-65);
+}
+
+.dev-page-tabs[data-component="segmented-control"] [data-slot="segmented-control-indicator"] {
+  background-color: color-mix(in srgb, var(--neutral-0) 64%, transparent);
+}
+
+.dev-page-tabs[data-component="segmented-control"] [data-slot="segmented-control-item"]:hover:not(:disabled):not([data-selected]) {
+  background-color: color-mix(in srgb, var(--neutral-0) 46%, transparent);
+}
+
+/* 首次挂载时 Kobalte 会延后计算指示器位置，禁用过渡以避免定位过程被看作 Tab 切换动画。 */
+.dev-page-tabs-initializing [data-slot="segmented-control-indicator"],
+.dev-page-tabs-initializing [data-slot="segmented-control-item"] {
+  transition: none;
+}
+
+/* 页签高度对齐 36px 行高（与其他类似页面一致）：
+ * item 28px + 轨道上下 padding 各 4px = 36px，与右侧搜索框/按钮（均 36px）齐平 */
+.dev-page-tabs [data-slot="segmented-control-item"] {
+  height: 28px;
+  line-height: 14px;
+}
+
+.dev-page-tile[data-component="tile"] [data-slot="tile-name"] {
+  font-weight: 500;
+}
+
+/* MCP 组件卡片：footer 标签容器占满宽度，使构建状态可右对齐到右下角 */
+.dev-page-tile[data-component="tile"] [data-slot="tile-tags"] {
+  flex: 1;
+}
+
+/* 技能开发/智能体开发卡片：填充背景（跟随主题）+ 无描边 */
+.tile-filled[data-component="tile"] {
+  background: color-mix(in srgb, var(--neutral-0) 82%, transparent);
+  border: none;
+}
+
+/* 智能体开发卡片：图标容器 40x40 */
+.tile-icon-40[data-component="tile"] [data-slot="tile-icon"] {
+  width: 40px;
+  height: 40px;
+}
+
+/* 技能开发卡片：对齐原型 sk-card 布局（48px 图标 + grid 让描述独占整行） */
+.skill-dev-tile[data-component="tile"] {
+  gap: 12px;
+}
+
+.skill-dev-tile[data-component="tile"] [data-slot="tile-icon"] {
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
+  background: #fff;
+}
+
+/* 用 grid 把 tile-body 拆成两行：第一行 icon+header，第二行 desc 占满整行 */
+.skill-dev-tile[data-component="tile"] [data-slot="tile-body"] {
+  display: grid;
+  grid-template-columns: 48px 1fr;
+  grid-template-rows: auto auto;
+  gap: 12px 10px;
+  align-items: start;
+}
+
+.skill-dev-tile[data-component="tile"] [data-slot="tile-icon"] {
+  grid-row: 1;
+  grid-column: 1;
+  align-self: center;
+}
+
+.skill-dev-tile[data-component="tile"] [data-slot="tile-content"] {
+  display: contents;
+}
+
+.skill-dev-tile[data-component="tile"] [data-slot="tile-header"] {
+  grid-row: 1;
+  grid-column: 2;
+  align-items: center;
+  min-height: 0;
+}
+
+/* 描述独占第二行整行宽度，单行省略 */
+.skill-dev-tile[data-component="tile"] [data-slot="tile-desc"] {
+  grid-row: 2;
+  grid-column: 1 / -1;
+  display: block;
+  -webkit-line-clamp: unset;
+  -webkit-box-orient: unset;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-height: unset;
+  margin-top: 0;
+  font-size: 14px;
+  line-height: 20px;
+  color: rgba(0, 0, 0, 0.46);
+}
+
+/* footer 改为纵向双行（个人 / 企业分发），去掉左侧缩进 */
+.skill-dev-tile[data-component="tile"] [data-slot="tile-footer"] {
+  flex-direction: column;
+  align-items: stretch;
+  padding-top: 0;
+  padding-inline-start: 0;
+  gap: 8px;
+}
+
+.skill-dev-tile[data-component="tile"] [data-slot="tile-tags"] {
+  flex: 1;
+  overflow: visible;
+  flex-wrap: nowrap;
+}
+
+/* 名称字重对齐原型 sk-name（600）；取消标题的剩余空间填充，让检查盾牌紧跟标题靠左显示。 */
+.skill-dev-tile[data-component="tile"] [data-slot="tile-name"] {
+  flex: 0 1 auto;
+  font-weight: 600;
+}
+
+/* hover / 选中态对齐原型 */
+.skill-dev-tile.tile-filled[data-component="tile"]:hover {
+  box-shadow: 0 3px 12px rgba(42, 52, 126, 0.06);
+  background: rgba(255, 255, 255, 0.95);
+}
+
+.skill-dev-tile-selected[data-component="tile"] {
+  /* 选中描边对齐原型 .sk-card.sel：1.5px #495DFF */
+  box-shadow: 0 0 0 1.5px #495dff !important;
+  background: var(--neutral-0) !important;
+}
+
+/* 开发类页面搜索框背景：跟随主题 */
+.dev-page-layout [data-slot="form-search-wrapper"] {
+  background: color-mix(in srgb, var(--neutral-0) 64%, transparent);
+}
+
+/* 窄宽度下搜索框收起为图标；点击图标后隐藏刷新/新建按钮，搜索框展开并占据标题行剩余宽度 */
+.dev-page-search-expand {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  animation: dev-page-search-expand-in 150ms ease;
+}
+
+@keyframes dev-page-search-expand-in {
+  from {
+    opacity: 0;
+    transform: translateX(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dev-page-search-expand {
+    animation: none;
+  }
+}
+
+.dev-page-search-expand [data-component="form-search"],
+.dev-page-search-expand [data-slot="form-search-wrapper"] {
+  width: 100%;
+}

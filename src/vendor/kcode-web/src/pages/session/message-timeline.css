@@ -1,0 +1,169 @@
+/*
+ * message-timeline.css
+ *
+ * content-visibility 治理：
+ * 1. 默认对每个 turn 启用 content-visibility: auto + contain-intrinsic-size，长会话保留虚拟化收益。
+ * 2. 当 turn 处于 active / 流式输出 / 内部存在已展开的 collapsible（aria-expanded="true"）时，
+ *    强制禁用 cv:auto，避免"占位高度远小于实际高度"在视口边界附近反复回流，
+ *    出现 DOM 上下闪动。
+ * 3. contain-intrinsic-size 初始占位从 500px 降至 200px：
+ *    首次进入视口前的回流幅度更小；`auto` 前缀保证浏览器记住实测高度后不再使用估值。
+ *
+ * 参见 root cause：[basic-tool.css] 中的 [data-component="tool-trigger"] 也已同步移除 cv:auto，
+ * 防止内层 0 占位放大闪烁。
+ */
+[data-message-turn] {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 200px;
+}
+
+[data-message-turn][data-cv-active="true"],
+[data-message-turn][data-cv-streaming="true"],
+[data-message-turn]:has([aria-expanded="true"]) {
+  content-visibility: visible;
+  contain-intrinsic-size: none;
+}
+
+/* 对话轮次导航悬停列表：细滚动条 */
+/* Fork 来源入口居中展示，左右分隔线保持它与对话内容的层级关系。 */
+[data-slot="session-turn-fork-back-link"] {
+  width: 100%;
+  min-width: 0;
+  align-self: stretch;
+  margin-top: 16px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+[data-slot="session-turn-fork-back-link"]::before,
+[data-slot="session-turn-fork-back-link"]::after {
+  content: "";
+  flex: 1 1 0;
+  min-width: 12px;
+  /* Nova 浅色主题的 border-weak 与页面底色太接近；neutral-200 在明暗主题下均保持 12% 对比度。 */
+  border-top: 1px solid var(--neutral-200, rgba(0, 0, 0, 0.12));
+}
+
+[data-slot="session-turn-fork-back-link"] [data-action="fork-back-link"] {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  flex: 0 1 auto;
+  max-width: 100%;
+  min-width: 0;
+  padding: 2px 4px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-interactive-base);
+  font-family: var(--font-family-sans);
+  font-size: var(--font-size-small);
+  font-weight: var(--font-weight-regular);
+  line-height: 20px;
+  text-align: center;
+}
+
+[data-slot="session-turn-fork-back-link"] [data-action="fork-back-link"] [data-component="icon"] {
+  color: inherit;
+}
+
+[data-slot="session-turn-fork-back-link"] [data-action="fork-back-link"] > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+[data-slot="session-turn-fork-back-link"] button[data-action="fork-back-link"] {
+  cursor: pointer;
+  text-decoration: underline transparent;
+  text-underline-offset: 2px;
+  transition: text-decoration-color 0.15s ease;
+}
+
+[data-slot="session-turn-fork-back-link"] button[data-action="fork-back-link"]:hover {
+  text-decoration-color: currentColor;
+}
+
+[data-slot="session-turn-fork-back-link"] button[data-action="fork-back-link"]:focus-visible {
+  outline: 1px solid var(--border-interactive-base);
+  outline-offset: 2px;
+}
+
+[data-slot="session-turn-fork-back-link"] [data-action="fork-back-link"][aria-disabled="true"] {
+  cursor: default;
+  color: var(--text-weaker);
+}
+
+/* ===== 分享选择模式 ===== */
+
+/* 分享模式：通过 padding 留出 radio 空间，radio 绝对定位 */
+.message-block--share-mode {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 16px 16px 16px 52px;
+  margin-bottom: 8px;
+  cursor: pointer;
+  width: 100%;
+  min-width: 0;
+  border-radius: 12px;
+  transition: background 0.15s ease;
+}
+
+.message-block--share-mode[data-selected="true"] {
+  background: var(--neutral-50, rgba(0, 0, 0, 0.03));
+}
+
+/* radio 按钮：蓝色圆形选中 / 空心圆未选中（基础样式） */
+.share-radio-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 2px solid var(--neutral-300, #d4d4d4);
+  background: transparent;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+/* radio 在消息块内：绝对定位于左侧，垂直居中于容器 */
+.message-block--share-mode .share-radio-btn {
+  position: absolute;
+  left: 16px;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.share-radio-btn:hover {
+  border-color: var(--primary-600, #495dff);
+}
+
+.share-radio-btn[data-selected="true"] {
+  background: var(--primary-600, #495dff);
+  border-color: var(--primary-600, #495dff);
+}
+
+/* 分享模式：禁用所有内容交互（链接、工具折叠、diff 等），
+   仅保留 share-part-container 和 share-radio-btn 可点击 */
+[data-share-mode] * {
+  pointer-events: none;
+}
+
+[data-share-mode] .message-block--share-mode,
+[data-share-mode] .share-radio-btn {
+  pointer-events: auto;
+}
+
+/* 分享模式：隐藏底部操作图标层（复制/重新生成/分享/meta），不占位 */
+[data-share-mode] [data-slot="user-message-copy-wrapper"],
+[data-share-mode] [data-slot="text-part-copy-wrapper"] {
+  display: none;
+}

@@ -1,0 +1,462 @@
+[data-component="markdown"] {
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: break-word;
+  color: var(--neutral-700);
+  font-size: 14px;
+  line-height: 20px;
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+[data-component="markdown"] > *:first-child {
+  margin-top: 0;
+}
+
+[data-component="markdown"] > *:last-child {
+  margin-bottom: 0;
+}
+
+[data-component="markdown"] h1,
+[data-component="markdown"] h2,
+[data-component="markdown"] h3,
+[data-component="markdown"] h4,
+[data-component="markdown"] h5,
+[data-component="markdown"] h6 {
+  color: var(--neutral-1000);
+  margin: 20px 0 0;
+  line-height: 1.5;
+  font-weight: 600;
+}
+
+[data-component="markdown"] h1 {
+  color: var(--slate-900, #0f172a);
+  font-size: 24px;
+}
+
+[data-component="markdown"] h2 {
+  font-size: 20px;
+}
+
+[data-component="markdown"] h3 {
+  font-size: 18px;
+}
+
+[data-component="markdown"] h4 {
+  font-size: 16px;
+}
+
+[data-component="markdown"] h5 {
+  font-size: 14px;
+}
+
+[data-component="markdown"] h6 {
+  font-size: 12px;
+}
+
+[data-component="markdown"] :is(h1, h2, h3, h4, h5, h6) + :is(h1, h2, h3, h4, h5, h6) {
+  margin-top: 20px;
+}
+
+[data-component="markdown"] :is(h1, h2, h3, h4, h5, h6) + :is(p, ul, ol, blockquote, pre, [data-slot="markdown-table"], hr, img) {
+  margin-top: 12px;
+}
+
+[data-component="markdown"] strong,
+[data-component="markdown"] b {
+  color: var(--neutral-1000);
+  font-weight: 600;
+}
+
+[data-component="markdown"] p {
+  margin: 0.75rem 0;
+}
+
+[data-component="markdown"] a {
+  color: var(--text-interactive-base);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+[data-component="markdown"] a:hover {
+  cursor: pointer;
+}
+
+[data-component="markdown"] ul,
+[data-component="markdown"] ol {
+  margin-top: 0.5rem;
+  margin-bottom: 1rem;
+  margin-left: 0;
+  padding-left: 1.5rem;
+  list-style-position: outside;
+}
+
+[data-component="markdown"] ul {
+  list-style-type: disc;
+}
+
+[data-component="markdown"] ol {
+  list-style-type: decimal;
+}
+
+[data-component="markdown"] li > p:first-child {
+  display: inline;
+  margin: 0;
+}
+
+[data-component="markdown"] li > p + p {
+  display: block;
+  margin-top: 0.25rem;
+}
+
+[data-component="markdown"] li::marker {
+  color: var(--text-weak);
+}
+
+[data-component="markdown"] li > ul,
+[data-component="markdown"] li > ol {
+  margin-top: 0.25rem;
+  margin-bottom: 0.25rem;
+  padding-left: 1rem;
+}
+
+[data-component="markdown"] li > ol {
+  padding-left: 1.75rem;
+}
+
+[data-component="markdown"] blockquote {
+  border-left: 2px solid var(--border-weak-base);
+  margin: 20px 0;
+  padding-left: 0.5rem;
+  color: var(--text-weak);
+  font-style: normal;
+}
+
+[data-component="markdown"] hr {
+  border: none;
+  border-top: 1px solid var(--gray-blue-300);
+  margin: 20px 0;
+}
+
+[data-component="markdown"] .shiki {
+  font-size: 13px;
+  padding: 0.75rem 1rem;
+  border-radius: 16px;
+  border: none;
+  /* 代码块会同时出现在会话区(background-page)与文件预览区(background-stronger)，
+     两者底色不同且无共同对比色，固定实色必然在某一侧融进背景；
+     用半透明叠加(亮色黑6%/暗色白6%)在两种底色上都能形成对比。
+     也不能用 --white-82：字面量白色 token，暗色下仍是白底配浅字。 */
+  background: var(--neutral-100) !important;
+}
+
+[data-component="markdown"] [data-component="markdown-code"] {
+  position: relative;
+}
+
+[data-component="markdown"] [data-slot="markdown-copy-button"] {
+  position: absolute;
+  top: 16px;
+  right: 8px;
+  transform: translateY(-50%);
+  opacity: 1;
+  transition: opacity 0.15s ease;
+  z-index: 1;
+  color: var(--neutral-400);
+}
+
+[data-component="markdown"] [data-slot="markdown-copy-button"]::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 4px);
+  z-index: 1000;
+  max-width: 320px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-float-base);
+  color: var(--text-invert-strong);
+  padding: 2px 8px;
+  pointer-events: none;
+  white-space: nowrap;
+  font-family: var(--font-family-sans);
+  font-size: var(--font-size-small);
+  font-style: normal;
+  font-weight: var(--font-weight-medium);
+  line-height: var(--line-height-large);
+  letter-spacing: var(--letter-spacing-normal);
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+[data-component="markdown"] [data-slot="markdown-copy-button"]:hover::after,
+[data-component="markdown"] [data-slot="markdown-copy-button"]:focus-visible::after {
+  opacity: 1;
+}
+
+[data-component="markdown"] [data-slot="markdown-copy-button"][data-variant="secondary"] {
+  box-shadow: none;
+  background-color: transparent;
+}
+
+[data-component="markdown"] [data-slot="markdown-copy-button"][data-variant="secondary"]:hover:not(:disabled) {
+  background-color: transparent;
+}
+
+[data-component="markdown"] [data-slot="markdown-copy-button"][data-variant="secondary"] [data-slot="icon-svg"] {
+  color: var(--neutral-400);
+}
+
+[data-component="markdown"] [data-component="markdown-code"]:hover [data-slot="markdown-copy-button"] {
+  opacity: 1;
+}
+
+[data-component="markdown"] [data-slot="markdown-copy-button"] [data-slot="check-icon"] {
+  display: none;
+}
+
+[data-component="markdown"] [data-slot="markdown-copy-button"][data-copied="true"] [data-slot="copy-icon"] {
+  display: none;
+}
+
+[data-component="markdown"] [data-slot="markdown-copy-button"][data-copied="true"] [data-slot="check-icon"] {
+  display: inline-flex;
+}
+
+[data-component="markdown"] pre {
+  margin: 1rem 0;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  max-height: 500px;
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+  transition: scrollbar-color 0.3s ease;
+  background: transparent !important;
+}
+
+[data-component="markdown"] pre[data-scrolling="true"] {
+  scrollbar-color: var(--neutral-300, rgba(0, 0, 0, 0.25)) transparent;
+}
+
+[data-component="markdown"] pre::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+
+[data-component="markdown"] pre::-webkit-scrollbar-track {
+  background: transparent;
+  margin-right: 2px;
+}
+
+[data-component="markdown"] pre::-webkit-scrollbar-thumb {
+  background: transparent;
+  border-radius: 3px;
+  transition: background 0.3s ease;
+}
+
+[data-component="markdown"] pre[data-scrolling="true"]::-webkit-scrollbar-thumb {
+  background: var(--neutral-300, rgba(0, 0, 0, 0.25));
+}
+
+[data-component="markdown"] pre[data-scrolling="true"]::-webkit-scrollbar-thumb:hover {
+  background: var(--neutral-400, rgba(0, 0, 0, 0.35));
+}
+
+[data-component="markdown"] :not(pre) > code {
+  font-family: var(--font-family-mono);
+  font-feature-settings: var(--font-family-mono--font-feature-settings);
+  color: var(--neutral-600);
+  padding: 1px 8px;
+  background: var(--neutral-50);
+  border-radius: 10px;
+  line-height: 1.5;
+  font-size: 14px;
+}
+
+[data-component="markdown"] [data-slot="markdown-table"] {
+  position: relative;
+  border-radius: 16px;
+  border: 1px solid var(--gray-100);
+  overflow: hidden;
+}
+
+[data-component="markdown"] [data-slot="markdown-table"][data-scrollable="true"]::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 32px;
+  pointer-events: none;
+  z-index: 3;
+  background: linear-gradient(to right, transparent, var(--neutral-100, rgba(0, 0, 0, 0.06)));
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+[data-component="markdown"] [data-slot="markdown-table"][data-scrollable="true"][data-overflow-right="true"]::after {
+  opacity: 1;
+}
+
+[data-component="markdown"] [data-slot="markdown-table-scroll"] {
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+[data-component="markdown"] [data-slot="markdown-table-scroll"] tbody {
+  background: var(--neutral-0);
+}
+
+[data-component="markdown"] [data-slot="markdown-table-scroll"] tbody td {
+  border-bottom: 1px solid var(--neutral-50);
+  padding: 8px 16px;
+}
+
+[data-component="markdown"] [data-slot="markdown-table-scroll"]::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+  display: none;
+}
+
+[data-component="markdown"] [data-slot="markdown-table-overlay"] {
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  bottom: 6px;
+  height: 10px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s ease;
+  z-index: 2;
+}
+
+/* 滚动条仅在悬停/滚动中/拖拽中显示：静止时隐藏以降低视觉噪音，滚动可发现性由渐变遮罩与 hover 兜底。
+   pointer-events 仅在显示时开启，避免透明 overlay 拦截表格底部的文本选择。 */
+[data-component="markdown"] [data-slot="markdown-table"][data-scrollable="true"]:hover [data-slot="markdown-table-overlay"],
+[data-component="markdown"] [data-slot="markdown-table"][data-scrollable="true"][data-scrolling="true"] [data-slot="markdown-table-overlay"],
+[data-component="markdown"] [data-slot="markdown-table"][data-dragging="true"] [data-slot="markdown-table-overlay"] {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+[data-component="markdown"] [data-slot="markdown-table-overlay-thumb"] {
+  position: absolute;
+  left: 0;
+  top: 1px;
+  height: 8px;
+  min-width: 44px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--neutral-500) 42%, transparent);
+  transition: background 0.15s ease;
+  cursor: grab;
+  will-change: transform;
+}
+
+[data-component="markdown"] [data-slot="markdown-table-overlay-thumb"]:hover {
+  background: color-mix(in srgb, var(--neutral-500) 56%, transparent);
+}
+
+[data-component="markdown"] [data-slot="markdown-table"][data-dragging="true"] [data-slot="markdown-table-overlay-thumb"] {
+  cursor: grabbing;
+}
+
+[data-component="markdown"] table {
+  width: 100%;
+  /* 宽表解除 100% 钉死：自然宽度超出容器时保持自然宽度，由滚动容器承接，短列不再被压缩到单字宽。 */
+  min-width: max-content;
+  border-collapse: collapse;
+  margin: 0;
+  font-size: 14px;
+  table-layout: auto;
+}
+
+[data-component="markdown"] thead,
+[data-component="markdown"] tbody {
+  display: table-row-group;
+}
+
+[data-component="markdown"] tr {
+  display: table-row;
+}
+
+[data-component="markdown"] th,
+[data-component="markdown"] td {
+  display: table-cell;
+  white-space: normal;
+  overflow-wrap: break-word;
+  /* CJK 无词边界，auto 布局的压缩下限是单字宽；4em 保底 4 字宽。长内容限内换行，防止撑爆整表。 */
+  min-width: 4em;
+  max-width: min(480px, 68vw);
+}
+
+[data-component="markdown"] th {
+  border-bottom: 1px solid var(--gray-100);
+  padding: 12px 16px;
+  text-align: left;
+  font-weight: 400;
+  background: var(--neutral-50, rgba(0, 0, 0, 0.03));
+}
+
+[data-component="markdown"] td {
+  border-bottom: 1px solid var(--gray-100);
+  padding: 14px 16px;
+}
+
+[data-component="markdown"] tbody tr:last-child td {
+  border-bottom: none;
+}
+
+[data-component="markdown"] img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 4px;
+  margin: 20px 0;
+  display: block;
+}
+
+[data-component="markdown"] a.external-link:hover > code {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+/* 正文中被识别为“文件名/路径”的行内 code / 加粗：可点，点击打开文件预览。
+   风格对齐 Claude Code：蓝色链接色、无下划线；默认无背景，悬停才出现背景。 */
+[data-component="markdown"] .file-link {
+  cursor: pointer;
+  display: inline;
+  padding: 1px 8px;
+  border-radius: 10px;
+  color: var(--text-interactive-base);
+  /* 纯文本内联的文件名也走等宽，保持与 code 写法一致的“蓝色等宽”外观。 */
+  font-family: var(--font-family-mono);
+  font-feature-settings: var(--font-family-mono--font-feature-settings);
+  font-size: 14px;
+  transition: background 0.15s ease;
+}
+
+[data-component="markdown"] .file-link:hover {
+  background: var(--neutral-50);
+}
+
+/* 覆盖内部 code / 加粗 / 强调（含嵌套写法，如 **`a.ts`**）的默认样式：
+   无论原始写法如何，统一呈现为一致的等宽蓝色链接，去掉 code 自带的灰底与内距。
+   用「后代选择器」而非「直接子代」，以覆盖 strong>code 这类嵌套结构。 */
+[data-component="markdown"] .file-link code,
+[data-component="markdown"] .file-link strong,
+[data-component="markdown"] .file-link b,
+[data-component="markdown"] .file-link em,
+[data-component="markdown"] .file-link i {
+  color: inherit;
+  background: transparent;
+  text-decoration: none;
+  font-family: var(--font-family-mono);
+  font-feature-settings: var(--font-family-mono--font-feature-settings);
+  font-style: normal;
+  font-weight: 400;
+  font-size: 14px;
+  padding: 0;
+  border-radius: 0;
+}

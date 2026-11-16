@@ -1,0 +1,151 @@
+/**
+ * 协作开发阶段审核条 / 阶段已完成页脚。
+ *
+ * 层叠：条的主体必须包在 DockShell（[data-dock-surface="shell"]，position:relative + z-index:10）里。
+ * PromptInput 根节点有个 ::before 渐变蒙层（prompt-input.tsx:3199）向上覆盖 80px、z-index:1、
+ * 底部是不透明的 --background-page，裸 div（z-auto）会被它整条压住；question / permission dock
+ * 正是靠这个 DockShell 约定躲开的，这里复用同一套契约而不是自己写 z-index。
+ *
+ * 几何沿用原型 .chat-stage-guide 的 min-height 58 / padding / 圆角，但**去掉了原型的
+ * margin-bottom:-18px**（原型让条的下半截藏到输入框底下）：要压住 z-1 的蒙层，条的 z 必须 >1；
+ * 而要被输入框盖住，条的 z 必须 < 输入框（z-auto）——两者不可兼得。改为与既有 dock 一致的
+ * 独立圆角卡片 + 8px 间距，不与输入框重叠，层叠顺序就不再影响观感。
+ */
+
+.ssr-dock {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 58px;
+  box-sizing: border-box;
+  margin-bottom: 8px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: var(--amber-50);
+}
+
+/**
+ * 配色用调色板 token（--amber-* / --primary-*）而不是 surface-* 语义 token：
+ * nova.json 运行时注入的 :root 会覆盖 theme.css，surface-* 的实际解析值与 theme.css 里写的
+ * 不一致（已踩过一次：--surface-interactive-base 写 #ecf3ff、实际 #d1e1fe），调色板 token
+ * 直接来自主题 JSON，两套模式都可靠。
+ */
+.ssr-dock-icon {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  flex: 0 0 auto;
+  color: var(--text-strong);
+}
+
+.ssr-dock-icon svg {
+  width: 22px;
+  height: 22px;
+}
+
+.ssr-dock-copy {
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.ssr-dock-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-strong);
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+/* 原型里这句副文案只给读屏用（clip 到 1px），界面上不占位。 */
+.ssr-dock-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.ssr-dock-confirm {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  min-height: 34px;
+  margin-left: auto;
+  padding: 0 12px;
+  border: none;
+  border-radius: 7px;
+  background: var(--primary-600);
+  color: var(--white-100, #ffffff);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 0.15s, box-shadow 0.15s;
+}
+
+.ssr-dock-confirm:hover:not(:disabled) {
+  background: var(--primary-500);
+  box-shadow: 0 3px 9px rgba(73, 93, 255, 0.25);
+}
+
+.ssr-dock-confirm:focus-visible {
+  outline: 2px solid var(--primary-700);
+  outline-offset: 2px;
+}
+
+.ssr-dock-confirm:disabled {
+  background: var(--neutral-130);
+  color: var(--text-weak);
+  cursor: not-allowed;
+}
+
+/**
+ * 阶段审批通过后替换输入框的页脚：居中一行「「X」已完成」，顶部一道分割线与会话内容区分隔。
+ *
+ * 分割线宽度不需要额外约束：本节点挂在 session-prompt-dock 的 md:max-w-[800px] 容器内，
+ * 与 [data-slot="session-turn-list"] 同宽同轴，border-top 铺满 100% 即对齐会话文字区域。
+ * 线色用 --neutral-130（黑 8% / 暗色白 8%）与执行阶段卡片内的分割线保持一致——
+ * 不要用 --border-weak-base，它实际解析为 #f3f4f6，与底色只差 12 级几乎看不见。
+ */
+.ssr-done {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 92px;
+  padding: 16px 12px;
+  border-top: 1px solid var(--neutral-130);
+  color: var(--text-base);
+  font-size: 14px;
+  line-height: 22px;
+}
+
+.ssr-done-icon {
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: var(--primary-600);
+  color: var(--white-100, #ffffff);
+}
+
+.ssr-done-icon svg {
+  width: 12px;
+  height: 12px;
+}

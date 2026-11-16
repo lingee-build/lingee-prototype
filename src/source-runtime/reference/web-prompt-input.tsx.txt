@@ -1,0 +1,4425 @@
+import { Empty } from "@kcode/ui/empty"
+import { useFilteredList } from "@kcode/ui/hooks"
+import { useSpring } from "@kcode/ui/motion-spring"
+import { createEffect, on, Component, Show, For, onCleanup, onMount, createMemo, createSignal, createResource, type JSX } from "solid-js"
+import { createResizeObserver } from "@solid-primitives/resize-observer"
+import { createStore, produce, reconcile as reconcileStore } from "solid-js/store"
+import { useLocal } from "@/context/local"
+import { selectionFromLines, type SelectedLineRange, useFile } from "@/context/file"
+import {
+  ContentPart,
+  DEFAULT_PROMPT,
+  isPromptEqual,
+  Prompt,
+  usePrompt,
+  ImageAttachmentPart,
+  AgentPart,
+  FileAttachmentPart,
+  RuleAttachmentPart,
+} from "@/context/prompt"
+import { useLayout, type LocalProject } from "@/context/layout"
+import { CustomScrollContainer } from "@/components/custom-scroll-container"
+import { useSDK } from "@/context/sdk"
+import { useGlobalSDK } from "@/context/global-sdk"
+import { useSync } from "@/context/sync"
+import { useGlobalSync } from "@/context/global-sync"
+import { useComments } from "@/context/comments"
+import { useSearchParams, useNavigate } from "@solidjs/router"
+import { base64Encode } from "@opencode-ai/core/util/encode"
+import { Binary } from "@opencode-ai/core/util/binary"
+import { Button } from "@kcode/ui/button"
+import { DockContainer, DockShellForm, DockTray } from "@kcode/ui/dock-surface"
+import { useTenantFeature } from "@/context/tenant-feature"
+import { canUseExpertSelection } from "@/utils/tenant-feature-policy"
+import "./prompt-input/prompt-input-bar.css"
+import { ExpertTeamPicker } from "./prompt-input/expert-team-picker"
+import { DiffChanges } from "@kcode/ui/diff-changes"
+import { Icon } from "@kcode/ui/icon"
+import { Tooltip, TooltipKeybind } from "@kcode/ui/tooltip"
+import { IconButton } from "@kcode/ui/icon-button"
+import { DropdownMenu } from "@kcode/ui/dropdown-menu"
+import { useDialog } from "@kcode/ui/context/dialog"
+import { useCommand } from "@/context/command"
+import { Persist, persisted } from "@/utils/persist"
+import { usePermission } from "@/context/permission"
+import { useLanguage } from "@/context/language"
+import { usePlatform } from "@/context/platform"
+import { useSessionLayout } from "@/pages/session/session-layout"
+import { createSessionTabs } from "@/pages/session/helpers"
+import { workspaceKey } from "@/pages/layout/helpers"
+import { decode64 } from "@/utils/base64"
+import { SessionContextUsage } from "@/components/session-context-usage"
+import { WorktreeToggle } from "@/components/session/worktree-toggle"
+import { promptEnabled, promptProbe } from "@/testing/prompt"
+import { createTextFragment, getCursorPosition, setCursorPosition, setRangeEdge } from "./prompt-input/editor-dom"
+import { createPromptAttachments } from "./prompt-input/attachments"
+import { ACCEPTED_FILE_TYPES } from "./prompt-input/files"
+import {
+  canNavigateHistoryAtCursor,
+  navigatePromptHistory,
+  prependHistoryEntry,
+  type PromptHistoryComment,
+  type PromptHistoryEntry,
+  type PromptHistoryStoredEntry,
+  promptLength,
+} from "./prompt-input/history"
+import { createPromptSubmit, type FollowupDraft } from "./prompt-input/submit"
+import { ENTERPRISE_KNOWLEDGE_BASE_ID } from "./prompt-input/build-request-parts"
+import { PromptPopover, type AtOption, type SlashCommand } from "./prompt-input/slash-popover"
+import { ModelSelector } from "./prompt-input/model-selector"
+import {
+  resolveSlashTrigger,
+  resolveSlashQueryInSession,
+  advanceSlashSession,
+  hasContentOutsideSession,
+  filterSlashCandidates,
+  type SlashSession,
+} from "./prompt-input/slash-trigger"
+import { PromptContextItems } from "./prompt-input/context-items"
+import { PromptImageAttachments, previewUrl } from "./prompt-input/image-attachments"
+import { PromptDragOverlay } from "./prompt-input/drag-overlay"
+import { promptPlaceholder } from "./prompt-input/placeholder"
+import { shouldClearExpertSelection, shouldClearExpertOnTenantChange } from "./prompt-input/expert-selection"
+import { ImagePreview } from "@kcode/ui/image-preview"
+import { getFilename } from "@opencode-ai/core/util/path"
+import { getLingeeBridge, getLingeeBridgeTenantId } from "@/utils/host-bridge"
+import { hidePreviewBrowserDock } from "@/pages/session/preview-controller"
+import { isCollabSession, isCollabSessionResolved } from "@/pages/session/collab-session"
+import { canShowSkillTab, createHostLicensePlan } from "@/utils/license-permissions"
+import { isSkillEntryTab } from "@/utils/skill-entries"
+import { resolveWorktreeTrackValue } from "@/utils/worktree-track"
+import { trackBuildPromptEnhance } from "@/utils/tracking"
+import { isSessionIdle } from "@/utils/session-status"
+import { createSessionTaskState, SessionTaskDock } from "@/components/session-task-dock"
+import { uuid } from "@/utils/uuid"
+import { getModelLevelIcon, modelSortComparator, MODEL_LEVEL_ORDER } from "@/utils/maas-display-name"
+import { useAsrOverlay } from "./prompt-input/use-asr-overlay"
+import { useEnhance } from "./prompt-input/use-enhance"
+import { getConversationContext } from "./prompt-input/enhance-context-builder"
+import EnhanceButton from "./prompt-input/enhance-button"
+import { CosmicAppDropdown, type FlatCosmicApp } from "@/components/cosmic-app-dropdown"
+import { Portal } from "solid-js/web"
+import { List } from "@kcode/ui/list"
+import { Switch } from "@kcode/ui/switch"
+import { deriveToolIconColors, myToolsStore, toggleTool as toggleMyTool } from "@/utils/tool-api"
+import { setActiveHomeView } from "@/context/kcode-state"
+import { showToast } from "@kcode/ui/toast"
+import { CubeIcon, SettingsGearIcon } from "@/components/icon"
+import type { KnowledgeBinding } from "@/pages/home/agent-config-components"
+import { loadTenantAllCategories } from "@/utils/knowledge-api"
+import { upsertAppMappingRow, findExistingAppByCode } from "@/utils/app-mapping"
+
+// The implementation remains available for internal compatibility, while all
+// interactive customer entrypoints stay closed.
+const CUSTOMER_SHELL_MODE_ENABLED = false
+
+interface PromptInputProps {
+  class?: string
+  ref?: (el: HTMLDivElement) => void
+  newSessionWorktree?: string
+  onNewSessionWorktreeReset?: () => void
+  onNewSessionWorktreeChange?: (value: string) => void
+  worktreeBranches?: { name: string; current: boolean; worktree?: string }[]
+  newSessionBaseBranch?: string
+  onNewSessionBaseBranchChange?: (branch: string) => void
+  // Git header row (existing session, git project): diff stat + Commit/PR quick actions.
+  // Commit and PR are mutually exclusive; `gitHeaderMode` decides which button shows.
+  gitHeaderVisible?: boolean
+  /** Diff + status both loaded — reveal the stat/action area only then, to avoid mode flicker. */
+  gitHeaderReady?: boolean
+  gitHeaderMode?: "commit" | "pr" | "none"
+  gitHeaderDiff?: { additions: number; deletions: number }
+  /** When the session is running a turn, Commit/PR actions are disabled (like Claude Code). */
+  gitHeaderBusy?: boolean
+  gitHeaderManualPrAvailable?: boolean
+  /** An open PR already exists for the branch — the manual item opens it instead of a new compare URL. */
+  gitHeaderHasOpenPr?: boolean
+  onGitHeaderOpenReview?: () => void
+  onGitHeaderCommit?: () => void
+  onGitHeaderCreatePr?: (draft: boolean) => void
+  onGitHeaderManualPr?: () => void
+  onGitHeaderViewPr?: () => void
+  edit?: { id: string; prompt: Prompt; context: FollowupDraft["context"] }
+  onEditLoaded?: () => void
+  shouldQueue?: () => boolean
+  onQueue?: (draft: FollowupDraft) => void
+  onAbort?: () => void
+  onSubmit?: () => void
+  onSent?: (sent: { sessionId: string }) => void
+  /** When true, automatically trigger submit once prompt text and model/agent are ready. */
+  autoSubmit?: boolean
+  /** Called after auto-submit fires so the parent can reset its flag. */
+  onAutoSubmitConsumed?: () => void
+  /** Slot for the goal-mode progress banner, rendered above the git header so the gradient overlay sits above the entire composer unit. */
+  goalBanner?: JSX.Element
+  /** Whether the goal progress banner is currently visible. Lifted from SessionGoalBanner so the
+   *  composer can lay out the shared banner "hood" (one-banner vs two-banner padding + divider) and
+   *  square the composer's top corners when a hood sits on top of it. */
+  goalBannerVisible?: boolean
+  /** Local test target kind ("agent" | "skill"). When omitted, inferred from session info and route state. */
+  localTestKind?: "agent" | "skill" | false
+  /** Local test agent name to display. When omitted, inferred from session info and route state. */
+  localTestAgentName?: string
+  /** 暴露命令式 API（如光标处插入技能 pill）给组件外部，如底部技能 tab。 */
+  expose?: (api: PromptInputApi) => void
+}
+
+export interface PromptInputApi {
+  /** 在光标位置插入技能 pill（无编辑器选区时追加到末尾）。 */
+  insertSkillPill: (part: AgentPart) => void
+}
+
+const EXAMPLES = [
+  "prompt.example.1",
+  "prompt.example.2",
+  "prompt.example.3",
+  "prompt.example.4",
+  "prompt.example.5",
+  "prompt.example.6",
+  "prompt.example.7",
+  "prompt.example.8",
+  "prompt.example.9",
+  "prompt.example.10",
+  "prompt.example.11",
+  "prompt.example.12",
+  "prompt.example.13",
+  "prompt.example.14",
+  "prompt.example.15",
+  "prompt.example.16",
+  "prompt.example.17",
+  "prompt.example.18",
+  "prompt.example.19",
+  "prompt.example.20",
+  "prompt.example.21",
+  "prompt.example.22",
+  "prompt.example.23",
+  "prompt.example.24",
+  "prompt.example.25",
+] as const
+
+const NON_EMPTY_TEXT = /[^\s\u200B]/
+/** 技能开发图标 (skill-bolt, 与 kcode-ui icon 注册表保持一致, viewBox 0 0 15 15) */
+const SKILL_BOLT_ICON =
+  `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 15 15" fill="none">` +
+  `<path d="M7.33333 0C11.3834 0 14.6667 3.28325 14.6667 7.33333C14.6667 11.3834 11.3834 14.6667 7.33333 14.6667L6.94922 14.6602C6.07431 14.6303 5.34135 14.4888 4.45703 14.1367C2.6958 13.4351 2.52354 11.2004 3.73698 9.98698L4.96745 8.75521L4.47135 8.25977C4.09635 7.88475 3.88613 7.37604 3.88607 6.8457C3.88607 6.31527 4.09628 5.80606 4.47135 5.43099L5.17839 4.72396C5.74844 4.1539 6.62895 4.08323 7.27604 4.51172L8.25977 3.52865C8.52012 3.2683 8.94212 3.2683 9.20247 3.52865C9.46282 3.789 9.46282 4.211 9.20247 4.47135L8.24219 5.43099L9.1849 6.3737L10.1452 5.41406C10.4055 5.15393 10.8276 5.15393 11.0879 5.41406C11.3482 5.67441 11.3482 6.09707 11.0879 6.35742L10.1042 7.3405C10.5331 7.98764 10.4628 8.86793 9.89258 9.43815L9.18555 10.1452C8.81052 10.5202 8.30185 10.7311 7.77148 10.7311C7.2411 10.7311 6.73249 10.5202 6.35742 10.1452L5.91081 9.69857L4.67969 10.9297C4.01411 11.5953 4.24322 12.6168 4.95052 12.8984C5.78267 13.2298 6.42468 13.3333 7.33333 13.3333C10.647 13.3333 13.3333 10.647 13.3333 7.33333C13.3333 4.01962 10.647 1.33333 7.33333 1.33333C4.01962 1.33333 1.33333 4.01962 1.33333 7.33333C1.33333 7.70152 1.03486 8 0.666667 8C0.298477 8 0 7.70152 0 7.33333C0 3.28325 3.28325 0 7.33333 0ZM6.5931 5.66667C6.46292 5.53649 6.25127 5.53649 6.12109 5.66667L5.41406 6.37435C5.2892 6.49935 5.2194 6.66901 5.2194 6.8457C5.21946 7.02242 5.28911 7.19209 5.41406 7.31706L7.30013 9.20247C7.42514 9.32743 7.59472 9.39779 7.77148 9.39779C7.94823 9.39774 8.11786 9.32746 8.24284 9.20247L8.94987 8.49544C9.08002 8.3653 9.07997 8.15427 8.94987 8.02409L6.5931 5.66667Z" fill="currentColor"/>` +
+  `</svg>`
+
+/** 智能体开发图标 (ai-partner, viewBox 0 0 20 20) */
+const AI_PARTNER_ICON =
+  `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 20 20" fill="none">` +
+  `<path d="M7.70841 9.51988C8.28371 9.51988 8.75008 9.95645 8.75008 10.4167V12.0199C8.75008 12.4801 8.28371 12.8532 7.70841 12.8532C7.13312 12.8532 6.66675 12.4801 6.66675 12.0199V10.4167C6.66675 9.95645 7.13312 9.51988 7.70841 9.51988Z" fill="currentColor"/><path fill-rule="evenodd" clip-rule="evenodd" d="M10.0001 1.66669C10.9206 1.66669 11.6667 2.41288 11.6667 3.33335C11.6667 3.94982 11.331 4.48627 10.8334 4.7746V6.18654H14.1667C16.0077 6.18654 17.5001 7.67893 17.5001 9.51988C17.9603 9.51988 18.3334 9.89297 18.3334 10.3532V13.6865C18.3334 14.1468 17.9603 14.5199 17.5001 14.5199C17.4648 14.5199 17.4301 14.5168 17.3959 14.5126C17.0283 15.9538 15.7225 17.0199 14.1667 17.0199H5.83341C4.2776 17.0199 2.97093 15.9539 2.60343 14.5126C2.56953 14.5168 2.53512 14.5199 2.50008 14.5199C2.03984 14.5199 1.66675 14.1468 1.66675 13.6865V10.3532C1.66675 9.89297 2.03984 9.51988 2.50008 9.51988C2.50008 7.67893 3.99247 6.18654 5.83341 6.18654H9.16675V4.7746C8.66917 4.48627 8.33341 3.94982 8.33341 3.33335C8.33341 2.41288 9.07961 1.66669 10.0001 1.66669ZM5.83341 7.85321C4.91294 7.85321 4.16675 8.5994 4.16675 9.51988V13.6865C4.16675 14.607 4.91294 15.3532 5.83341 15.3532H14.1667C15.0872 15.3532 15.8334 14.607 15.8334 13.6865V9.51988C15.8334 8.5994 15.0872 7.85321 14.1667 7.85321H5.83341Z" fill="currentColor"/><path d="M12.2917 9.51988C12.867 9.51988 13.3334 9.95645 13.3334 10.4167V12.0199C13.3334 12.4801 12.867 12.8532 12.2917 12.8532C11.7165 12.8532 11.2501 12.4801 11.2501 12.0199V10.4167C11.2501 9.95645 11.7165 9.51988 12.2917 9.51988Z" fill="currentColor"/>` +
+  `</svg>`
+
+/** 通用应用图标 (app-general, viewBox 0 0 16 16) */
+const APP_GENERAL_ICON =
+  `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 16 16" fill="none">` +
+  `<path fill-rule="evenodd" clip-rule="evenodd" d="M6.66406 1.0033C7.49046 0.52494 8.50955 0.524941 9.33594 1.0033L13.6693 3.51177C14.4927 3.98849 14.9999 4.86824 15 5.81971V10.1804C15 11.1319 14.4927 12.0116 13.6693 12.4883L9.33594 14.9968C8.50951 15.4752 7.49049 15.4752 6.66406 14.9968L2.33073 12.4883C1.50729 12.0116 1.00004 11.1319 1 10.1804V5.81971C1.00009 4.86824 1.50729 3.98849 2.33073 3.51177L6.66406 1.0033ZM2.38086 5.46815C2.34989 5.58125 2.33336 5.69929 2.33333 5.81971V10.1804C2.33337 10.6561 2.58701 11.0957 2.9987 11.334L7.33203 13.8431L7.33333 13.8438V8.38091L2.38086 5.46815ZM8.66667 8.38091V13.8438L8.66797 13.8431L13.0013 11.334C13.413 11.0957 13.6666 10.6561 13.6667 10.1804V5.81971C13.6666 5.69923 13.6495 5.5813 13.6185 5.46815L8.66667 8.38091ZM8.66797 2.15695C8.25484 1.91787 7.74516 1.91787 7.33203 2.15695L3.32552 4.47661L8 7.22596L12.6738 4.47661L8.66797 2.15695Z" fill="currentColor"/>` +
+  `</svg>`
+
+/** 原型探索图标 (app-prototype, 与 kcode-ui icon 注册表一致, viewBox 0 0 24 24) */
+const APP_PROTOTYPE_ICON =
+  `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none">` +
+  `<path d="M20 8.5H10V20H18C19.1046 20 20 19.1046 20 18V8.5ZM4 18C4 19.1046 4.89543 20 6 20H8V8.5H4V18ZM20 6C20 4.89543 19.1046 4 18 4H6C4.89543 4 4 4.89543 4 6V6.5H20V6ZM22 18C22 20.2091 20.2091 22 18 22H6C3.79086 22 2 20.2091 2 18V6C2 3.79086 3.79086 2 6 2H18C20.2091 2 22 3.79086 22 6V18Z" fill="currentColor" fill-opacity="0.82"/>` +
+  `</svg>`
+
+/** 苍穹应用图标 (app-cosmic, viewBox 0 0 16 16) */
+const APP_COSMIC_ICON =
+  `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 16 16" fill="none">` +
+  `<path d="M8.42134 2.52401C8.50009 2.16442 8.85533 1.93688 9.21496 2.01555C9.5745 2.09434 9.80209 2.44957 9.72342 2.80917L7.39009 13.4758C7.31129 13.8353 6.95603 14.0629 6.59647 13.9843C6.23692 13.9056 6.00942 13.5503 6.08801 13.1907L8.42134 2.52401Z" fill="currentColor" fill-opacity="0.82"/><path d="M3.85949 4.28443C4.0706 3.98284 4.48625 3.90934 4.78788 4.12037C5.08937 4.3315 5.16294 4.74717 4.95194 5.04875L2.88553 7.99992L4.95194 10.9511C5.16285 11.2527 5.08942 11.6684 4.78788 11.8795C4.4863 12.0905 4.07062 12.0169 3.85949 11.7154L1.52616 8.38209C1.36561 8.15262 1.36565 7.84724 1.52616 7.61776L3.85949 4.28443Z" fill="currentColor" fill-opacity="0.82"/><path d="M11.3569 4.12037C11.6585 3.90934 12.0742 3.98284 12.2853 4.28443L14.6186 7.61776C14.7791 7.84724 14.7791 8.15264 14.6186 8.38209L12.2853 11.7154C12.0742 12.0169 11.6585 12.0904 11.3569 11.8795C11.0553 11.6684 10.9819 11.2527 11.1928 10.9511L13.2586 7.99992L11.1928 5.04875C10.9818 4.74714 11.0553 4.33149 11.3569 4.12037Z" fill="currentColor" fill-opacity="0.82"/>` +
+  `</svg>`
+
+/** MCP 应用图标 (mcp, viewBox 0 0 20 20) */
+const MCP_ICON =
+  `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 20 20" fill="none">` +
+  `<path fill-rule="evenodd" clip-rule="evenodd" d="M4.16699 1.66602C5.2552 1.66602 6.17871 2.36212 6.52214 3.33268H13.7503C15.8214 3.33268 17.5003 5.01161 17.5003 7.08268C17.5003 9.15375 15.8214 10.8327 13.7503 10.8327H6.25033C5.09973 10.8327 4.16699 11.7654 4.16699 12.916C4.16699 14.0666 5.09973 14.9993 6.25033 14.9993H13.4785C13.8219 14.0288 14.7454 13.3327 15.8337 13.3327C17.2144 13.3327 18.3337 14.452 18.3337 15.8327C18.3337 17.2134 17.2144 18.3327 15.8337 18.3327C14.7454 18.3327 13.8219 17.6366 13.4785 16.666H6.25033C4.17926 16.666 2.50033 14.9871 2.50033 12.916C2.50033 10.8449 4.17926 9.16602 6.25033 9.16602H13.7503C14.9009 9.16602 15.8337 8.23328 15.8337 7.08268C15.8337 5.93209 14.9009 4.99935 13.7503 4.99935H6.52214C6.17871 5.96991 5.2552 6.66602 4.16699 6.66602C2.78628 6.66602 1.66699 5.54673 1.66699 4.16602C1.66699 2.7853 2.78628 1.66602 4.16699 1.66602ZM15.8337 14.9993C15.3734 14.9993 15.0003 15.3724 15.0003 15.8327C15.0003 16.2929 15.3734 16.666 15.8337 16.666C16.2939 16.666 16.667 16.2929 16.667 15.8327C16.667 15.3724 16.2939 14.9993 15.8337 14.9993ZM4.16699 3.33268C3.70675 3.33268 3.33366 3.70578 3.33366 4.16602C3.33366 4.62625 3.70675 4.99935 4.16699 4.99935C4.62723 4.99935 5.00033 4.62625 5.00033 4.16602C5.00033 3.70578 4.62723 3.33268 4.16699 3.33268Z" fill="currentColor"/>` +
+  `</svg>`
+
+/** 技能名称 → 图标 SVG 映射，与 utils/skill-entries.ts 中 SKILL_TABS 的 iconName 保持一致 */
+const SKILL_ICON_MAP: Record<string, string> = {
+  "kingdee-skill-creator": SKILL_BOLT_ICON,
+  "ai-partner-creator": AI_PARTNER_ICON,
+  "standalone-build": APP_GENERAL_ICON,
+  "app-build": APP_COSMIC_ICON,
+  "kingdee-design": APP_PROTOTYPE_ICON,
+  "mcp-apps-builder": MCP_ICON,
+}
+
+const APP_GRID_ICON =
+  `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" fill="none">` +
+  `<path d="M2 3.5C2 2.67157 2.67157 2 3.5 2H5.5C6.32843 2 7 2.67157 7 3.5V5.5C7 6.32843 6.32843 7 5.5 7H3.5C2.67157 7 2 6.32843 2 5.5V3.5Z" fill="white"/>` +
+  `<path d="M9 3.5C9 2.67157 9.67157 2 10.5 2H12.5C13.3284 2 14 2.67157 14 3.5V5.5C14 6.32843 13.3284 7 12.5 7H10.5C9.67157 7 9 6.32843 9 5.5V3.5Z" fill="white"/>` +
+  `<path d="M2 10.5C2 9.67157 2.67157 9 3.5 9H5.5C6.32843 9 7 9.67157 7 10.5V12.5C7 13.3284 6.32843 14 5.5 14H3.5C2.67157 14 2 13.3284 2 12.5V10.5Z" fill="white"/>` +
+  `<path d="M9 10.5C9 9.67157 9.67157 9 10.5 9H12.5C13.3284 9 14 9.67157 14 10.5V12.5C14 13.3284 13.3284 14 12.5 14H10.5C9.67157 14 9 6.32843 9 10.5V12.5Z" fill="white"/>` +
+  `</svg>`
+
+/** 简化的应用条目类型（模块级，供跨路由持久化使用） */
+export type PromptAppItem = {
+  /** archive.json 绝对路径 */
+  path: string
+  /** 显示名（appName 或文件夹名） */
+  name: string
+  /** 所属项目目录 */
+  directory: string
+  /** app 文件夹名 */
+  title: string
+  /** archive.json 解析数据，预留给后续发送给大模型 */
+  data: Record<string, unknown> | null
+}
+
+/** 选中的应用信息（模块级信号，跨路由持久化） */
+const [selectedApp, setSelectedAppSignal] = createSignal<PromptAppItem | null>(null)
+/** 记忆的选中应用（clearSelectedApp 不清空，用于回到新会话页时恢复苍穹下拉显示） */
+const [lastSelectedApp, setLastSelectedApp] = createSignal<PromptAppItem | null>(null)
+/** setSelectedApp 包装：非 null 时同步写入记忆，null 时只清当前选中（不清记忆） */
+function setSelectedApp(app: PromptAppItem | null) {
+  setSelectedAppSignal(app)
+  if (app) setLastSelectedApp(app)
+}
+
+export { setSelectedApp }
+export { lastSelectedApp }
+
+/** 任务/专家页传入的会话专家绑定，供会话页首次打开时消费。 */
+export type SelectedExpert =
+  | { type: "team"; teamId: string; teamName: string }
+  | { type: "expert"; expertId: string; expertName: string; agentName: string }
+
+const [pendingSessionExpert, setPendingSessionExpert] = createSignal<{
+  sessionId: string
+  expert: SelectedExpert
+} | null>(null)
+
+export function setSessionExpertFromTask(sessionId: string, expert: SelectedExpert) {
+  setPendingSessionExpert({ sessionId, expert })
+}
+
+const [selectedExpert, setSelectedExpertSignal] = createSignal<SelectedExpert | null>(null)
+export { selectedExpert }
+export function setSelectedExpert(expert: SelectedExpert | null) {
+  setSelectedExpertSignal(expert)
+}
+export function clearSelectedExpert() {
+  setSelectedExpertSignal(null)
+}
+const [pendingExpertSync, setPendingExpertSync] = createSignal(false)
+export function setSelectedExpertFromPage(expert: SelectedExpert) {
+  setSelectedExpertSignal(expert)
+  setPendingExpertSync(true)
+}
+const [pendingPrompt, setPendingPromptSignal] = createSignal<string | null>(null)
+export function setPendingPrompt(text: string | null) {
+  setPendingPromptSignal(text)
+}
+
+/** 技能名称 → devMode 白名单，用于技能选择时自动切换开发模式 */
+export const SKILL_DEV_MODE_MAP: Record<string, string> = {
+  "app-build": "app",
+  "kd-frontend-development": "app",
+  "kingdee-app-router": "app",
+  "standalone-build": "app",
+  "kingdee-skill-creator": "skill",
+  "ai-partner-creator": "agent",
+  "kingdee-design": "universal",
+  "mcp-apps-builder": "app",
+  "universal-dev-partner": "universal",
+}
+
+/**
+ * 技能开发 pill → 会话绑定 AI partner 映射。
+ * 发送时输入框含对应技能开发 pill 则优先按此绑定 partner（见 createPromptSubmit 的
+ * aiPartnerID 入参）：后端按 aiPartnerID 注入 partner 专属工具，query_my_tools /
+ * list_mcp_tools / list_skill_types / skill_install 仅 skill-builder-partner 会话可用。
+ * 不绑定则普通新会话落默认 kingdee-design，技能开发交互生效但专属工具不注入。
+ */
+export const SKILL_PARTNER_MAP: Record<string, string> = {
+  "kingdee-skill-creator": "skill-builder-partner",
+  "ai-partner-creator": "ai-partner-builder",
+}
+
+/** 技能触发名 → UI 展示名映射（触发器真实名保持不变，仅影响显示文本） */
+export const SKILL_DISPLAY_NAME_MAP: Record<string, string> = {
+  "app-build": "cosmic-app-builder",
+  "kd-frontend-development": "cosmic-kwc-builder",
+  "standalone-build": "general-app-builder",
+  "kingdee-skill-creator": "skill-builder",
+  "ai-partner-creator": "agent-builder",
+  "kingdee-design": "prototype-builder",
+}
+export const getSkillDisplayName = (trigger: string): string => SKILL_DISPLAY_NAME_MAP[trigger] ?? trigger
+
+/** Extract the skill-dev name from an agent part.
+ *  Slash-command pills carry name=trigger; @-mention pills carry id=skill-name
+ *  with name=display-label. Checks both fields against SKILL_DEV_MODE_MAP. */
+export const getSkillDevName = (part: { type: string; name?: string; id?: string }): string | undefined => {
+  if (part.type !== "agent") return undefined
+  if (part.name && part.name in SKILL_DEV_MODE_MAP) return part.name
+  if (part.id && part.id in SKILL_DEV_MODE_MAP) return part.id
+  return undefined
+}
+
+export const PromptInput: Component<PromptInputProps> = (props) => {
+  const sdk = useSDK()
+  // @ 菜单规则数据源：rule.list 只返回元数据；弹层打开时 refetch 以感知规则增删改。
+  // 不用 createResource：它被 useFilteredList 的资源 source 在 <Suspense> 边界内 track 读取时，
+  // 首次加载与 refetch 都会让整页落入上层 Suspense fallback（页面闪烁），
+  // 同 settings-archive.tsx 改用 signal 的原因。
+  const [ruleOptions, setRuleOptions] = createSignal<AtOption[]>([])
+  const refetchRules = async () => {
+    const res = await sdk.client.rule.list().catch(() => undefined)
+    setRuleOptions(
+      (res?.data ?? []).map(
+        (rule): AtOption => ({
+          type: "rule",
+          path: rule.path,
+          name: rule.name,
+          display: rule.name,
+          ruleType: rule.type,
+          scope: rule.scope,
+        }),
+      ),
+    )
+  }
+  onMount(() => {
+    void refetchRules()
+  })
+  const globalSDK = useGlobalSDK()
+  const navigate = useNavigate()
+  const [searchParams] = useSearchParams<{
+    starterAgentID?: string
+    agent?: string
+    agentPid?: string
+    localTestAgent?: string
+    localTestSkill?: string
+  }>()
+  const sync = useSync()
+  const globalSync = useGlobalSync()
+  const local = useLocal()
+  const files = useFile()
+  const prompt = usePrompt()
+  const layout = useLayout()
+  const comments = useComments()
+  const dialog = useDialog()
+  const command = useCommand()
+  const permission = usePermission()
+  const language = useLanguage()
+  const licensePlan = createHostLicensePlan()
+  const platform = usePlatform()
+  const { params, tabs, view } = useSessionLayout()
+  const promptDropdownPlacement = createMemo(() => (params.id ? "top-start" : "bottom-start"))
+  const collabSession = isCollabSession(() => params.id)
+  const collabSessionResolved = isCollabSessionResolved(() => params.id)
+  const tenantFeature = useTenantFeature()
+  const expertSelectionAllowed = () => canUseExpertSelection(tenantFeature.policy().expertSelection, collabSession())
+  createEffect(on(tenantFeature.tenantCode, (tenant, previousTenant) => {
+    if (!shouldClearExpertOnTenantChange({ previousTenant, tenant, taskBound: collabSession() || !collabSessionResolved() })) return
+    setSelectedExpertSignal(null)
+    if (local.expertTeam.get()) local.expertTeam.set(null)
+    setPendingSessionExpert(null)
+    setPendingExpertSync(false)
+  }, { defer: true }))
+  // 「新建工作树」勾选框、分支芯片:定义见下方(依赖 effectiveProject/effectiveChild,
+  // createMemo 立即求值,故须在其依赖之后声明,避免 TDZ)。
+  let editorRef!: HTMLDivElement
+  let fileInputRef: HTMLInputElement | undefined
+  let scrollRef!: HTMLDivElement
+  let slashPopoverRef!: HTMLDivElement
+  let dockContainerRef: HTMLDivElement | undefined
+  const [newSessionPopoverWidth, setNewSessionPopoverWidth] = createSignal(0)
+  const [starterDropdownOpen, setStarterDropdownOpen] = createSignal(false)
+  const [projectDropdownOpen, setProjectDropdownOpen] = createSignal(false)
+  const [selectedKnowledge, setSelectedKnowledge] = createSignal<KnowledgeBinding[]>([])
+  const openKnowledgePicker = async () => {
+    try {
+      const latestTree = await loadTenantAllCategories()
+      void import("@/pages/home/agent-config-components").then((x) => {
+        dialog.show(() => (
+          <x.AddKnowledgeDialog
+            tree={latestTree}
+            initialBindings={selectedKnowledge().filter((k) => k.id !== ENTERPRISE_KNOWLEDGE_BASE_ID)}
+            tipText={language.t("kcode.agentKnowledge.addTipGeneric" as any)}
+            onConfirm={(bindings) => {
+              setSelectedKnowledge([
+                ...selectedKnowledge().filter((k) => k.id === ENTERPRISE_KNOWLEDGE_BASE_ID),
+                ...bindings,
+              ])
+              recordRecentKnowledge(bindings)
+            }}
+          />
+        ))
+      })
+    } catch (error) {
+      showToast({
+        variant: "error",
+        title: language.t("prompt.tools.knowledgeLoadFailed"),
+        description: error instanceof Error && error.message ? error.message : language.t("prompt.tools.knowledgeLoadFailedDesc"),
+      })
+    }
+  }
+  const removeKnowledge = (id: string) => {
+    setSelectedKnowledge((prev) => prev.filter((k) => k.id !== id))
+  }
+
+  // 存储 key 带租户 ID，按现有租户隔离逻辑区分不同租户的数据
+  const [recentKnowledge, setRecentKnowledge] = persisted(
+    Persist.global(`recent-knowledge.${getLingeeBridgeTenantId() ?? "anonymous"}`, ["recent-knowledge.v1"]),
+    createStore<KnowledgeBinding[]>([]),
+  )
+
+  const recordRecentKnowledge = (items: KnowledgeBinding[]) => {
+    // 「企业知识库」本身有快捷选项，不进入最近知识列表
+    for (const item of items.filter((k) => k.id !== ENTERPRISE_KNOWLEDGE_BASE_ID)) {
+      // 最多保留 20 条，超出后最旧记录自动被覆盖
+      setRecentKnowledge((prev) => [
+        item,
+        ...prev.filter((k) => k.id !== item.id),
+      ].slice(0, 20))
+    }
+  }
+
+  // 过滤掉历史持久化的「企业知识库」条目，它在菜单中已有独立快捷选项
+  const recentKnowledgeFiltered = createMemo(() => recentKnowledge.filter((k) => k.id !== ENTERPRISE_KNOWLEDGE_BASE_ID))
+
+  const addKnowledge = (item: KnowledgeBinding) => {
+    if (selectedKnowledge().some((k) => k.id === item.id)) return
+    setSelectedKnowledge((prev) => [...prev, item])
+    recordRecentKnowledge([item])
+  }
+
+  /** 知识库 tag 横向滚动：溢出时显示左右箭头，点击滚动一屏 */
+  const [knowledgeScrollEl, setKnowledgeScrollEl] = createSignal<HTMLDivElement>()
+  const [canScrollKnowledgeLeft, setCanScrollKnowledgeLeft] = createSignal(false)
+  const [canScrollKnowledgeRight, setCanScrollKnowledgeRight] = createSignal(false)
+
+  const updateKnowledgeScrollState = () => {
+    const el = knowledgeScrollEl()
+    if (!el) return
+    setCanScrollKnowledgeLeft(el.scrollLeft > 1)
+    setCanScrollKnowledgeRight(el.scrollLeft < el.scrollWidth - el.clientWidth - 1)
+  }
+
+  const scrollKnowledgeTags = (dir: "left" | "right") => {
+    const el = knowledgeScrollEl()
+    if (!el) return
+    const page = el.clientWidth
+    if (dir === "right") {
+      const remaining = el.scrollWidth - el.clientWidth - el.scrollLeft
+      el.scrollTo({ left: el.scrollLeft + (remaining <= page ? remaining : page), behavior: "smooth" })
+    } else {
+      el.scrollTo({ left: el.scrollLeft - (el.scrollLeft <= page ? el.scrollLeft : page), behavior: "smooth" })
+    }
+  }
+
+  createEffect(() => {
+    const el = knowledgeScrollEl()
+    if (!el) return
+    createResizeObserver(knowledgeScrollEl, updateKnowledgeScrollState)
+    updateKnowledgeScrollState()
+  })
+
+  // selectedKnowledge 增减后重新检测溢出状态
+  createEffect(on(() => selectedKnowledge().length, () => {
+    const raf = requestAnimationFrame(() => updateKnowledgeScrollState())
+    onCleanup(() => cancelAnimationFrame(raf))
+  }))
+
+  // 新会话页面挂载时自动聚焦输入框
+  // onMount 在组件真正插入 DOM 后执行，比父组件 createEffect 更可靠
+  onMount(() => {
+    if (!params.id) editorRef.focus()
+  })
+
+  const mirror = { input: false }
+  const hasAgentPill = createMemo(() => prompt.current().some((p) => p.type === "agent"))
+  const inset = () => (hasAgentPill() ? 6 : 14)
+  const space = () => `${inset()}px`
+
+  const scrollCursorIntoView = () => {
+    const container = scrollRef
+    const selection = window.getSelection()
+    if (!container || !selection || selection.rangeCount === 0) return
+
+    const range = selection.getRangeAt(0)
+    if (!editorRef.contains(range.startContainer)) return
+
+    const cursor = getCursorPosition(editorRef)
+    const length = promptLength(prompt.current().filter((part) => part.type !== "image"))
+    if (cursor >= length) {
+      container.scrollTop = container.scrollHeight
+      return
+    }
+
+    const rect = range.getClientRects().item(0) ?? range.getBoundingClientRect()
+    if (!rect.height) return
+
+    const containerRect = container.getBoundingClientRect()
+    const top = rect.top - containerRect.top + container.scrollTop
+    const bottom = rect.bottom - containerRect.top + container.scrollTop
+    const padding = 12
+
+    if (top < container.scrollTop + padding) {
+      container.scrollTop = Math.max(0, top - padding)
+      return
+    }
+
+    if (bottom > container.scrollTop + container.clientHeight - inset()) {
+      container.scrollTop = bottom - container.clientHeight + inset()
+    }
+  }
+
+  const queueScroll = (count = 2) => {
+    requestAnimationFrame(() => {
+      scrollCursorIntoView()
+      if (count > 1) queueScroll(count - 1)
+    })
+  }
+
+  const activeFileTab = createSessionTabs({
+    tabs,
+    pathFromTab: files.pathFromTab,
+    normalizeTab: (tab) => (tab.startsWith("file://") ? files.tab(tab) : tab),
+  }).activeFileTab
+
+  createEffect(
+    on(
+      () => params.id,
+      (id) => {
+        if (starterDropdownOpen()) setStarterDropdownOpen(false)
+        if (projectDropdownOpen()) setProjectDropdownOpen(false)
+        if (id) return
+        const width = dockContainerRef?.offsetWidth ?? 0
+        if (width > 0) setNewSessionPopoverWidth(width)
+      },
+      { defer: true },
+    ),
+  )
+
+  createEffect(() => {
+    const el = dockContainerRef
+    if (!el) return
+    const observer = new ResizeObserver((entries) => {
+      const width = entries[0]?.contentRect.width ?? 0
+      if (width > 0) setNewSessionPopoverWidth(Math.round(width))
+    })
+    observer.observe(el)
+    onCleanup(() => observer.disconnect())
+  })
+
+  const commentInReview = (path: string) => {
+    const sessionID = params.id
+    if (!sessionID) return false
+
+    const diffs = sync.data.session_diff[sessionID]
+    if (!diffs) return false
+    return diffs.some((diff) => diff.file === path)
+  }
+
+  const openComment = (item: { path: string; commentID?: string; commentOrigin?: "review" | "file" }) => {
+    if (!item.commentID) return
+    // dock 与面板互斥：评论跳转会在审查面板中打开文件，先隐藏 dock
+    hidePreviewBrowserDock()
+
+    const focus = { file: item.path, id: item.commentID }
+    comments.setActive(focus)
+
+    const queueCommentFocus = (attempts = 6) => {
+      const schedule = (left: number) => {
+        requestAnimationFrame(() => {
+          comments.setFocus({ ...focus })
+          if (left <= 0) return
+          requestAnimationFrame(() => {
+            const current = comments.focus()
+            if (!current) return
+            if (current.file !== focus.file || current.id !== focus.id) return
+            schedule(left - 1)
+          })
+        })
+      }
+
+      schedule(attempts)
+    }
+
+    const wantsReview = item.commentOrigin === "review" || (item.commentOrigin !== "file" && commentInReview(item.path))
+    if (wantsReview) {
+      if (!view().reviewPanel.opened()) view().reviewPanel.open()
+      tabs().setActive("review")
+      queueCommentFocus()
+      return
+    }
+
+    if (!view().reviewPanel.opened()) view().reviewPanel.open()
+    layout.fileTree.setTab("all")
+    const tab = files.tab(item.path)
+    tabs().open(tab)
+    tabs().setActive(tab)
+    Promise.resolve(files.load(item.path)).finally(() => queueCommentFocus())
+  }
+
+  const recent = createMemo(() => {
+    const all = tabs().all()
+    const active = activeFileTab()
+    const order = active ? [active, ...all.filter((x) => x !== active)] : all
+    const seen = new Set<string>()
+    const paths: string[] = []
+
+    for (const tab of order) {
+      const path = files.pathFromTab(tab)
+      if (!path) continue
+      if (seen.has(path)) continue
+      seen.add(path)
+      paths.push(path)
+    }
+
+    return paths
+  })
+  const info = createMemo(() => (params.id ? sync.session.get(params.id) : undefined))
+  // 当前会话是否已归档：已归档时输入区替换为「取消归档」提示
+  const sessionArchived = createMemo(() => !!info()?.time?.archived)
+
+  // 输入框上方的 banner「hood」：分支信息 banner（上）与进度/目标 banner（下）合并为一块连续的灰色
+  // 圆角底座，圆角只在顶部（底部平直，与输入框灰色外框无缝衔接）。
+  // - branchHeaderVisible：git 项目会话头（项目名/分支/变更/Commit·PR）——沿用原展示条件。
+  // - goalBannerVisible：目标模式进度 banner 是否可见（由 SessionGoalBanner 上抬到父级）。
+  // 展示一个 → padding 8/16/32/16；展示两个 → padding 12/12/46/12，且两条之间加 1px 分隔线。
+  const branchHeaderVisible = createMemo(() => !sessionArchived() && (props.gitHeaderVisible ?? !!params.id))
+  const bannerCount = createMemo(() => (branchHeaderVisible() ? 1 : 0) + (props.goalBannerVisible ? 1 : 0))
+  const hoodVisible = createMemo(() => bannerCount() > 0)
+  const [unarchiving, setUnarchiving] = createSignal(false)
+  const unarchiveSession = async () => {
+    const sessionID = params.id
+    if (!sessionID || unarchiving()) return
+    setUnarchiving(true)
+    try {
+      // API 用会话自身 directory（与 layout archiveSession 一致）；store 更新用当前视图 directory（会话所在 child store）
+      const directory = info()?.directory ?? sdk.directory
+      await globalSDK.client.session.update({ directory, sessionID, time: { archived: null } })
+      // 同步清除 store 中的 archived 标记，会话自动回到侧边栏列表、输入区恢复正常
+      const [, setChildStore] = globalSync.child(sdk.directory)
+      setChildStore(
+        "session",
+        produce((draft) => {
+          const match = Binary.search(draft, sessionID, (s) => s.id)
+          if (match.found) draft[match.index].time.archived = undefined
+        }),
+      )
+      showToast({ variant: "success", title: language.t("settings.archive.toast.restored") })
+    } catch (err) {
+      showToast({
+        variant: "error",
+        title: language.t("common.requestFailed"),
+        description: err instanceof Error ? err.message : String(err),
+      })
+    } finally {
+      setUnarchiving(false)
+    }
+  }
+  const status = createMemo(
+    () =>
+      sync.data.session_status[params.id ?? ""] ?? {
+        type: "idle",
+      },
+  )
+  const working = createMemo(() => !isSessionIdle(status(), sync.data.message[params.id ?? ""]))
+  // 会话任务条(子代理 + 后台进程)的统一状态,渲染见下方 SessionTaskDock;
+  // visible 同时参与 hood/输入框外框的拼接判断,保证灰色列连续。
+  const taskDock = createSessionTaskState(() => params.id)
+  const imageAttachments = createMemo(() =>
+    prompt.current().filter((part): part is ImageAttachmentPart => part.type === "image"),
+  )
+
+  const [store, setStore] = createStore<{
+    popover: "at" | "slash" | null
+    historyIndex: number
+    savedPrompt: PromptHistoryEntry | null
+    placeholder: number
+    draggingType: "image" | "@mention" | null
+    mode: "normal" | "shell"
+    applyingHistory: boolean
+    focused: boolean
+  }>({
+    popover: null,
+    historyIndex: -1,
+    savedPrompt: null as PromptHistoryEntry | null,
+    placeholder: Math.floor(Math.random() * EXAMPLES.length),
+    draggingType: null,
+    mode: "normal",
+    applyingHistory: false,
+    focused: false,
+  })
+
+  // ── ASR 语音输入（必须在 store 定义之后调用）──
+  const asrOverlay = useAsrOverlay({
+    editorRef: () => editorRef,
+    prompt,
+    language,
+  })
+
+  // ── 提示词增强（必须在 working / imageAttachments 定义之后调用）──
+  const enhance = useEnhance({
+    prompt,
+    language,
+    working,
+    mode: () => store.mode,
+    getConversationContext: () => {
+      const sessionID = params.id
+      const messages = sessionID ? (sync.data.message[sessionID] ?? []) : []
+      // 获取 compaction summary（最后一个 summary=true 的 assistant 消息的文本内容）
+      const summaryMsg = messages.findLast((m) => m.role === "assistant" && m.summary)
+      const rawSummary = summaryMsg
+        ? (sync.data.part[summaryMsg.id] ?? [])
+            .flatMap((p) => p.type === "text" && !p.synthetic && !p.ignored ? [p.text] : [])
+            .join("\n")
+        : undefined
+
+      // 和 slash 菜单一致：从当前项目 command 列表取技能描述（会话启动时已加载）
+      const skillDescMap = new Map<string, string | undefined>()
+      for (const cmd of sync.data.command)
+        if (cmd.source === "skill") skillDescMap.set(cmd.name, cmd.description)
+
+      return getConversationContext(
+        rawSummary,
+        messages.map((m) => ({ id: m.id, role: m.role })),
+        (id) => sync.data.part[id],
+        () => prompt.current(),
+        (name: string) => skillDescMap.get(name),
+      )
+    },
+  })
+
+  const buttonsSpring = useSpring(() => (store.mode === "normal" ? 1 : 0), { visualDuration: 0.2, bounce: 0 })
+  const motion = (value: number) => ({
+    opacity: value,
+    transform: `scale(${0.95 + value * 0.05})`,
+    filter: `blur(${(1 - value) * 2}px)`,
+    "pointer-events": value > 0.5 ? ("auto" as const) : ("none" as const),
+  })
+  const buttons = createMemo(() => motion(buttonsSpring()))
+  const shell = createMemo(() => motion(1 - buttonsSpring()))
+  const control = createMemo(() => ({ height: "36px", padding: "9px 12px", "border-radius": "18px", background: "#FAFAFA", color: "rgba(0, 0, 0, 0.64)", "font-family": "\"Microsoft YaHei\"", "font-size": "12px", "font-style": "normal", "font-weight": "400", "line-height": "18px", ...buttons() }))
+
+  // ── Project selector for new sessions ──
+  // List every project, ordered by latest session updated time (most recent first).
+  const [selectedProjectDir, setSelectedProjectDir] = createSignal<string | undefined>(undefined)
+  const routeProjectDir = createMemo(() => decode64(params.dir) ?? sdk.directory)
+  const effectiveProjectDir = createMemo(() => selectedProjectDir() ?? routeProjectDir())
+
+  // 分支/worktree 芯片以 effectiveProjectDir 对应的 child store 与项目元信息为准,
+  // 保证切换/展开项目后「项目名」与「分支」始终来自同一目录,避免二者错位。
+  // 常态下 effectiveProjectDir === sdk.directory,effectiveChild() 即 sync.data,行为不变。
+  const effectiveChild = createMemo(() => globalSync.child(effectiveProjectDir(), { bootstrap: false })[0])
+  const effectiveProject = createMemo(() => {
+    if (effectiveProjectDir() === sdk.directory) return sync.project
+    const id = effectiveChild().project
+    if (!id) return undefined
+    return globalSync.data.project.find((p) => p.id === id)
+  })
+
+  // 新会话头部「项目块」右侧箭头:仅 git 项目展示,引导视线到后面的分支块。
+  const projectIsGit = createMemo(() => effectiveProject()?.vcs === "git")
+
+  // 「新建工作树」勾选框:仅新会话 + git 项目 + 当前在项目根(不在某 worktree 内)时显示。
+  // 以「有效项目目录」(effectiveProjectDir)为准而非路由目录(sync/sdk.directory):
+  // app-dev 模式下展开项目子菜单会临时切换 effectiveProjectDir 而不导航,若分支/勾选仍读路由,
+  // 会与上方展示的项目名不一致(即「切换项目后分支展示不对」)。
+  const worktreeToggleVisible = createMemo(
+    () => !params.id && effectiveProject()?.vcs === "git" && effectiveProject()?.worktree === effectiveProjectDir(),
+  )
+  // "main" = 不使用独立 worktree;"create" = 基于所选分支新建 worktree;其余值 = 已存在的 worktree
+  // 目录路径(选中了被其他 worktree 占用的分支时直接复用该目录)。checked/locked 需覆盖这三态。
+  const worktreeChecked = createMemo(() => {
+    const v = props.newSessionWorktree
+    return v === "create" || (!!v && v !== "main")
+  })
+  // 锁定态:选中的分支已被其他 worktree 占用,本次操作是「复用」而非「新建」,禁止用户手动取消勾选。
+  const worktreeLocked = createMemo(() => {
+    const v = props.newSessionWorktree
+    return !!v && v !== "main" && v !== "create"
+  })
+  const currentBranch = createMemo(
+    () => effectiveChild()?.vcs?.branch ?? props.worktreeBranches?.find((branch) => branch.current)?.name,
+  )
+  const worktreeBranch = createMemo(() => props.newSessionBaseBranch ?? currentBranch())
+  // 选中普通分支(非新建 worktree)时,在下拉框里选中的那一刻就真正切换主目录分支——而不是
+  // 等到点击发送才切。检测(并行会话 busy)也在这一刻做,命中直接拦截并 toast 提示;
+  // 未提交变更不再预检,直接尝试 checkout,由 git 判断是否允许切换。
+  // 不放行、不更新选中态(下拉保持原分支);只有真正 checkout 成功才更新。
+  const [branchSwitching, setBranchSwitching] = createSignal(false)
+  const switchMainBranch = async (name: string): Promise<boolean> => {
+    const dir = effectiveProjectDir()
+    const currentBranch = effectiveChild()?.vcs?.branch
+    if (name === currentBranch) return true
+    const client = dir === sdk.directory ? sdk.client : sdk.createClient({ directory: dir, throwOnError: true })
+    const [mainStore] = globalSync.child(dir)
+    // compacting 期间同样禁止切分支：压缩引用着当前 worktree 的上下文，中途切换会污染摘要
+    const hasBusySession = mainStore.session.some((s) => {
+      if (s.time.archived) return false
+      const type = mainStore.session_status[s.id]?.type
+      return type === "busy" || type === "compacting"
+    })
+    if (hasBusySession) {
+      showToast({
+        variant: "warning",
+        title: language.t("prompt.toast.branchSwitchBlocked.title"),
+        description: language.t("prompt.toast.branchSwitchBlocked.busyDescription"),
+      })
+      return false
+    }
+    // 不再预检未提交文件：git 本身允许在「未提交修改与目标分支一致」时切换，
+    // 直接尝试 checkout，由 git 决定是否放行。冲突时 checkout 会失败并返回错误信息。
+    const checkout = await client.vcs.checkout({ name }).then((x) => x.data).catch(() => undefined)
+    if (!checkout?.success) {
+      showToast({
+        variant: "error",
+        title: language.t("scm.toast.branchSwitchFailed"),
+        description: checkout?.error || language.t("common.requestFailed"),
+      })
+      return false
+    }
+    return true
+  }
+
+  // 跨路由恢复：组件重新挂载时，若存在持久化的选中应用，且其所属项目与当前路由一致，才恢复对应的项目目录
+  // 避免 selectedApp 的旧 directory 覆盖当前路由项目，造成项目选择器与技能列表不一致
+  if (selectedApp() && !selectedProjectDir()) {
+    const app = selectedApp()!
+    if (app.directory === routeProjectDir()) {
+      setSelectedProjectDir(app.directory)
+    } else {
+      setSelectedApp(null)
+    }
+  }
+
+  const allProjects = createMemo(() => {
+    const projects = layout.projects.list()
+    if (projects.length <= 1) return projects
+
+    const byProject = new Map<string, number>()
+    for (const project of projects) {
+      let at = 0
+      const dirs = [project.worktree, ...(project.sandboxes ?? [])]
+      for (const directory of dirs) {
+        try {
+          const child = globalSync.child(directory, { bootstrap: false })
+          const sessions = child?.[0]?.session
+          if (!sessions) continue
+          for (const session of sessions) {
+            if (session.time.archived) continue
+            const updated = session.time.updated ?? session.time.created
+            if (updated > at) at = updated
+          }
+        } catch {
+          // directory may not have synced sessions yet, skip
+        }
+      }
+      byProject.set(project.worktree, at)
+    }
+
+    return projects
+      .map((project, index) => ({ project, at: byProject.get(project.worktree) ?? 0, index }))
+      .sort((a, b) => b.at - a.at || a.index - b.index)
+      .map(({ project }) => project)
+  })
+  const getProjectDisplayName = (project: LocalProject) => {
+    if (project.name) return project.name
+    return getFilename(project.worktree) || project.worktree
+  }
+  // 新会话顶部工具条(项目/分支/worktree)是否可见:仅新会话,且至少有项目选择器或 worktree 控件其一。
+  // 非 git 仓库时 worktreeToggleVisible() 为 false;若同时没有可选项目则整条不渲染,避免出现空白条。
+  const newSessionHeaderVisible = createMemo(
+    () => !params.id && (allProjects().length > 0 || worktreeToggleVisible()),
+  )
+  const selectedProjectName = createMemo(() => {
+    const dir = effectiveProjectDir()
+    const project = allProjects().find(p => p.worktree === dir || (p.sandboxes ?? []).includes(dir))
+    return project ? getProjectDisplayName(project) : (getFilename(dir) || dir)
+  })
+  // ── 新会话 hood 的内容感知收起：不用固定 420px 断点 ──
+  // 分支块（WorktreeToggle 根 div）是 shrink-0 不可压缩，分支名较长时容器远未到 420px 就已
+  // flex-wrap 换行——这正是隐藏 label 要解决的问题。在换行实际发生、或容器低于 420px 下限
+  // （与 CSS 容器查询断点/模式 chip 行为对齐）时给容器挂 .collapsed 隐藏项目/分支文字；
+  // 恢复条件取 max(420, 单行实际需要宽)——容器宽于该值才重新显示，避免收起/恢复抖动。
+  const NEW_SESSION_HOOD_MIN_WIDTH = 420
+  // 信号式 ref：容器在 Show（依赖异步加载的项目数据）内挂载，普通 let 变量不会触发
+  // createResizeObserver 的响应式 effect 重挂；信号赋值（容器挂载）时 observer 才挂上。
+  const [newSessionHeaderEl, setNewSessionHeaderEl] = createSignal<HTMLDivElement | undefined>()
+  const [newSessionHeaderCollapsed, setNewSessionHeaderCollapsed] = createSignal(false)
+  // 换行发生时测得的单行需要宽（label 显示态口径）；0 表示尚未因换行收起（仅下限约束）。
+  let newSessionSingleRowNeed = 0
+
+  const evaluateNewSessionHeader = () => {
+    const el = newSessionHeaderEl()
+    if (!el) return
+    const kids = Array.from(el.children).filter((child): child is HTMLElement => child instanceof HTMLElement)
+    if (kids.length === 0) return
+    const cs = getComputedStyle(el)
+    const contentWidth = el.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight)
+    if (!newSessionHeaderCollapsed()) {
+      // 换行判定：任一子块被 flex-wrap 折到下一行（offsetTop 偏离首块）。
+      const firstTop = kids[0].offsetTop
+      const wrapped = kids.some((kid) => kid.offsetTop > firstTop + 1)
+      if (wrapped) {
+        // 单行需要宽 = 各子块实际宽 + 容器 gap（子块宽不因换行改变，换行态测量同样有效）。
+        const gap = parseFloat(cs.gap) || 4
+        newSessionSingleRowNeed = kids.reduce((sum, kid) => sum + kid.offsetWidth, 0) + gap * (kids.length - 1)
+      }
+      setNewSessionHeaderCollapsed(wrapped || contentWidth < NEW_SESSION_HOOD_MIN_WIDTH)
+      return
+    }
+    // 恢复：容器宽于 max(下限, 单行需要宽) 才重新显示（+8px 余量避免临界抖动）。
+    if (contentWidth >= Math.max(NEW_SESSION_HOOD_MIN_WIDTH, newSessionSingleRowNeed) + 8) {
+      setNewSessionHeaderCollapsed(false)
+    }
+  }
+
+  createResizeObserver(() => newSessionHeaderEl(), evaluateNewSessionHeader)
+  // 切项目/切分支/控件显隐改变内容宽度，但不会触发容器 ResizeObserver：先按显示态放开重测
+  // （多数场景容器足够宽保持显示），不足时由 evaluate 重新收起。
+  createEffect(
+    on(
+      () => [selectedProjectName(), worktreeBranch(), worktreeToggleVisible()] as const,
+      () => {
+        setNewSessionHeaderCollapsed(false)
+        requestAnimationFrame(evaluateNewSessionHeader)
+      },
+      { defer: true },
+    ),
+  )
+  const navigateToNewSessionDirectory = (dir: string) => {
+    const routeDir = base64Encode(dir)
+    if (prompt.dirty()) prompt.set(prompt.current(), prompt.cursor(), { dir: params.dir! })
+    setProjectDropdownOpen(false)
+    navigate(`/${routeDir}/session?starterAgentID=${encodeURIComponent(selectedStarterAgentID())}`)
+  }
+  // Reset selected project when route dir changes
+  createEffect(on(() => params.dir, () => {
+    setSelectedProjectDir(undefined)
+  }, { defer: true }))
+
+  createEffect(() => {
+    const sessionID = params.id
+    selectedExpert()
+    if (!expertSelectionAllowed()) {
+      setSelectedExpertSignal(null)
+      if (collabSessionResolved()) {
+        if (local.expertTeam.get()) local.expertTeam.set(null)
+        if (pendingSessionExpert()) setPendingSessionExpert(null)
+      }
+      if (pendingExpertSync()) setPendingExpertSync(false)
+      return
+    }
+    if (!sessionID) return
+    const pending = pendingSessionExpert()
+    if (pending?.sessionId === sessionID) {
+      setPendingSessionExpert(null)
+      setSelectedExpertSignal(pending.expert)
+      local.expertTeam.set(pending.expert)
+      return
+    }
+    setSelectedExpertSignal(local.expertTeam.get())
+  })
+
+  createEffect(on(() => params.id, (sessionID, previousSessionID) => {
+    if (!shouldClearExpertSelection({ sessionID, prevSessionID: previousSessionID, pendingExpertSync: pendingExpertSync() })) return
+    setSelectedExpertSignal(null)
+  }))
+
+  createEffect(() => {
+    if (params.id || !expertSelectionAllowed()) return
+    const expert = selectedExpert()
+    if (!expert) return
+    if (pendingExpertSync()) setPendingExpertSync(false)
+    if (local.expertTeam.get()) return
+    local.expertTeam.set(expert)
+  })
+
+  // 应用开发模式下，项目选择器切换到的目标项目需要主动 bootstrap，
+  // 否则 slash 命令列表为空（slashCommands memo 用 bootstrap: false 只读取不触发）。
+  // 非应用开发模式下 SyncProvider 已负责当前 SDK 目录的 bootstrap，无需重复处理。
+  const refreshCommandsForDirectory = (dir: string) => {
+    if (!dir || dir === "*") return
+    // SyncProvider 已负责当前 SDK 目录的 bootstrap 与数据维护，直接跳过
+    if (dir === sdk.directory) return
+    // 为非当前项目触发 bootstrap（首次访问时加载全量状态含 command）
+    const [childStore, setChildStore] = globalSync.child(dir, { bootstrap: true })
+    if (childStore.status === "loading") return
+    // 已 bootstrap 的 store，dispose 后刷新 command 列表以应对技能变更
+    const client = globalSDK.createClient({ directory: dir, throwOnError: true })
+    void client.instance.dispose()
+      .catch(() => undefined)
+      .then(() => client.command.list())
+      .then((x) => setChildStore("command", reconcileStore(x.data ?? [], { key: "name" })))
+      .catch(() => undefined)
+  }
+
+  // effectiveProjectDir 综合了 routeProjectDir 与 selectedProjectDir：
+  // - 非应用开发模式下等于 routeProjectDir（随路由变化）
+  // - 应用开发模式下项目选择器通过 selectedProjectDir 切换，不会触发路由变化
+  // 监听它能覆盖两种场景，确保 slash 技能列表跟随 UI 上选中的项目刷新
+  createEffect(on(() => effectiveProjectDir(), (dir) => {
+    refreshCommandsForDirectory(dir)
+  }, { defer: true }))
+
+  const handleCreateProjectForSession = async () => {
+    const handleResult = (result: string | string[] | null) => {
+      const dir = Array.isArray(result) ? result[0] : result
+      if (!dir) return
+      layout.projects.open(dir)
+      // 新会话:新增/打开项目后导航到目标项目的新会话路由,使 sync/分支/worktree 整页跟随更新
+      // (与切换已有项目一致)。此前只 setSelectedProjectDir 不改路由,分支/worktree 会停留在旧项目——即此 bug。
+      if (!params.id && dir !== routeProjectDir()) {
+        navigateToNewSessionDirectory(dir)
+        return
+      }
+      setSelectedProjectDir(dir)
+    }
+    if (platform.openDirectoryPickerDialog) {
+      const result = await platform.openDirectoryPickerDialog({
+        title: language.t("command.project.open"),
+        multiple: false,
+      })
+      handleResult(result)
+    } else {
+      void import("@/components/dialog-select-directory").then((x) => {
+        dialog.show(
+          () => <x.DialogSelectDirectory multiple={false} onSelect={handleResult} />,
+          () => handleResult(null),
+        )
+      })
+    }
+  }
+
+  const commentCount = createMemo(() => {
+    if (store.mode === "shell") return 0
+    return prompt.context.items().filter((item) => item.type === "file" && !!item.comment?.trim()).length
+  })
+  const blank = createMemo(() => {
+    const text = prompt
+      .current()
+      .map((part) => ("content" in part ? part.content : ""))
+      .join("")
+    return text.trim().length === 0 && imageAttachments().length === 0 && commentCount() === 0
+  })
+  const stopping = createMemo(() => working() && blank())
+  const [submitShake, setSubmitShake] = createSignal(false)
+  const tip = () => {
+    if (stopping()) {
+      return (
+        <div class="flex items-center gap-2">
+          <span>{language.t("prompt.action.stop")}</span>
+        </div>
+      )
+    }
+
+    return (
+      <div class="flex items-center gap-2">
+        <span>{language.t("prompt.action.send")}</span>
+      </div>
+    )
+  }
+
+  const contextItems = createMemo(() => {
+    const items = prompt.context.items()
+    if (store.mode !== "shell") return items
+    return items.filter((item) => item.type !== "file" || !item.comment?.trim())
+  })
+
+  const hasUserPrompt = createMemo(() => {
+    const sessionID = params.id
+    if (!sessionID) return false
+    const messages = sync.data.message[sessionID]
+    if (!messages) return false
+    return messages.some((m) => m.role === "user")
+  })
+
+  const [history, setHistory] = persisted(
+    Persist.global("prompt-history", ["prompt-history.v1"]),
+    createStore<{
+      entries: PromptHistoryStoredEntry[]
+    }>({
+      entries: [],
+    }),
+  )
+  const [shellHistory, setShellHistory] = persisted(
+    Persist.global("prompt-history-shell", ["prompt-history-shell.v1"]),
+    createStore<{
+      entries: PromptHistoryStoredEntry[]
+    }>({
+      entries: [],
+    }),
+  )
+
+  const suggest = createMemo(() => !hasUserPrompt())
+
+  // placeholder is defined after selectedStarterAgent to avoid TDZ (temporal dead zone) reference error
+
+  const historyComments = () => {
+    const byID = new Map(comments.all().map((item) => [`${item.file}\n${item.id}`, item] as const))
+    return prompt.context.items().flatMap((item) => {
+      if (item.type !== "file") return []
+      const comment = item.comment?.trim()
+      if (!comment) return []
+
+      const selection = item.commentID ? byID.get(`${item.path}\n${item.commentID}`)?.selection : undefined
+      const nextSelection =
+        selection ??
+        (item.selection
+          ? ({
+              start: item.selection.startLine,
+              end: item.selection.endLine,
+            } satisfies SelectedLineRange)
+          : undefined)
+      if (!nextSelection) return []
+
+      return [
+        {
+          id: item.commentID ?? item.key,
+          path: item.path,
+          selection: { ...nextSelection },
+          comment,
+          time: item.commentID ? (byID.get(`${item.path}\n${item.commentID}`)?.time ?? Date.now()) : Date.now(),
+          origin: item.commentOrigin,
+          preview: item.preview,
+        } satisfies PromptHistoryComment,
+      ]
+    })
+  }
+
+  const applyHistoryComments = (items: PromptHistoryComment[]) => {
+    comments.replace(
+      items.map((item) => ({
+        id: item.id,
+        file: item.path,
+        selection: { ...item.selection },
+        comment: item.comment,
+        time: item.time,
+      })),
+    )
+    prompt.context.replaceComments(
+      items.map((item) => ({
+        type: "file" as const,
+        path: item.path,
+        selection: selectionFromLines(item.selection),
+        comment: item.comment,
+        commentID: item.id,
+        commentOrigin: item.origin,
+        preview: item.preview,
+      })),
+    )
+  }
+
+  const applyHistoryPrompt = (entry: PromptHistoryEntry, position: "start" | "end") => {
+    const p = entry.prompt
+    const length = position === "start" ? 0 : promptLength(p)
+    setStore("applyingHistory", true)
+    applyHistoryComments(entry.comments)
+    prompt.set(p, length)
+    requestAnimationFrame(() => {
+      editorRef.focus()
+      setCursorPosition(editorRef, length)
+      setStore("applyingHistory", false)
+      queueScroll()
+    })
+  }
+
+  const getCaretState = () => {
+    const selection = window.getSelection()
+    const textLength = promptLength(prompt.current())
+    if (!selection || selection.rangeCount === 0) {
+      return { collapsed: false, cursorPosition: 0, textLength }
+    }
+    const anchorNode = selection.anchorNode
+    if (!anchorNode || !editorRef.contains(anchorNode)) {
+      return { collapsed: false, cursorPosition: 0, textLength }
+    }
+    return {
+      collapsed: selection.isCollapsed,
+      cursorPosition: getCursorPosition(editorRef),
+      textLength,
+    }
+  }
+
+  const escBlur = () => platform.platform === "desktop" && platform.os === "macos"
+
+  const pick = () => fileInputRef?.click()
+
+  const pickFolder = async () => {
+    const handleResult = (result: string | string[] | null) => {
+      const folderPath = Array.isArray(result) ? result[0] : result
+      if (!folderPath) return
+      // 存为 ImageAttachmentPart（type: "image"）走卡片渲染，与文件附件保持一致。
+      // mime 设为 application/x-directory，后端 resolvePart 会注入路径提示。
+      const folderName = folderPath.replace(/[\/]+$/, "").split("/").pop() || folderPath
+      const attachment: ImageAttachmentPart = {
+        type: "image",
+        id: uuid(),
+        filename: folderName,
+        mime: "application/x-directory",
+        dataUrl: "",
+        filePath: folderPath,
+      }
+      prompt.set([...prompt.current(), attachment], promptLength(prompt.current()))
+      editorRef?.focus()
+    }
+
+    if (platform.openDirectoryPickerDialog) {
+      const result = await platform.openDirectoryPickerDialog({
+        title: language.t("prompt.tools.uploadFolder"),
+        multiple: false,
+      })
+      handleResult(result)
+    } else {
+      void import("@/components/dialog-select-directory").then((x) => {
+        dialog.show(
+          () => <x.DialogSelectDirectory multiple={false} onSelect={handleResult} />,
+          () => handleResult(null),
+        )
+      })
+    }
+    editorRef?.focus()
+  }
+
+  const setMode = (mode: "normal" | "shell") => {
+    if (mode === "shell" && !CUSTOMER_SHELL_MODE_ENABLED) return
+    setStore("mode", mode)
+    setStore("popover", null)
+    requestAnimationFrame(() => editorRef?.focus())
+  }
+
+  const normalModeKey = "mod+shift+e"
+
+  command.register("prompt-input", () => [
+    {
+      id: "file.attach",
+      title: language.t("prompt.action.attachFile"),
+      category: language.t("command.category.file"),
+      keybind: "mod+u",
+      disabled: store.mode !== "normal",
+      onSelect: pick,
+    },
+    {
+      id: "prompt.mode.normal",
+      title: language.t("command.prompt.mode.normal"),
+      category: language.t("command.category.session"),
+      keybind: normalModeKey,
+      disabled: store.mode === "normal",
+      onSelect: () => setMode("normal"),
+    },
+  ])
+
+  const closePopover = () => setStore("popover", null)
+  createEffect(() => {
+    if (store.popover === "at") void refetchRules()
+  })
+
+  const resetHistoryNavigation = (force = false) => {
+    if (!force && (store.historyIndex < 0 || store.applyingHistory)) return
+    setStore("historyIndex", -1)
+    setStore("savedPrompt", null)
+  }
+
+  const clearEditor = () => {
+    editorRef.innerHTML = ""
+  }
+
+  const setEditorText = (text: string) => {
+    clearEditor()
+    editorRef.textContent = text
+  }
+
+  const focusEditorEnd = () => {
+    requestAnimationFrame(() => {
+      editorRef.focus()
+      const range = document.createRange()
+      const selection = window.getSelection()
+      range.selectNodeContents(editorRef)
+      range.collapse(false)
+      selection?.removeAllRanges()
+      selection?.addRange(range)
+    })
+  }
+
+  const currentCursor = () => {
+    const selection = window.getSelection()
+    if (!selection || selection.rangeCount === 0 || !editorRef.contains(selection.anchorNode)) return null
+    return getCursorPosition(editorRef)
+  }
+
+  const restoreFocus = () => {
+    requestAnimationFrame(() => {
+      const cursor = prompt.cursor() ?? promptLength(prompt.current())
+      editorRef.focus()
+      setCursorPosition(editorRef, cursor)
+      queueScroll()
+    })
+  }
+
+  const renderEditorWithCursor = (parts: Prompt, trustDomCursor = false) => {
+    // Only trust the live DOM selection when the re-render was triggered by
+    // user input (mirror.input). For external state changes (session switch,
+    // revert, edit, recommendation cards, …) the DOM still shows the *previous*
+    // prompt, so currentCursor() would return a stale position belonging to
+    // another session and clobber the correct persisted cursor.
+    const domCursor = trustDomCursor ? currentCursor() : null
+    renderEditor(parts)
+    if (domCursor !== null) {
+      setCursorPosition(editorRef, domCursor)
+    } else {
+      const storedCursor = prompt.cursor() ?? promptLength(parts)
+      editorRef.focus()
+      setCursorPosition(editorRef, storedCursor)
+    }
+  }
+
+  createEffect(() => {
+    params.id
+    if (params.id) return
+    if (!suggest()) return
+    const interval = setInterval(() => {
+      setStore("placeholder", (prev) => (prev + 1) % EXAMPLES.length)
+    }, 6500)
+    onCleanup(() => clearInterval(interval))
+  })
+
+  const [composing, setComposing] = createSignal(false)
+  const isImeComposing = (event: KeyboardEvent) => event.isComposing || composing() || event.keyCode === 229
+
+  const handleBlur = () => {
+    // 只收弹层，保留会话区间：失焦通常意味着用户被打断而非放弃，焦点回来且光标仍落在
+    // 关键词内时应当能接着选。区间不允许含空白，所以它只在「正在打一个关键词、还没打
+    // 空格」这个短暂状态下存活 —— 一旦输入了空白或其他内容，resolveSlashTrigger 便不再
+    // 匹配并就地作废，不存在长期残留。
+    closePopover()
+    setComposing(false)
+    setStore("focused", false)
+  }
+
+  const handleCompositionStart = () => {
+    setComposing(true)
+  }
+
+  const handleCompositionEnd = () => {
+    setComposing(false)
+    requestAnimationFrame(() => {
+      if (composing()) return
+      reconcile(prompt.current().filter((part) => part.type !== "image"))
+    })
+  }
+
+  // 从 ~/.kcode/preset-data/ 读取 @ 触发的推荐 agent 列表（跨 Mac/Windows 路径由后端解析）
+  // const [presetAgents] = createResource<Array<{ id: string; name: string }>>(async () => {
+  //   const res = await fetch("/api/preset-agent/list")
+  //   if (!res.ok) return []
+  //   if (!res.headers.get("content-type")?.includes("application/json")) return []
+  //   const list = (await res.json()) as Array<{ id: string; name: string }>
+  //   return list.filter((item) => !!(item.name || item.id))
+  // })
+
+  const starterRecommendationCards = createMemo(() => {
+    const cards = [
+      {
+        id: 'skill-builder-partner',
+        title: language.t("kcode.nav.skillDev"),
+        subtitle: language.t("kcode.starter.skill.subtitle"),
+        prompt: `@${language.t("kcode.nav.skillDev")}`,
+        devMode: "skill" as const,
+        iconName: "skill-bolt" as const,
+        iconColor: "#FF6D37",
+        iconBg: "linear-gradient(135deg, var(--yellow-50, #FEFFE7) 0%, var(--red-50, #FFF0F1) 86.06%)",
+      },
+      {
+        id: 'ai-partner-builder',
+        title: language.t("kcode.nav.agentDev"),
+        subtitle: language.t("kcode.starter.agent.subtitle"),
+        prompt: `@${language.t("kcode.nav.agentDev")}`,
+        devMode: "agent" as const,
+        iconName: "ai-partner" as const,
+        iconColor: "#8F40FF",
+        iconBg: "linear-gradient(135deg, var(--cyan-50, #F0F9FF) 0%, var(--violet-50, #F5F2FF) 100%)",
+      },
+      {
+        id: 'kingdee-design',
+        title: language.t("kcode.starter.app.universal"),
+        subtitle: language.t("kcode.starter.app.subtitle"),
+        prompt: `@${language.t("kcode.starter.app.universal")}`,
+        devMode: "universal" as const,
+        iconName: "app-grid" as const,
+        iconColor: "#08C787",
+        iconBg: "linear-gradient(135deg, var(--lime-50, #F0FBE4) 0%, var(--teal-50, #EFFEFC) 100%)",
+      },
+      {
+        id: 'app-builder-partner',
+        title: language.t("kcode.starter.app.cosmic"),
+        subtitle: language.t("kcode.starter.app.subtitle"),
+        prompt: `@${language.t("kcode.starter.app.cosmic")}`,
+        devMode: "app" as const,
+        iconName: "app-grid" as const,
+        iconColor: "#08C787",
+        iconBg: "linear-gradient(135deg, var(--lime-50, #F0FBE4) 0%, var(--teal-50, #EFFEFC) 100%)",
+      },
+    ]
+
+    return cards
+  })
+  const starterAgentIDs = createMemo(() => new Set(starterRecommendationCards().map((item) => item.id)))
+  const defaultStarterAgentID = createMemo(() => {
+    const cards = starterRecommendationCards()
+    const universalCard = cards.find((c) => c.id === "kingdee-design")
+    return universalCard ? universalCard.id : (cards[0]?.id ?? "skill-builder-partner")
+  })
+  const normalizeStarterAgentID = (value?: string) => {
+    if (!value) return
+    if (!starterAgentIDs().has(value)) return
+    return value
+  }
+  const [starterAgentStore, setStarterAgentStore] = persisted(
+    Persist.workspace(sdk.directory, "starter-agent", ["starter-agent.v2"]),
+    createStore<{ session: Record<string, string | undefined> }>({ session: {} }),
+  )
+  // Remembered PR mode for the header split button. Selecting an option in the dropdown only
+  // switches the mode (like a model switcher); the main button executes the current mode.
+  //   create → /create-pr, draft → /create-pr --draft, manual → open compare (or existing PR)
+  const [prMode, setPrMode] = persisted(
+    "git-header-pr-mode-v2",
+    createStore<{ mode: "create" | "draft" | "manual" }>({ mode: "create" }),
+  )
+  const prModeLabel = () =>
+    prMode.mode === "draft"
+      ? language.t("git.header.prDraft")
+      : prMode.mode === "manual"
+        ? language.t(props.gitHeaderHasOpenPr ? "git.header.prView" : "git.header.prManual")
+        : language.t("git.header.pr")
+  const runPrMode = () => {
+    if (prMode.mode === "draft") return props.onGitHeaderCreatePr?.(true)
+    if (prMode.mode === "manual")
+      return props.gitHeaderHasOpenPr ? props.onGitHeaderViewPr?.() : props.onGitHeaderManualPr?.()
+    return props.onGitHeaderCreatePr?.(false)
+  }
+  // Main button is inert when busy, locked in spec mode, or in manual mode with no reachable target.
+  const specLocked = createMemo(() => local.agent.current()?.name === "spec")
+  const prMainDisabled = () =>
+    !!props.gitHeaderBusy ||
+    specLocked() ||
+    (prMode.mode === "manual" && !props.gitHeaderHasOpenPr && !props.gitHeaderManualPrAvailable)
+  const starterAgentScopeKey = createMemo(() => (params.id ? `session:${params.id}` : `draft:${sdk.directory}`))
+  const [selectedStarterAgentID, setSelectedStarterAgentID] = createSignal(defaultStarterAgentID())
+  const [newSessionStarterInitialized, setNewSessionStarterInitialized] = createSignal(false)
+  createEffect(() => {
+    if (params.id) {
+      if (newSessionStarterInitialized()) setNewSessionStarterInitialized(false)
+      return
+    }
+    if (newSessionStarterInitialized()) return
+    const key = starterAgentScopeKey()
+    const queryValue = normalizeStarterAgentID(searchParams.starterAgentID)
+    const savedValue = normalizeStarterAgentID(starterAgentStore.session[key])
+    const next = queryValue ?? savedValue ?? defaultStarterAgentID()
+    if (selectedStarterAgentID() !== next) setSelectedStarterAgentID(next)
+    if (starterAgentStore.session[key] !== next) setStarterAgentStore("session", key, next)
+    setNewSessionStarterInitialized(true)
+  })
+  createEffect(() => {
+    if (!params.id) return
+    const key = starterAgentScopeKey()
+    const queryValue = normalizeStarterAgentID(searchParams.starterAgentID)
+    const sessionValue = normalizeStarterAgentID(info()?.aiPartnerID)
+    const savedValue = normalizeStarterAgentID(starterAgentStore.session[key])
+    const draftValue = normalizeStarterAgentID(starterAgentStore.session[`draft:${sdk.directory}`])
+    const next = queryValue ?? sessionValue ?? savedValue ?? draftValue ?? defaultStarterAgentID()
+    if (selectedStarterAgentID() !== next) setSelectedStarterAgentID(next)
+    if (starterAgentStore.session[key] !== next) setStarterAgentStore("session", key, next)
+  })
+  createEffect(() => {
+    const current = selectedStarterAgentID()
+    if (starterAgentIDs().has(current)) return
+
+    const next = defaultStarterAgentID()
+    const key = starterAgentScopeKey()
+    if (current !== next) setSelectedStarterAgentID(next)
+    if (starterAgentStore.session[key] !== next) setStarterAgentStore("session", key, next)
+  })
+  const selectedStarterAgent = createMemo(() => {
+    const options = starterRecommendationCards()
+    const selected = options.find((item) => item.id === selectedStarterAgentID())
+    if (selected) return selected.title
+    return options[0]?.title ?? language.t("kcode.nav.appDev")
+  })
+  const localTestKind = createMemo((): "agent" | "skill" | false => {
+    if (props.localTestKind !== undefined) return props.localTestKind
+    const id = params.id
+    if (id) {
+      const sessionKind = (sync.session.get(id) as { localTest?: { targetKind?: string } } | undefined)?.localTest
+        ?.targetKind
+      if (sessionKind === "agent" || sessionKind === "skill") return sessionKind
+    }
+    if (searchParams.localTestSkill) return "skill"
+    if (searchParams.localTestAgent) return "agent"
+    return false
+  })
+  const localTestAgentName = createMemo(() => {
+    if (props.localTestAgentName !== undefined) return props.localTestAgentName
+    const id = params.id
+    if (id) {
+      const currentSession = sync.session.get(id) as {
+        title?: string
+        localTest?: { targetKind?: string; targetName?: string; targetID?: string }
+      } | undefined
+      if (currentSession?.localTest?.targetKind === "agent") {
+        return currentSession.localTest.targetName || currentSession.localTest.targetID || ""
+      }
+      if (currentSession?.localTest?.targetKind === "skill") {
+        return ""
+      }
+      if (currentSession?.localTest) {
+        const titleMatch = currentSession.title?.match(
+          /^(?:测试\s*·\s*|Test\s*·\s*|本地测试[：:]\s*|本地測試[：:]\s*|Local Test[：:]\s*|ローカルテスト[：:]\s*)(.+)$/i,
+        )
+        if (titleMatch?.[1]) {
+          return titleMatch[1].trim()
+        }
+      }
+    }
+    if (searchParams.localTestAgent) {
+      const matched = sync.data.agent.find((a) => a.name === searchParams.localTestAgent)
+      return (
+        matched?.name ||
+        (searchParams as Record<string, string | undefined>).localTestAgentName ||
+        searchParams.localTestAgent
+      )
+    }
+    return ""
+  })
+  const placeholder = createMemo(() =>
+    promptPlaceholder({
+      mode: store.mode,
+      commentCount: commentCount(),
+      example: suggest() ? language.t(EXAMPLES[store.placeholder]) : "",
+      suggest: suggest(),
+      starterAgentName: selectedStarterAgent(),
+      agent: local.agent.current()?.name,
+      localTestKind: localTestKind(),
+      t: (key, params) => language.t(key as Parameters<typeof language.t>[0], params as never),
+    }),
+  )
+  /* ── App selector state (active when starter agent is in app dev mode) ── */
+
+  /** 因技能选择而触发开发模式（唯一来源：技能白名单 SKILL_DEV_MODE_MAP） */
+  const [skillDevMode, setSkillDevMode] = createSignal<string | undefined>(undefined)
+
+  /** 是否处于应用开发模式（仅由技能选择驱动） */
+  const isAppDevMode = createMemo(() => skillDevMode() === "app")
+
+  /** 会话历史兜底：发送后输入框技能 pill 被清空、skillDevMode 复位，
+   *  按「用户消息 agent part → 会话 aiPartnerID」顺序还原开发模式，
+   *  避免「工具」等入口在进入会话后消失。 */
+  const SESSION_PARTNER_DEV_MODE: Record<string, string> = {
+    "skill-builder-partner": "skill",
+  }
+  const sessionSkillDevMode = createMemo(() => {
+    const sessionID = params.id
+    if (!sessionID) return undefined
+    const fromParts = (sync.data.message[sessionID] ?? [])
+      .filter((m) => m.role === "user")
+      .flatMap((m) => sync.data.part[m.id] ?? [])
+      .map((p) => getSkillDevName(p))
+      .find((x): x is string => x !== undefined)
+    if (fromParts) return SKILL_DEV_MODE_MAP[fromParts]
+    const partner = info()?.aiPartnerID
+    return partner ? SESSION_PARTNER_DEV_MODE[partner] : undefined
+  })
+
+  /** 是否处于技能开发模式（当前技能选择优先、会话历史兜底，决定是否展示“工具”选择入口） */
+  const isSkillDevMode = createMemo(() => (skillDevMode() ?? sessionSkillDevMode()) === "skill")
+
+  const selectedAppName = createMemo(() => selectedApp()?.name ?? "")
+
+  /** 当前选中的开发技能 trigger（从 prompt pill 解析），区分 app-build(ERP) / standalone-build(general) */
+  const currentSkillTrigger = createMemo(() => {
+    for (const p of prompt.current()) {
+      const name = getSkillDevName(p)
+      if (name) return name
+    }
+    return undefined
+  })
+  /** 当前选中的全部开发技能 trigger（去重，用于 build_skill_send 多选埋点） */
+  const currentSkillTriggers = createMemo(() => {
+    const seen = new Set<string>()
+    for (const p of prompt.current()) {
+      const name = getSkillDevName(p)
+      if (name && !seen.has(name)) seen.add(name)
+    }
+    return [...seen]
+  })
+  /** 触发苍穹应用下拉的技能白名单：app-build 与 kd-frontend-development 均需要选择苍穹应用 */
+  const COSMIC_APP_SKILLS = new Set(["app-build", "kd-frontend-development"])
+  /** 是否处于 ERP(苍穹) 应用开发模式：app-build 或 kd-frontend-development 技能触发，用于显示苍穹应用下拉 */
+  const isErpAppDevMode = createMemo(() => COSMIC_APP_SKILLS.has(currentSkillTrigger() ?? ""))
+
+  // 回到新会话页（ERP 模式）时，从记忆恢复选中应用：
+  // 发送成功后 clearSelectedApp 清空了 selectedApp，切走再回来苍穹下拉仍显示上次选中的应用。
+  // 依赖 !params.id 与 isErpAppDevMode 的变化触发（不追踪 selectedApp，避免 clearSelectedApp 后立即恢复）。
+  createEffect(on(() => [!params.id, isErpAppDevMode()] as const, ([isNew, erp]) => {
+    if (!isNew || !erp) return
+    if (selectedApp()) return
+    const last = lastSelectedApp()
+    if (!last || last.directory !== effectiveProjectDir()) return
+    setSelectedApp(last)
+  }))
+
+  // 离开应用开发模式时清除选中的应用
+  // defer: 组件重新挂载时 skillDevMode 重置为 undefined（isAppDevMode=false），不触发清空，
+  // 避免 selectedApp 被清空后恢复 effect 因时序问题（isErpAppDevMode 依赖 prompt pill，与 skillDevMode 不同步）无法恢复
+  createEffect(on(() => isAppDevMode(), (mode) => {
+    if (!mode) setSelectedApp(null)
+  }, { defer: true }))
+
+  // 项目切换时，若选中的应用不属于当前项目则清除
+  createEffect(on(() => effectiveProjectDir(), (dir) => {
+    const app = selectedApp()
+    if (app && app.directory !== dir) setSelectedApp(null)
+  }))
+
+  // 新会话首次发送成功后（params.id 从 undefined 变为有值），清除 selectedApp
+  // app-context 已作为隐藏 synthetic part 写入消息历史，selectedApp 完成使命
+  // prev === undefined 条件确保只在「草稿→session创建」方向触发
+  // 不影响 app-dev-page 的 setSelectedApp + navigate 跨路由透传
+  createEffect(on(() => params.id, (id, prev) => {
+    if (prev === undefined && id) setSelectedApp(null)
+  }, { defer: true }))
+
+  /** 校验未通过（未选应用即发送）时为 true，苍穹下拉触发器文案变红引导选择 */
+  const [appRequired, setAppRequired] = createSignal(false)
+  /** 苍穹应用下拉的挂载点：指向当前编辑器中 cosmic-app 技能 pill 内的 trigger 容器 */
+  const [cosmicAppTriggerMount, setCosmicAppTriggerMount] = createSignal<HTMLElement | null>(null)
+
+  /** 选中苍穹应用：构造 PromptAppItem（约定 archive.json 路径）并 setSelectedApp，
+   *  既更新苍穹下拉触发器显示，也驱动 app-context 注入（build-request-parts 据此生成 <app-context>）。
+   *  路径按 cosmic 类型约定为 {project}/app/{number}/archive.json。
+   *  archive.json 在首次发送成功后由 submit 的 onEnsureArchive 异步落盘（已存在则跳过）。 */
+  const handlePickCosmicApp = (app: FlatCosmicApp) => {
+    const dir = effectiveProjectDir()
+    if (!dir) return
+    const number = app.number || app.id
+    const base = dir.replace(/\\/g, "/").replace(/\/+$/, "")
+    setSelectedApp({
+      path: `${base}/app/${number}/archive.json`,
+      name: app.name || app.number || app.id,
+      directory: dir,
+      title: number,
+      data: {
+        type: "cosmic",
+        appCode: number,
+        appName: app.name || app.number || app.id,
+        appId: app.id,
+        cosmicAppName: app.name,
+        bizCloudId: app.cloudId,
+        bizCloudName: app.cloudName,
+        appDescription: app.description,
+      },
+    })
+    setAppRequired(false)
+    // modal={false} 后 onCloseAutoFocus 的 preventDefault 生效，不再抢焦点
+    setTimeout(restoreFocus, 0)
+  }
+
+  const agentNames = createMemo(() => local.agent.list().map((agent) => agent.name))
+
+  const AGENT_NAME_KEYS: Record<string, string> = {
+    build: "agent.name.build",
+    plan: "agent.name.plan",
+    spec: "agent.name.spec",
+    quest: "agent.name.quest",
+  }
+  const agentLabel = (name: string) => {
+    const key = AGENT_NAME_KEYS[name]
+    return key ? language.t(key as Parameters<typeof language.t>[0]) : name
+  }
+  // Spec / 目标 live in the "+" dropdown as mutually-exclusive modes; picking the active one again
+  // clears back to build. A chip after the model selector reflects the current non-build mode.
+  const specEnabled = createMemo(() => agentNames().includes("spec"))
+  const questEnabled = createMemo(() => agentNames().includes("quest"))
+  const currentMode = createMemo(() => local.agent.current()?.name ?? "build")
+  const toggleMode = (name: "spec" | "quest") => {
+    const next = currentMode() === name ? "build" : name
+    // Leaving 目标(quest) mode while a goal is autonomously running: stop it the SAME way the goal
+    // banner's delete does (soft-cancel via ui_goal_delete → the in-flight round finishes and the
+    // loop exits gracefully). Without this, flipping the mode only changes the composer's next-turn
+    // agent; the backend keeps looping rounds with no banner and no edit/delete controls — an
+    // orphaned goal that only the native stop button could end. See session-goal-banner.tsx remove().
+    if (currentMode() === "quest" && next !== "quest" && working()) {
+      const sessionID = params.id
+      if (sessionID) void sdk.client.session.abort({ sessionID, reason: "ui_goal_delete" }).catch(() => {})
+    }
+    local.agent.set(next)
+    restoreFocus()
+  }
+  const modeChip = createMemo<"spec" | "quest" | undefined>(() => {
+    const m = currentMode()
+    return m === "spec" || m === "quest" ? m : undefined
+  })
+
+  const handleAtSelect = (option: AtOption | undefined) => {
+    if (!option) return
+    if (option.type === "agent") {
+      const current = prompt.current()
+      const images = current.filter((part): part is ImageAttachmentPart => part.type === "image")
+      const base = current.filter((part) => part.type !== "image" && part.type !== "agent")
+      const head = {
+        type: "agent" as const,
+        name: option.name,
+        ...(option.id ? { id: option.id } : {}),
+        content: "@" + option.name,
+        start: 0,
+        end: 0,
+      }
+      const hasContent = base.some((part) => part.type !== "text" || part.content.length > 0)
+      const next: Prompt = [head]
+      if (hasContent) {
+        const first = base[0]
+        const needsGap = first?.type !== "text" || (!!first.content && !first.content.startsWith(" "))
+        if (needsGap) next.push({ type: "text", content: " ", start: 0, end: 0 })
+        next.push(...base)
+      } else {
+        next.push({ type: "text", content: " ", start: 0, end: 0 })
+      }
+      window.getSelection()?.removeAllRanges()
+      prompt.set([...next, ...images], Number.MAX_SAFE_INTEGER)
+      queueScroll()
+    } else if (option.type === "rule") {
+      addPart({
+        type: "rule",
+        path: option.path,
+        name: option.name,
+        ruleType: option.ruleType,
+        content: "@" + option.name,
+        start: 0,
+        end: 0,
+      })
+    } else {
+      addPart({ type: "file", path: option.path, content: "@" + option.path, start: 0, end: 0 })
+    }
+  }
+
+  const atKey = (x: AtOption | undefined) => {
+    if (!x) return ""
+    if (x.type === "agent") return `agent:${x.name}`
+    if (x.type === "rule") return `rule:${x.path}`
+    return `file:${x.path}`
+  }
+
+  const {
+    flat: atFlat,
+    active: atActive,
+    setActive: setAtActive,
+    onInput: atOnInput,
+    onKeyDown: atOnKeyDown,
+  } = useFilteredList<AtOption>({
+    items: async (query) => {
+      // 智能体暂不进 @ 菜单（产品决策，恢复时在列表头部加回 agent 类型条目）。
+      const open = recent()
+      const seen = new Set(open)
+      const pinned: AtOption[] = open.map((path) => ({ type: "file", path, display: path, recent: true }))
+      // @ 菜单只展示 manual 规则：always_on 自动注入、glob 随文件命中、model_decision 走索引，各有自己的链路。
+      const rules = ruleOptions().filter((rule) => rule.type === "rule" && rule.ruleType === "manual")
+      if (!query.trim()) return [...pinned, ...rules]
+      const paths = await files.searchFilesAndDirectories(query)
+      const fileOptions: AtOption[] = paths
+        .filter((path) => !seen.has(path))
+        .map((path) => ({ type: "file", path, display: path }))
+      return [...pinned, ...rules, ...fileOptions]
+    },
+    key: atKey,
+    filterKeys: ["display"],
+    groupBy: (item) => {
+      if (item.type === "agent") return "agent"
+      if (item.type === "rule") return "rule"
+      if (item.recent) return "recent"
+      return "file"
+    },
+    sortGroupsBy: (a, b) => {
+      const rank = (category: string) => {
+        if (category === "agent") return 0
+        if (category === "recent") return 1
+        if (category === "rule") return 2
+        return 3
+      }
+      return rank(a.category) - rank(b.category)
+    },
+    onSelect: handleAtSelect,
+  })
+
+  // True while command.list() hasn't resolved yet (before the first bootstrap).
+  // Shows a loading placeholder in the Skills section instead of an empty gap.
+  const skillsLoading = createMemo(() => {
+    const dir = effectiveProjectDir()
+    const store = dir && dir !== "*"
+      ? globalSync.child(dir, { bootstrap: false })[0]
+      : sync.data
+    return store.command.length === 0 && store.status !== "complete"
+  })
+
+  // 摘掉正在输入的 `/关键词` 之后，输入框里是否还剩别的实质内容（光标左右两侧都算），
+  // 由 handleInput 写入。为真时只允许技能候选：技能选中后走 addPart，仅替换光标前的
+  // `/xxx`，其余文本原样保留；而命令类候选走 setEditorText / clearEditor，会覆盖或
+  // 清空整个输入框，导致剩余内容丢失，内置命令还会被立即执行。
+  const [slashHasOtherContent, setSlashHasOtherContent] = createSignal(false)
+
+  // 当前 slash 输入会话所占区间，由 input 事件维护；选中候选时按它删除，光标移动不修改它。
+  // 详见 slash-trigger.ts 中 SlashSession 的说明：替换区间只能记录并增量推进，不能事后从文本猜。
+  const [slashSession, setSlashSession] = createSignal<SlashSession | undefined>(undefined)
+
+  /**
+   * 作废 slash 会话并收起弹层。
+   *
+   * 两者必须一起清：只清区间会留下「弹层还开着、替换范围却没了」的状态，此时选中技能
+   * 只会插入标签而把 `/关键词` 留在正文里；只关弹层则会让残留区间在下次输入时被沿用。
+   *
+   * 反过来，「收弹层但留区间」是有意允许的状态，共两条来源，都表示本次输入尚未结束、
+   * 光标回到关键词内即可恢复：
+   *   1. 光标在框内移出会话区间（syncSlashOnCaretMove）；
+   *   2. 输入框失焦（handleBlur）。
+   * 这两处只调 closePopover。除此之外，任何收起弹层的场景都必须调用本函数连区间一起
+   * 作废 —— 否则残留区间会在后续编辑中被沿用，可能按错误范围删除用户正文。
+   */
+  const resetSlashSession = () => {
+    setSlashSession(undefined)
+    // 候选收窄标记同属会话状态：它被 slashPopoverCommands 消费，残留为 true 会让下次
+    // 打开时先渲染出收窄后的列表。
+    setSlashHasOtherContent(false)
+    closePopover()
+  }
+
+  const slashCommands = createMemo<SlashCommand[]>(() => {
+    const builtin = command.options
+      .filter((opt) => !opt.disabled && !opt.id.startsWith("suggested.") && opt.slash)
+      .map((opt) => ({
+        id: opt.id,
+        trigger: opt.slash!,
+        title: opt.title,
+        description: opt.description,
+        keybind: opt.keybind,
+        type: "builtin" as const,
+      }))
+
+    // 应用开发模式下 selectedProjectDir 可能与 sdk.directory 不一致，
+    // 技能列表需要跟随 effectiveProjectDir() 对应的项目
+    const effectiveDir = effectiveProjectDir()
+    const effectiveStore = effectiveDir && effectiveDir !== "*"
+      ? globalSync.child(effectiveDir, { bootstrap: false })[0]
+      : undefined
+
+    const isGitRepo = !!(effectiveStore?.vcs ?? sync.data.vcs)?.branch
+
+    // [KWC] /init 命令已屏蔽，后续恢复时删除此 filter
+    // /create-pr、/review 需要 git 仓库支持，非 git 项目下隐藏
+    const backendCmds = (effectiveStore?.command ?? sync.data.command)
+      .filter((cmd) => cmd.name !== "init")
+      .filter((cmd) => !["create-pr", "review"].includes(cmd.name) || isGitRepo)
+      .filter((cmd) => cmd.source !== "skill" || canShowSkillTab(licensePlan(), cmd.name))
+      .map((cmd) => ({
+        id: `custom.${cmd.name}`,
+        trigger: cmd.name,
+        title: cmd.source === "skill" ? (SKILL_DISPLAY_NAME_MAP[cmd.name] ?? cmd.name) : cmd.name,
+        description: cmd.description,
+        type: "custom" as const,
+        source: cmd.source,
+        skillScope: cmd.skillScope,
+      }))
+
+    // alias.standalone-build is a legacy alias for expert-team-build.
+    // Only show it once the backend command list has loaded (i.e. real skill
+    // commands are present) AND the real standalone-build skill is not already
+    // in the list.  Without the first guard the alias — which carries
+    // skillScope: "builtin" — is the *only* "built-in" entry visible during the
+    // 1–2s bootstrap window before command.list() resolves, giving the false
+    // impression that just one built-in skill is available.  Without the second
+    // guard the alias duplicates the real skill entry.
+    //
+    // Guards MUST be computed from backendCmds (before adding the alias):
+    // hasStandaloneBuild checks trigger === "standalone-build", and the alias
+    // itself carries that trigger — computing from the merged array would make
+    // the guard always true and the alias would never show.
+    const hasSkillCommands = backendCmds.some((cmd) => cmd.source === "skill")
+    const hasStandaloneBuild = backendCmds.some((cmd) => cmd.trigger === "standalone-build")
+
+    // Merge alias into the array BEFORE sorting so it participates in the
+    // skillScope-based ordering instead of being tacked on at the end.
+    // The sort treats source === "alias" as skill-like (same tier as "skill")
+    // so the alias lands among its peers by skillScope, not after non-skill
+    // commands like MCP prompts.
+    const isSkillLike = (s: string | undefined) => s === "skill" || s === "alias"
+
+    const custom = [
+      ...backendCmds,
+      ...(hasSkillCommands && !hasStandaloneBuild && canShowSkillTab(licensePlan(), "standalone-build")
+        ? [{
+            id: "alias.standalone-build",
+            trigger: "standalone-build",
+            title: "expert-team-build",
+            description: "Legacy alias for expert-team-build",
+            type: "custom" as const,
+            source: "alias" as const,
+            skillScope: "builtin" as const,
+          }]
+        : []),
+    ].sort((a, b) => {
+      // 技能（含 alias）排在最前，其余按后端返回顺序保持不变
+      if (isSkillLike(a.source) && !isSkillLike(b.source)) return -1
+      if (!isSkillLike(a.source) && isSkillLike(b.source)) return 1
+      // 技能内部按 skillScope 排序：内置 → 用户 → 项目
+      if (isSkillLike(a.source) && isSkillLike(b.source)) {
+        const rank = (s: string | undefined) =>
+          s === "builtin" ? 0 : s === "user" ? 1 : s === "project" ? 2 : 3
+        return rank(a.skillScope) - rank(b.skillScope)
+      }
+      return 0
+    })
+
+    return [
+      ...custom,
+      ...builtin,
+    ]
+  })
+
+  // 弹层实际展示的候选。与 slashCommands 分开是必须的：后者还被 parseTextParts
+  // （粘贴 `/命令 内容` 时按 trigger 查命令）依赖，那里需要的始终是完整列表。
+  const slashPopoverCommands = createMemo<SlashCommand[]>(() =>
+    filterSlashCandidates(slashCommands(), slashHasOtherContent()),
+  )
+
+  /**
+   * 插入技能 pill，并移除光标前正在输入的 `/关键词`。
+   * pill 在光标位置插入（`range.deleteContents()` 后 range 坍缩处），
+   * 与文字同行（inline-flex）。
+   */
+  const insertSkillPill = (part: AgentPart) => {
+    const selection = window.getSelection()
+
+    // 删除 input 事件记录的会话区间，而不是按当前光标重新推断终点：
+    // `/｜123` 的 123 是原有正文，若按词尾猜测会连它一起删掉。
+    const session = slashSession()
+    if (session && selection && selection.rangeCount > 0 && editorRef.contains(selection.anchorNode)) {
+      const range = selection.getRangeAt(0)
+      setRangeEdge(editorRef, range, "start", session.start)
+      setRangeEdge(editorRef, range, "end", session.end)
+      range.deleteContents()
+    }
+    setSlashSession(undefined)
+
+    // 清除浏览器在空 contenteditable 中自动插入的占位 <br>：
+    // 仅当编辑器无实质内容（无文本、无 pill）时才清除，避免误删用户多行换行。
+    const hasContent = Array.from(editorRef.childNodes).some(
+      (n) =>
+        (n.nodeType === Node.TEXT_NODE && (n.textContent ?? "").replace(/\u200B/g, "").length > 0) ||
+        (n.nodeType === Node.ELEMENT_NODE && !!(n as HTMLElement).dataset.type),
+    )
+    if (!hasContent) {
+      editorRef.querySelectorAll("br").forEach((br) => br.remove())
+    }
+
+    // pill 前面若非空白字符，补一个空格分隔，避免复制时 trigger 拼接到前文。
+    if (selection && selection.rangeCount > 0 && editorRef.contains(selection.anchorNode)) {
+      const r = selection.getRangeAt(0)
+      const before = r.cloneRange()
+      before.selectNodeContents(editorRef)
+      before.setEnd(r.startContainer, r.startOffset)
+      if (/\S$/.test(before.toString())) {
+        const space = document.createTextNode(" ")
+        r.insertNode(space)
+        r.setStartAfter(space)
+        r.collapse(true)
+        selection.removeAllRanges()
+        selection.addRange(r)
+      }
+    }
+
+    // 普通空格作为 pill 后的 gap：用户紧接输入的文本不会拼接到 trigger 上，
+    // 全选复制时 text/plain 自然包含 "/trigger body" 分隔，降级路径可重建 pill。
+    const pill = createPill(part)
+    const gap = document.createTextNode(" ")
+    // 在光标位置插入 pill + gap，而非一律插到编辑器开头
+    if (selection && selection.rangeCount > 0 && editorRef.contains(selection.anchorNode)) {
+      const range = selection.getRangeAt(0)
+      range.insertNode(pill)
+      pill.after(gap)
+    } else {
+      editorRef.appendChild(pill)
+      editorRef.appendChild(gap)
+    }
+
+    // 光标落在 pill 之后的 gap 后面：继续输入紧跟技能，而非跳回编辑器末尾
+    editorRef.focus()
+    const caret = document.createRange()
+    caret.setStartAfter(gap)
+    caret.collapse(true)
+    selection?.removeAllRanges()
+    selection?.addRange(caret)
+    handleInput()
+    closePopover()
+  }
+
+  props.expose?.({ insertSkillPill })
+
+  const handleSlashSelect = (cmd: SlashCommand | undefined) => {
+    if (!cmd) return
+    if ((cmd.source === "skill" || cmd.source === "alias") && !canShowSkillTab(licensePlan(), cmd.trigger)) return
+    promptProbe.select(cmd.id)
+    closePopover()
+    const images = imageAttachments()
+
+    if (cmd.type === "custom") {
+      if (cmd.source === "skill") {
+        insertSkillPill({ type: "agent", name: cmd.trigger, content: `/${cmd.trigger}`, start: 0, end: 0 })
+        const devMode = SKILL_DEV_MODE_MAP[cmd.trigger]
+        if (devMode) setSkillDevMode(devMode)
+        return
+      }
+      const text = `/${cmd.trigger} `
+      setEditorText(text)
+      prompt.set([{ type: "text", content: text, start: 0, end: text.length }, ...images], text.length)
+      focusEditorEnd()
+      return
+    }
+
+    clearEditor()
+    prompt.set([...DEFAULT_PROMPT, ...images], 0)
+    command.trigger(cmd.id, "slash")
+  }
+
+  const {
+    flat: slashFlat,
+    grouped: slashGrouped,
+    active: slashActive,
+    setActive: setSlashActive,
+    onInput: slashOnInput,
+    onKeyDown: slashOnKeyDown,
+  } = useFilteredList<SlashCommand>({
+    items: slashPopoverCommands,
+    key: (x) => x?.id,
+    filterKeys: ["trigger", "title"],
+    groupBy: (cmd) => (cmd.source === "skill" || cmd.source === "alias" ? "skills" : "commands"),
+    sortGroupsBy: (a, b) => {
+      if (a.category === "skills") return -1
+      if (b.category === "skills") return 1
+      return 0
+    },
+    onSelect: handleSlashSelect,
+  })
+
+  // command.list() 写入后会触发 slash 候选的异步重新过滤。这个短暂的
+  // refreshing 阶段仍属于加载过程，否则 skillsLoading 先变为 false 时会让
+  // 弹层瞬间进入空态。
+  const slashSkillsLoading = createMemo(() => skillsLoading() || slashGrouped.loading)
+
+  const createPill = (part: FileAttachmentPart | AgentPart | RuleAttachmentPart) => {
+    const pill = document.createElement("span")
+    pill.setAttribute("data-type", part.type)
+    if (part.type === "file") pill.setAttribute("data-path", part.path)
+    if (part.type === "rule") {
+      pill.setAttribute("data-path", part.path)
+      pill.setAttribute("data-name", part.name)
+      pill.setAttribute("data-rule-type", part.ruleType)
+    }
+    if (part.type === "agent") {
+      pill.setAttribute("data-name", part.name)
+      if (part.id) pill.setAttribute("data-id", part.id)
+    }
+    pill.setAttribute("data-content", part.content)
+    pill.setAttribute("contenteditable", "false")
+    pill.style.userSelect = "text"
+    pill.style.cursor = "default"
+    if (part.type === "agent" && part.name.startsWith("kdapp:")) {
+      const tagColor = part.name.slice(6)
+      const icon = document.createElement("span")
+      icon.setAttribute("aria-hidden", "true")
+      icon.style.display = "inline-flex"
+      icon.style.alignItems = "center"
+      icon.style.justifyContent = "center"
+      icon.style.width = "16px"
+      icon.style.height = "16px"
+      icon.innerHTML = APP_GRID_ICON
+      const text = document.createElement("span")
+      text.textContent = part.content
+      text.style.color = "#FFF"
+      text.style.fontFamily = "\"PingFang SC\", sans-serif"
+      text.style.fontSize = "14px"
+      text.style.fontWeight = "500"
+      text.style.lineHeight = "20px"
+      const close = document.createElement("span")
+      close.textContent = "\u00d7"
+      close.style.color = "rgba(255,255,255,0.8)"
+      close.style.fontSize = "14px"
+      close.style.lineHeight = "1"
+      close.style.cursor = "pointer"
+      close.style.display = "inline-flex"
+      close.style.alignItems = "center"
+      close.addEventListener("mousedown", (e) => {
+        e.preventDefault()
+        e.stopPropagation()
+        pill.remove()
+        handleInput()
+      })
+      pill.style.display = "flex"
+      pill.style.width = "fit-content"
+      pill.style.alignItems = "center"
+      pill.style.gap = "4px"
+      pill.style.padding = "4px 10px"
+      pill.style.borderRadius = "8px"
+      pill.style.backgroundColor = tagColor
+      pill.style.verticalAlign = "top"
+      pill.style.whiteSpace = "nowrap"
+      pill.replaceChildren(icon, text, close)
+      return pill
+    }
+    if (part.type === "agent" && part.content.startsWith("/")) {
+      const icon = document.createElement("span")
+      icon.className = "pill-icon"
+      icon.setAttribute("aria-hidden", "true")
+      icon.style.width = "16px"
+      icon.style.height = "16px"
+      icon.innerHTML = SKILL_ICON_MAP[part.name] ?? SKILL_BOLT_ICON
+      const svg = icon.querySelector("svg")
+      if (svg) {
+        svg.style.width = "100%"
+        svg.style.height = "100%"
+      }
+      icon.style.color = "var(--primary-600)"
+      const text = document.createElement("span")
+      text.textContent = getSkillDisplayName(part.content.slice(1))
+      text.style.color = "var(--primary-600)"
+      text.style.fontFamily = "\"PingFang SC\", sans-serif"
+      text.style.fontSize = "14px"
+      text.style.fontWeight = "500"
+      text.style.lineHeight = "22px"
+      const close = document.createElement("span")
+      close.className = "pill-close"
+      close.setAttribute("aria-hidden", "true")
+      close.style.width = "16px"
+      close.style.height = "16px"
+      close.style.flexShrink = "0"
+      close.style.color = "var(--primary-400)"
+      close.style.cursor = "pointer"
+      close.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M10.8418 2.33296C11.0697 2.1052 11.4389 2.10517 11.6667 2.33296C11.8944 2.56076 11.8944 2.93006 11.6667 3.15783L7.82492 6.99963L11.6667 10.8414C11.8944 11.0692 11.8945 11.4385 11.6667 11.6663C11.439 11.8941 11.0697 11.894 10.8418 11.6663L7.00005 7.8245L3.15826 11.6663C2.93048 11.894 2.56118 11.894 2.33339 11.6663C2.1056 11.4385 2.10564 11.0692 2.33339 10.8414L6.17518 6.99963L2.33339 3.15783C2.10558 2.93003 2.10559 2.56077 2.33339 2.33296C2.56119 2.10516 2.93045 2.10516 3.15826 2.33296L7.00005 6.17476L10.8418 2.33296Z" fill="currentColor"/></svg>`
+      close.addEventListener("mousedown", (e) => {
+        e.preventDefault()
+        e.stopPropagation()
+        pill.remove()
+        handleInput()
+      })
+      pill.style.display = "inline-flex"
+      pill.style.alignItems = "center"
+      pill.style.justifyContent = "center"
+      pill.style.gap = "4px"
+      pill.style.padding = "4px 8px"
+      pill.style.borderRadius = "12px"
+      pill.style.backgroundColor = "var(--primary-50)"
+      pill.style.verticalAlign = "top"
+      pill.style.whiteSpace = "nowrap"
+      pill.style.marginBottom = "8px"
+      if (COSMIC_APP_SKILLS.has(part.name)) {
+        const divider = document.createElement("span")
+        divider.setAttribute("aria-hidden", "true")
+        // 标识给 index.css：仅挂载了下拉的容器非空，空容器 pill 的分割线由 :has 规则隐藏
+        divider.setAttribute("data-cosmic-app-divider", "")
+        divider.style.cssText = "width:1px;height:14px;background:var(--skill-pill-divider-bg,var(--primary-200,rgba(0,0,0,0.1)));flex-shrink:0;margin:0 2px;"
+        const appContainer = document.createElement("span")
+        appContainer.setAttribute("data-cosmic-app-trigger", "")
+        appContainer.style.cssText = "display:inline-flex;align-items:center;flex-shrink:0;"
+        pill.replaceChildren(icon, close, text, divider, appContainer)
+      } else {
+        pill.replaceChildren(icon, close, text)
+      }
+      return pill
+    }
+    if (part.type === "agent" && part.content.startsWith("@")) {
+      const text = document.createElement("span")
+      text.textContent = part.content
+      text.style.color = "var(--primary-600)"
+      text.style.fontFamily = "\"PingFang SC\", sans-serif"
+      text.style.fontSize = "14px"
+      text.style.fontWeight = "400"
+      text.style.lineHeight = "20px"
+      const close = document.createElement("span")
+      close.textContent = "\u00d7"
+      close.setAttribute("aria-hidden", "true")
+      close.style.color = "var(--primary-400)"
+      close.style.fontSize = "14px"
+      close.style.lineHeight = "1"
+      close.style.cursor = "pointer"
+      close.style.display = "inline-flex"
+      close.style.alignItems = "center"
+      close.style.marginLeft = "2px"
+      close.addEventListener("mousedown", (e) => {
+        e.preventDefault()
+        e.stopPropagation()
+        pill.remove()
+        handleInput()
+      })
+      pill.style.display = "flex"
+      pill.style.width = "fit-content"
+      pill.style.alignItems = "center"
+      pill.style.gap = "4px"
+      pill.style.padding = "2px 8px"
+      pill.style.borderRadius = "12px"
+      pill.style.backgroundColor = "var(--primary-50)"
+      pill.style.verticalAlign = "top"
+      pill.style.whiteSpace = "nowrap"
+      pill.replaceChildren(text, close)
+      return pill
+    }
+    if (part.type === "rule") {
+      const text = document.createElement("span")
+      text.textContent = part.content
+      text.style.color = "var(--primary-600)"
+      text.style.fontFamily = "\"PingFang SC\", sans-serif"
+      text.style.fontSize = "14px"
+      text.style.fontWeight = "400"
+      text.style.lineHeight = "20px"
+      const close = document.createElement("span")
+      close.textContent = "\u00d7"
+      close.setAttribute("aria-hidden", "true")
+      close.style.color = "var(--primary-400)"
+      close.style.fontSize = "14px"
+      close.style.lineHeight = "1"
+      close.style.cursor = "pointer"
+      close.style.display = "inline-flex"
+      close.style.alignItems = "center"
+      close.style.marginLeft = "2px"
+      close.addEventListener("mousedown", (e) => {
+        e.preventDefault()
+        e.stopPropagation()
+        pill.remove()
+        handleInput()
+      })
+      // inline-flex：pill 与相邻文本/其他 pill 内联排列；块级 flex 会让每个 pill 独占一行。
+      pill.style.display = "inline-flex"
+      pill.style.width = "fit-content"
+      pill.style.alignItems = "center"
+      pill.style.gap = "4px"
+      pill.style.padding = "2px 8px"
+      pill.style.borderRadius = "12px"
+      pill.style.backgroundColor = "var(--primary-50)"
+      pill.style.verticalAlign = "top"
+      pill.style.whiteSpace = "nowrap"
+      pill.replaceChildren(text, close)
+      return pill
+    }
+    pill.textContent = part.content
+    return pill
+  }
+
+  const isNormalizedEditor = () => {
+    const children = Array.from(editorRef.childNodes)
+    const normalized = children.every((node) => {
+      if (node.nodeType === Node.TEXT_NODE) {
+        const text = node.textContent ?? ""
+        if (!text.includes("\u200B")) return true
+        if (text !== "\u200B") return false
+
+        const prev = node.previousSibling
+        const next = node.nextSibling
+        const prevIsBr = prev?.nodeType === Node.ELEMENT_NODE && (prev as HTMLElement).tagName === "BR"
+        return !!prevIsBr && !next
+      }
+      if (node.nodeType !== Node.ELEMENT_NODE) return false
+      const el = node as HTMLElement
+      if (el.dataset.type === "file") return true
+      if (el.dataset.type === "agent") return true
+      if (el.dataset.type === "rule") return true
+      return el.tagName === "BR"
+    })
+    if (!normalized) return false
+
+    // renderEditor appends a trailing \u200B when the last child is a pill or BR,
+    // so the caret always has a text anchor to land on. A DOM that ends with a
+    // pill/BR and no trailing \u200B is NOT in the rendered state — without it,
+    // some webviews (e.g. lingee-yzj) cannot place the caret at all, causing the
+    // editor to lose focus and become unfocusable.
+    const last = children[children.length - 1]
+    if (last?.nodeType === Node.ELEMENT_NODE) {
+      const el = last as HTMLElement
+      if (el.tagName === "BR" || el.dataset.type === "file" || el.dataset.type === "agent" || el.dataset.type === "rule")
+        return false
+    }
+
+    return true
+  }
+
+  const renderEditor = (parts: Prompt) => {
+    clearEditor()
+    for (const part of parts) {
+      if (part.type === "text") {
+        editorRef.appendChild(createTextFragment(part.content))
+        continue
+      }
+      if (part.type === "file" || part.type === "agent" || part.type === "rule") {
+        editorRef.appendChild(createPill(part))
+      }
+    }
+
+    const last = editorRef.lastChild
+    if (last?.nodeType === Node.ELEMENT_NODE) {
+      const el = last as HTMLElement
+      if (el.tagName === "BR" || el.dataset.type === "file" || el.dataset.type === "agent" || el.dataset.type === "rule") {
+        editorRef.appendChild(document.createTextNode("\u200B"))
+      }
+    }
+    // 重建 DOM 后重新探测苍穹应用下拉挂载点
+    const triggerEl = editorRef.querySelector<HTMLElement>("[data-cosmic-app-trigger]")
+    if (triggerEl) setCosmicAppTriggerMount(triggerEl)
+    else if (cosmicAppTriggerMount()) setCosmicAppTriggerMount(null)
+  }
+
+  // Auto-scroll active command into view when navigating with keyboard
+  createEffect(() => {
+    const activeId = slashActive()
+    if (!activeId || !slashPopoverRef) return
+
+    requestAnimationFrame(() => {
+      const element = slashPopoverRef.querySelector(`[data-slash-id="${activeId}"]`)
+      element?.scrollIntoView({ block: "nearest", behavior: "smooth" })
+    })
+  })
+
+  // 候选为空只由 PromptPopover 控制 DOM 是否可见，不在这里修改
+  // store.popover。command.list() 和 createResource 过滤会先后产生多个中间结果，
+  // 任何一次空结果若关闭 slash 会话，后续技能到达也无法自动重新打开。
+  // 输入不再符合 slash 触发规则、Escape、失焦或选中候选时，现有的
+  // resetSlashSession/closePopover 路径仍会正常结束会话。
+
+  if (promptEnabled()) {
+    createEffect(() => {
+      promptProbe.set({
+        popover: store.popover,
+        slash: {
+          active: slashActive() ?? null,
+          ids: slashFlat().map((cmd) => cmd.id),
+        },
+      })
+    })
+
+    onCleanup(() => promptProbe.clear())
+  }
+
+  const selectPopoverActive = () => {
+    if (store.popover === "at") {
+      const items = atFlat()
+      if (items.length === 0) return
+      const active = atActive()
+      const item = items.find((entry) => atKey(entry) === active) ?? items[0]
+      handleAtSelect(item)
+      return
+    }
+
+    if (store.popover === "slash") {
+      const items = slashFlat()
+      if (items.length === 0) return
+      const active = slashActive()
+      const item = items.find((entry) => entry.id === active) ?? items[0]
+      handleSlashSelect(item)
+    }
+  }
+
+  const reconcile = (input: Prompt) => {
+    if (mirror.input) {
+      mirror.input = false
+      if (isNormalizedEditor()) return
+
+      // Originated from user input — the DOM selection is authoritative.
+      renderEditorWithCursor(input, true)
+      return
+    }
+
+    // 走到这里说明内容不是本次用户输入产生的（切换会话、恢复草稿、编辑旧消息、撤回等）。
+    // 旧的 slash 会话区间是针对上一份文本记录的，对新内容毫无意义，必须作废。
+    //
+    // 位置有两个讲究：
+    // 1) 必须在下面的 DOM 相等判断之前 —— 新旧内容碰巧一致时那里会提前 return，
+    //    放在后面就漏清了；
+    // 2) 必须在这个分支里而不是 clearEditor 里 —— 用户输入触发的 DOM 规范化
+    //    （上面 mirror.input 分支）同样经由 clearEditor，在那里清会留下
+    //    「弹层还开着、替换区间却没了」的状态，选中技能后 `/关键词` 会残留在正文里。
+    resetSlashSession()
+
+    const dom = parseFromDOM()
+    if (isNormalizedEditor() && isPromptEqual(input, dom)) return
+
+    // External state change (session switch, revert, edit, …) — restore from
+    // the persisted cursor instead of the (now stale) DOM selection.
+    renderEditorWithCursor(input)
+  }
+
+  createEffect(
+    on(
+      () => prompt.current(),
+      (parts) => {
+        if (composing()) return
+        reconcile(parts.filter((part) => part.type !== "image"))
+      },
+    ),
+  )
+
+  // 从 prompt 状态兜底同步 skillDevMode，覆盖技能 tag 点击、draft 恢复等
+  // 所有写入 prompt 的路径，确保开发模式始终与当前技能 pill 一致。
+  createEffect(
+    on(
+      () => prompt.current(),
+      (parts) => {
+        if (composing()) return
+        const devSkill = parts.find((p) => getSkillDevName(p) !== undefined)
+        const name = devSkill ? getSkillDevName(devSkill) : undefined
+        setSkillDevMode(name ? SKILL_DEV_MODE_MAP[name] : undefined)
+      },
+    ),
+  )
+
+  const parseFromDOM = (): Prompt => {
+    const parts: Prompt = []
+    let position = 0
+    let buffer = ""
+
+    const flushText = () => {
+      let content = buffer
+      if (content.includes("\r")) content = content.replace(/\r\n?/g, "\n")
+      if (content.includes("\u200B")) content = content.replace(/\u200B/g, "")
+      buffer = ""
+      if (!content) return
+      parts.push({ type: "text", content, start: position, end: position + content.length })
+      position += content.length
+    }
+
+    const pushFile = (file: HTMLElement) => {
+      const content = file.textContent ?? ""
+      parts.push({
+        type: "file",
+        path: file.dataset.path!,
+        content,
+        start: position,
+        end: position + content.length,
+      })
+      position += content.length
+    }
+
+    const pushAgent = (agent: HTMLElement) => {
+      const content = agent.dataset.content ?? agent.textContent ?? ""
+      const id = agent.dataset.id
+      parts.push({
+        type: "agent",
+        name: agent.dataset.name!,
+        ...(id ? { id } : {}),
+        content,
+        start: position,
+        end: position + content.length,
+      })
+      position += content.length
+    }
+
+    const pushRule = (rule: HTMLElement) => {
+      const content = rule.dataset.content ?? rule.textContent ?? ""
+      parts.push({
+        type: "rule",
+        path: rule.dataset.path!,
+        name: rule.dataset.name!,
+        ruleType: rule.dataset.ruleType ?? "always_on",
+        content,
+        start: position,
+        end: position + content.length,
+      })
+      position += content.length
+    }
+
+    const visit = (node: Node) => {
+      if (node.nodeType === Node.TEXT_NODE) {
+        buffer += node.textContent ?? ""
+        return
+      }
+      if (node.nodeType !== Node.ELEMENT_NODE) return
+
+      const el = node as HTMLElement
+      if (el.dataset.type === "file") {
+        flushText()
+        pushFile(el)
+        return
+      }
+      if (el.dataset.type === "agent") {
+        flushText()
+        pushAgent(el)
+        return
+      }
+      if (el.dataset.type === "rule") {
+        flushText()
+        pushRule(el)
+        return
+      }
+      if (el.tagName === "BR") {
+        buffer += "\n"
+        return
+      }
+
+      for (const child of Array.from(el.childNodes)) {
+        visit(child)
+      }
+    }
+
+    const children = Array.from(editorRef.childNodes)
+    children.forEach((child, index) => {
+      const isBlock = child.nodeType === Node.ELEMENT_NODE && ["DIV", "P"].includes((child as HTMLElement).tagName)
+      visit(child)
+      if (isBlock && index < children.length - 1) {
+        buffer += "\n"
+      }
+    })
+
+    flushText()
+
+    if (parts.length === 0) parts.push(...DEFAULT_PROMPT)
+    return parts
+  }
+
+  /**
+   * 依据当前文本与光标位置刷新 slash 弹窗（开关 + 搜索关键词 + 候选收窄）。
+   *
+   * 触发判定与候选收窄的完整规则见 ./prompt-input/slash-trigger.ts。
+   * 除 input 事件外，光标移动（方向键、Home/End、鼠标点击、选区变化）也要调用它：
+   * 移动光标不产生 input 事件，若不同步，关键词会停留在上一次输入时的值 ——
+   * 例如 `12 /email` 把光标移到 `/e` 之后，列表仍按 email 过滤而非 e。
+   */
+  const syncSlashPopover = (input: { rawText: string; cursorPosition: number; parts: Prompt }) => {
+    // at 弹层开着时不抢（同 syncSlashOnCaretMove 的守卫）：@ 触发与 slash 触发互斥，
+    // 不拦截的话下面的 resetSlashSession 会在同一次 input 事件里把刚打开的 at 弹层关掉。
+    if (store.popover === "at") return
+    const slashTrigger = resolveSlashTrigger({
+      rawText: input.rawText,
+      cursor: input.cursorPosition,
+    })
+    if (!slashTrigger) {
+      resetSlashSession()
+      return
+    }
+    // 触发区间若落在已有技能 pill（agent part）的内容范围内，说明 / 来自 pill
+    // 而非用户输入（删完 pill 后的文字后 rawText 又变回 /wr），不弹窗。
+    const triggerStart = slashTrigger.session.start
+    const withinPill = input.parts.some(
+      (p) =>
+        p.type === "agent" &&
+        p.content.startsWith("/") &&
+        triggerStart >= p.start &&
+        triggerStart < p.end,
+    )
+    if (withinPill) {
+      resetSlashSession()
+      return
+    }
+    // 增量推进而非重设：光标之后可能仍有本会话输入的关键词字符（`/ex｜mail`）。
+    const session = advanceSlashSession({
+      rawText: input.rawText,
+      cursor: input.cursorPosition,
+      previous: slashSession(),
+      fallback: slashTrigger.session,
+    })
+    setSlashSession(session)
+    // 必须用推进后的 session 判断，不能用 slashTrigger 里的初始区间：光标停在关键词
+    // 中间时（`/ex｜mail`），按初始区间会把 mail 误判成其他内容，普通命令被错误过滤。
+    setSlashHasOtherContent(hasContentOutsideSession({ rawText: input.rawText, session }))
+    slashOnInput(slashTrigger.query)
+    // 没有匹配候选时隐藏弹层（不重置会话，用户继续输入匹配时恢复）
+    if (slashFlat().length === 0) {
+      closePopover()
+      return
+    }
+    setStore("popover", "slash")
+  }
+
+  /**
+   * 光标移动后刷新检索关键词。
+   *
+   * 不重新判定触发、也不修改会话区间：移动光标并未改变用户输入过哪些字符，因此替换
+   * 范围必须保持 input 事件记录的值。检索关键词则取 `/` 到光标，刻意不受会话末尾
+   * 约束 —— 否则同一个可见状态会因输入历史不同而检索结果不同，详见
+   * resolveSlashQueryInSession 的说明。
+   *
+   * 光标退到 `/` 之上或越过空白时只收起弹层、保留区间，移回来要能恢复 —— 因此这里
+   * 不能要求弹层当前是开着的。`123 /123` 中光标越过 `/` 再移回来就是这种情况：区间
+   * 仍是 [4,8]，无需重建即可安全恢复。用户主动 Escape 时会连区间一起作废，不会被
+   * 这里重新唤起。
+   */
+  const syncSlashOnCaretMove = () => {
+    if (store.mode === "shell") return
+    if (composing()) return
+    // 开着的是别的弹层时不抢；未开弹层（null）则继续，以便从会话内恢复。
+    if (store.popover && store.popover !== "slash") return
+    const session = slashSession()
+    if (!session) return
+
+    const selection = window.getSelection()
+    if (!selection || selection.rangeCount === 0 || !editorRef.contains(selection.anchorNode)) return
+    // 存在选区时不响应：拖选/Shift+方向键属于选择文本，不是移动插入点。
+    if (!selection.isCollapsed) return
+
+    const query = resolveSlashQueryInSession({
+      rawText: prompt
+        .current()
+        .map((p) => ("content" in p ? p.content : ""))
+        .join(""),
+      cursor: getCursorPosition(editorRef),
+      session,
+    })
+    if (query === undefined) {
+      // 只收弹层，保留区间：光标可能只是暂时移出，移回来还要按同一区间继续。
+      closePopover()
+      return
+    }
+    slashOnInput(query)
+    setStore("popover", "slash")
+  }
+
+  /** 仅在纯移动光标的按键后同步；字符输入走 onInput，方向键上下由历史导航处理。 */
+  const CARET_MOVE_KEYS = new Set(["ArrowLeft", "ArrowRight", "Home", "End"])
+  const handleCaretKeyUp = (event: KeyboardEvent) => {
+    if (!CARET_MOVE_KEYS.has(event.key)) return
+    // Shift+方向键是扩展选区而非移动插入点，不应触发检索。
+    if (event.shiftKey) return
+    syncSlashOnCaretMove()
+  }
+
+  const handleInput = () => {
+    const rawParts = parseFromDOM()
+    // 同步苍穹应用下拉挂载点：pill 增删时及时更新
+    {
+      const triggerEl = editorRef.querySelector<HTMLElement>("[data-cosmic-app-trigger]")
+      if (triggerEl) setCosmicAppTriggerMount(triggerEl)
+      else if (cosmicAppTriggerMount()) setCosmicAppTriggerMount(null)
+    }
+    // 检测是否还有带 dev-mode 的技能 pill；没有则清除技能触发的开发模式
+    const hasDevModeSkill = rawParts.some((p) => getSkillDevName(p) !== undefined)
+    if (!hasDevModeSkill) setSkillDevMode(undefined)
+    const images = imageAttachments()
+    const cursorPosition = getCursorPosition(editorRef)
+    const rawText =
+      rawParts.length === 1 && rawParts[0]?.type === "text"
+        ? rawParts[0].content
+        : rawParts.map((p) => ("content" in p ? p.content : "")).join("")
+    const hasNonText = rawParts.some((part) => part.type !== "text")
+    const shouldReset = !NON_EMPTY_TEXT.test(rawText) && !hasNonText && images.length === 0
+
+    if (shouldReset) {
+      // 输入框已清空，会话必须一并作废，否则残留区间会在下次输入时被错误沿用。
+      resetSlashSession()
+      resetHistoryNavigation()
+      if (prompt.dirty()) {
+        mirror.input = true
+        prompt.set(DEFAULT_PROMPT, 0)
+      }
+      queueScroll()
+      return
+    }
+
+    const shellMode = store.mode === "shell"
+
+    if (!shellMode) {
+      // @ 触发只匹配光标所在文本段（anchor 文本节点）：pill 的 content 位于元素节点、
+      // 不会拼入该段，天然规避「pill content 拼入 rawText 误匹配」（slash 防护的问题），
+      // 也支持已存在 pill 后继续 @ 引用。边界字符类与 build-request-parts 的 mention 解析口径一致。
+      const sel = window.getSelection()
+      const anchor = sel?.anchorNode
+      const atSegment =
+        anchor && anchor.nodeType === Node.TEXT_NODE && editorRef.contains(anchor)
+          ? (anchor.textContent ?? "").slice(0, sel?.anchorOffset ?? 0)
+          : ""
+      const atMatch = atSegment.match(/(?:^|[\s([{"'])@(\S*)$/)
+      if (atMatch) {
+        atOnInput(atMatch[1] ?? "")
+        setStore("popover", "at")
+      } else if (store.popover === "at") {
+        setStore("popover", null)
+      }
+      syncSlashPopover({ rawText, cursorPosition, parts: rawParts })
+    } else {
+      resetSlashSession()
+    }
+
+    resetHistoryNavigation()
+
+    mirror.input = true
+    prompt.set([...rawParts, ...images], cursorPosition)
+    queueScroll()
+  }
+
+  /**
+   * 拦截 contenteditable 的 copy 事件：将 skill/file pill 的 data-content（如
+   * /prototype-builder）而非显示名写入剪贴板 text/plain，并将含 data-* 属性的
+   * pill DOM 写入 text/html。粘贴时 handlePaste 优先从 text/html 重建 pill，
+   * text/plain 作为降级路径。无 pill 时走浏览器默认行为。
+   */
+  const handleCopy = (event: ClipboardEvent) => {
+    const selection = window.getSelection()
+    if (!selection || selection.rangeCount === 0) return
+
+    const range = selection.getRangeAt(0)
+    if (!editorRef.contains(range.commonAncestorContainer)) return
+
+    const fragment = range.cloneContents()
+    if (!fragment.querySelector("[data-type='agent'], [data-type='file']")) return
+
+    let text = ""
+    const walk = (node: Node) => {
+      if (node.nodeType === Node.TEXT_NODE) {
+        text += (node.textContent ?? "").replace(/\u200B/g, "")
+        return
+      }
+      if (node.nodeType !== Node.ELEMENT_NODE) return
+      const el = node as HTMLElement
+      if (el.dataset.type === "agent" || el.dataset.type === "file" || el.dataset.type === "rule") {
+        text += el.dataset.content ?? el.textContent ?? ""
+        return
+      }
+      if (el.tagName === "BR") {
+        text += "\n"
+        return
+      }
+      for (const child of Array.from(el.childNodes)) walk(child)
+    }
+
+    const children = Array.from(fragment.childNodes)
+    children.forEach((child, index) => {
+      const isBlock = child.nodeType === Node.ELEMENT_NODE && ["DIV", "P"].includes((child as HTMLElement).tagName)
+      walk(child)
+      if (isBlock && index < children.length - 1) text += "\n"
+    })
+
+    const tempDiv = document.createElement("div")
+    tempDiv.appendChild(fragment)
+    const html = tempDiv.innerHTML
+
+    event.preventDefault()
+    event.clipboardData?.setData("text/plain", text)
+    event.clipboardData?.setData("text/html", html)
+  }
+
+  const addPart = (part: ContentPart) => {
+    if (part.type === "image") return false
+
+    const selection = window.getSelection()
+    if (!selection) return false
+
+    if (selection.rangeCount === 0 || !editorRef.contains(selection.anchorNode)) {
+      editorRef.focus()
+      const cursor = prompt.cursor() ?? promptLength(prompt.current())
+      setCursorPosition(editorRef, cursor)
+    }
+
+    if (selection.rangeCount === 0) return false
+    const range = selection.getRangeAt(0)
+    if (!editorRef.contains(range.startContainer)) return false
+
+    if (part.type === "file" || part.type === "agent" || part.type === "rule") {
+      const cursorPosition = getCursorPosition(editorRef)
+      const rawText = prompt
+        .current()
+        .map((p) => ("content" in p ? p.content : ""))
+        .join("")
+      const textBeforeCursor = rawText.substring(0, cursorPosition)
+      const query = part.type === "agent" && part.content.startsWith("/")
+        ? textBeforeCursor.match(/\/(\S*)$/)
+        : textBeforeCursor.match(/@(\S*)$/)
+      const pill = createPill(part)
+      // 使用零宽空格作为 gap：UI 上不可见，parseFromDOM 会移除它（不保留在 prompt 数据中），
+      // renderEditor 在 pill 后追加 \u200B 用于光标定位。sendFollowupDraft 负责在发送时
+      // 确保 slash agent pill 后面有空格分隔（后端 ACP 适配层用 split(/\s+/) 解析 command）。
+      const gap = document.createTextNode("\u200B")
+
+      if (query) {
+        const start = query.index ?? cursorPosition - query[0].length
+        setRangeEdge(editorRef, range, "start", start)
+        setRangeEdge(editorRef, range, "end", cursorPosition)
+      }
+
+      range.deleteContents()
+      range.insertNode(gap)
+      range.insertNode(pill)
+      range.setStartAfter(gap)
+      range.collapse(true)
+      selection.removeAllRanges()
+      selection.addRange(range)
+    }
+
+    if (part.type === "text") {
+      const fragment = createTextFragment(part.content)
+      const last = fragment.lastChild
+      range.deleteContents()
+      range.insertNode(fragment)
+      if (last) {
+        if (last.nodeType === Node.TEXT_NODE) {
+          const text = last.textContent ?? ""
+          if (text === "\u200B") {
+            range.setStart(last, 0)
+          }
+          if (text !== "\u200B") {
+            range.setStart(last, text.length)
+          }
+        }
+        if (last.nodeType !== Node.TEXT_NODE) {
+          const isBreak = last.nodeType === Node.ELEMENT_NODE && (last as HTMLElement).tagName === "BR"
+          const next = last.nextSibling
+          const emptyText = next?.nodeType === Node.TEXT_NODE && (next.textContent ?? "") === ""
+          if (isBreak && (!next || emptyText)) {
+            const placeholder = next && emptyText ? next : document.createTextNode("\u200B")
+            if (!next) last.parentNode?.insertBefore(placeholder, null)
+            placeholder.textContent = "\u200B"
+            range.setStart(placeholder, 0)
+          } else {
+            range.setStartAfter(last)
+          }
+        }
+      }
+      range.collapse(true)
+      selection.removeAllRanges()
+      selection.addRange(range)
+    }
+
+    handleInput()
+    // 必须在 handleInput 之后作废：那里会重新判定触发并可能建立新会话，
+    // 只关弹层会留下「区间还在、弹层已收」的状态，光标一移动弹层就会自己回来。
+    resetSlashSession()
+    return true
+  }
+
+  const addToHistory = (prompt: Prompt, mode: "normal" | "shell") => {
+    const currentHistory = mode === "shell" ? shellHistory : history
+    const setCurrentHistory = mode === "shell" ? setShellHistory : setHistory
+    const next = prependHistoryEntry(currentHistory.entries, prompt, mode === "shell" ? [] : historyComments())
+    if (next === currentHistory.entries) return
+    setCurrentHistory("entries", next)
+  }
+
+  createEffect(
+    on(
+      () => props.edit?.id,
+      (id) => {
+        const edit = props.edit
+        if (!id || !edit) return
+
+        for (const item of prompt.context.items()) {
+          prompt.context.remove(item.key)
+        }
+
+        for (const item of edit.context) {
+          prompt.context.add({
+            type: item.type,
+            path: item.path,
+            selection: item.selection,
+            comment: item.comment,
+            commentID: item.commentID,
+            commentOrigin: item.commentOrigin,
+            preview: item.preview,
+          })
+        }
+
+        setStore("mode", "normal")
+        setStore("popover", null)
+        setStore("historyIndex", -1)
+        setStore("savedPrompt", null)
+        prompt.set(edit.prompt, promptLength(edit.prompt))
+        requestAnimationFrame(() => {
+          editorRef.focus()
+          setCursorPosition(editorRef, promptLength(edit.prompt))
+          queueScroll()
+        })
+        props.onEditLoaded?.()
+      },
+      { defer: true },
+    ),
+  )
+
+  const navigateHistory = (direction: "up" | "down") => {
+    const result = navigatePromptHistory({
+      direction,
+      entries: store.mode === "shell" ? shellHistory.entries : history.entries,
+      historyIndex: store.historyIndex,
+      currentPrompt: prompt.current(),
+      currentComments: historyComments(),
+      savedPrompt: store.savedPrompt,
+    })
+    if (!result.handled) return false
+    setStore("historyIndex", result.historyIndex)
+    setStore("savedPrompt", result.savedPrompt)
+    applyHistoryPrompt(result.entry, result.cursor)
+    return true
+  }
+
+  const { addAttachments, removeAttachment, handlePaste } = createPromptAttachments({
+    editor: () => editorRef,
+    isDialogActive: () => !!dialog.active,
+    setDraggingType: (type) => setStore("draggingType", type),
+    focusEditor: () => {
+      editorRef.focus()
+      setCursorPosition(editorRef, promptLength(prompt.current()))
+    },
+    addPart,
+    currentDirectory: () => sdk.directory,
+    parseTextParts: (text) => {
+      if (text.includes("\n") || text.includes("\r")) return [{ type: "text", content: text, start: 0, end: 0 }]
+      const match = text.match(/^\/(\S+)\s+([\s\S]+)$/)
+      if (!match) return [{ type: "text", content: text, start: 0, end: 0 }]
+      const trigger = match[1]
+      if (!trigger) return [{ type: "text", content: text, start: 0, end: 0 }]
+      const cmd = slashCommands().find((item) => item.trigger === trigger)
+      if (!cmd) return [{ type: "text", content: text, start: 0, end: 0 }]
+      const body = match[2] ?? ""
+      return [
+        { type: "agent", name: trigger, content: `/${trigger}`, start: 0, end: 0 },
+        { type: "text", content: body ? ` ${body}` : " ", start: 0, end: 0 },
+      ]
+    },
+    readClipboardImage: platform.readClipboardImage,
+    getCurrentModelCapabilities: () => {
+      const model = local.model.current()
+      if (!model?.capabilities) return undefined
+      return {
+        attachment: model.capabilities.attachment,
+        input: {
+          text: model.capabilities.input.text,
+          image: model.capabilities.input.image,
+          audio: model.capabilities.input.audio,
+          video: model.capabilities.input.video,
+          pdf: model.capabilities.input.pdf,
+        },
+      }
+    },
+  })
+
+  const modelItems = createMemo(() =>
+    local.model
+      .list()
+      .filter((item) =>
+        local.model.visible({ modelID: item.id, providerID: item.provider.id, lingeeModelId: item.lingeeModelId }),
+      )
+      .sort(modelSortComparator),
+  )
+  const accepting = createMemo(() => {
+    const id = params.id
+    if (!id) return permission.isAutoAcceptingDirectory(sdk.directory)
+    return permission.isAutoAccepting(id, sdk.directory)
+  })
+
+  const { abort, handleSubmit } = createPromptSubmit({
+    info,
+    imageAttachments,
+    commentCount,
+    autoAccept: () => accepting(),
+    mode: () => store.mode,
+    working,
+    editor: () => editorRef,
+    queueScroll,
+    promptLength,
+    addToHistory,
+    resetHistoryNavigation: () => {
+      resetHistoryNavigation(true)
+    },
+    setMode: (mode) => setStore("mode", mode),
+    setPopover: (popover) => setStore("popover", popover),
+    newSessionWorktree: () => {
+      const projDir = selectedProjectDir()
+      const routeDir = routeProjectDir()
+      if (projDir && projDir !== routeDir) return projDir
+      if (!params.id && routeDir !== sdk.directory) return routeDir
+      return props.newSessionWorktree
+    },
+    onNewSessionWorktreeReset: props.onNewSessionWorktreeReset,
+    newSessionBaseBranch: () => props.newSessionBaseBranch,
+    // SolidJS 的 props 是 getter：直接写 `props.shouldQueue` 只会在组件创建时求值一次，
+    // 值随即被冻住。而 session.tsx 只在「已有会话 id 且非子会话」时才传 followup，
+    // /session/:id? 又是同一条路由（新任务 → 会话不重新挂载），于是新会话页发出的第一条
+    // 消息会把 shouldQueue 永久捕获成 undefined，导致 submit.ts 的入队分支永不成立。
+    // 必须用 accessor 包一层，读取时才向上取值。
+    shouldQueue: createMemo(() => props.shouldQueue?.() ?? false),
+    onQueue: (draft) => props.onQueue?.(draft),
+    onAbort: () => props.onAbort?.(),
+    onSubmit: props.onSubmit,
+    onSent: (sent) => props.onSent?.(sent),
+    canUseSkill: (skillName) => canShowSkillTab(licensePlan(), skillName),
+    // 技能开发 pill 优先于 starter 选择绑定 partner：否则普通新会话里用 /kingdee-skill-creator
+    // 建的会话落默认 kingdee-design，后端 partner 门禁不注入 query_my_tools 等专属工具
+    aiPartnerID: () => SKILL_PARTNER_MAP[currentSkillTrigger() ?? ""] ?? selectedStarterAgentID(),
+    // 原始 URL 查询参数（未合并 localStorage 持久化值）。知识目录候选注入用它判定
+    // "本次显式进入自然语言创建流程"；经持久化恢复的 selectedStarterAgentID 会把
+    // 历史模式误带进普通新会话（见 shouldInjectKnowledgeCatalog 注释）。
+    starterAgentIDFromQuery: () => normalizeStarterAgentID(searchParams.starterAgentID),
+    skillInfo: () => {
+      // 埋点口径：仅底部 6 个技能入口计入 build_skill_send（名单见 utils/skill-entries.ts）
+      // 多选：会话窗口可同时挂多个技能 pill，去重后每个命中入口各上报一条
+      return currentSkillTriggers()
+        .filter((trigger): trigger is string => isSkillEntryTab(trigger))
+        .map((trigger) => ({ skillId: trigger, devMode: skillDevMode() }))
+    },
+    // 功能开关埋点：仅在发送时上报（见 submit.ts），切换/勾选动作本身不上报
+    specMode: modeChip,
+    worktreeToggleState: () =>
+      // 仅勾选框可见可用时才上报：非 git 项目下 newSessionWorktree 会被目录推导成
+      // 非 "main" 值，直接据它上报等于凭空多一条 reuse（见 utils/worktree-track.ts）
+      resolveWorktreeTrackValue(worktreeToggleVisible(), props.newSessionWorktree),
+    // 编辑已有智能体入口（home.tsx onEdit）会带 agent / agentPid 参数；创建入口不带。
+    // 知识目录候选只在创建会话注入，避免 AI 编辑时擅自改动已有知识绑定。
+    isAgentCreation: () => !searchParams.agent && !searchParams.agentPid,
+    selectedApp: () => selectedApp(),
+    clearSelectedApp: () => setSelectedApp(null),
+    taskBoundExpert: collabSession,
+    selectedExpert: () => expertSelectionAllowed() ? selectedExpert() ?? undefined : undefined,
+    referencedKnowledge: () => selectedKnowledge(),
+    clearReferencedKnowledge: () => setSelectedKnowledge([]),
+    isErpAppDevMode: () => isErpAppDevMode(),
+    onAppRequired: () => setAppRequired(true),
+    onEnsureArchive: (app) => {
+      // 发送成功后异步创建 archive.json（苍穹应用下拉选中、尚未落盘的场景）
+      void (async () => {
+        const data = app.data as
+          | { type?: string; appCode?: string; appName?: string; appId?: string; cosmicAppName?: string; bizCloudId?: string; bizCloudName?: string; appDescription?: string }
+          | null
+        if (!data || data.type !== "cosmic") return
+        const appCode = data.appCode ?? ""
+        if (!appCode || !app.directory) return
+        // 已存在则跳过，避免重复创建
+        const existing = await findExistingAppByCode(sdk.url, app.directory, appCode)
+        if (existing) return
+        const appDir = app.path.replace(/[/\\]archive\.json$/, "")
+        const appName = data.appName ?? app.name
+        const archive = {
+          type: "cosmic",
+          appCode,
+          appName,
+          appId: data.appId ?? "",
+          cosmicAppName: data.cosmicAppName ?? "",
+          bizCloudId: data.bizCloudId ?? "",
+          bizCloudName: data.bizCloudName ?? "",
+          appDescription: data.appDescription ?? "",
+          createdAt: new Date().toISOString(),
+        }
+        try {
+          await fetch("/api/file/write", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ dir: appDir, filename: "archive.json", content: archive, mkdir: true }),
+          })
+          await upsertAppMappingRow(sdk.url, app.directory, {
+            appCode,
+            appName,
+            appDescription: data.appDescription ?? "",
+            type: "cosmic",
+            path: `app/${appCode}/archive.json`,
+          })
+        } catch (err) {
+          console.error("[prompt-input] async create cosmic archive.json failed:", err)
+        }
+      })()
+    },
+  })
+
+  // Auto-submit: when navigated from Home with a pre-filled prompt,
+  // automatically trigger submit once prompt text, model, and agent are ready.
+  // fired 需在 autoSubmit 被消费（变回 false）时同步重置，否则同一页面内第二次
+  // auto-submit（如 kdapp-confirm 连续点击）会因 fired 仍为 true 而跳过提交。
+  {
+    let fired = false
+    createEffect(() => {
+      if (!props.autoSubmit) {
+        fired = false
+        return
+      }
+      if (fired) return
+      const currentModel = local.model.current()
+      const currentAgent = local.agent.current()
+      if (!currentModel || !currentAgent) return
+      const text = prompt
+        .current()
+        .map((part) => ("content" in part ? part.content : ""))
+        .join("")
+      if (text.trim().length === 0) return
+      fired = true
+      props.onAutoSubmitConsumed?.()
+      handleSubmit(new Event("submit", { cancelable: true }))
+    })
+  }
+
+  const handleKeyDown = (event: KeyboardEvent) => {
+    // mod+u 已由全局 command 系统（file.attach）统一处理，此处不再重复响应，避免文件选择弹窗触发两次
+
+    if (event.key === "Backspace") {
+      const selection = window.getSelection()
+      if (selection && selection.isCollapsed) {
+        const node = selection.anchorNode
+        const offset = selection.anchorOffset
+
+        // Manually delete a preceding pill instead of letting the browser
+        // remove the contenteditable=false element. On Windows the browser's
+        // default Backspace can move focus outside the editor, making it
+        // unable to receive further input.
+        const getPill = (el: Node | null): HTMLElement | null =>
+          el?.nodeType === Node.ELEMENT_NODE &&
+          ((el as HTMLElement).dataset.type === "file" ||
+            (el as HTMLElement).dataset.type === "agent" ||
+            (el as HTMLElement).dataset.type === "rule")
+            ? (el as HTMLElement)
+            : null
+
+        if (node && node.nodeType === Node.TEXT_NODE) {
+          const text = node.textContent ?? ""
+          if (/^\u200B*$/.test(text) && offset <= 1) {
+            const pill = getPill(node.previousSibling)
+            if (pill) {
+              event.preventDefault()
+              pill.remove()
+              handleInput()
+              requestAnimationFrame(() => {
+                editorRef.focus()
+                setCursorPosition(editorRef, prompt.cursor() ?? 0)
+              })
+              return
+            }
+          }
+          if (/^\u200B+$/.test(text) && offset > 0) {
+            const range = document.createRange()
+            range.setStart(node, 0)
+            range.collapse(true)
+            selection.removeAllRanges()
+            selection.addRange(range)
+          }
+          // When deleting the last character of a text node that follows a pill,
+          // replace it with \u200B instead of letting the browser delete it.
+          // This keeps a non-empty text anchor after the pill — without it,
+          // some webviews (e.g. lingee-yzj) cannot place the caret, causing
+          // the editor to lose focus and become unfocusable.
+          if (offset === 1 && text.length === 1 && !/^\u200B+$/.test(text)) {
+            const pill = getPill(node.previousSibling)
+            if (pill) {
+              event.preventDefault()
+              node.textContent = "\u200B"
+              const range = document.createRange()
+              range.setStart(node, 0)
+              range.collapse(true)
+              selection.removeAllRanges()
+              selection.addRange(range)
+              handleInput()
+              return
+            }
+          }
+        }
+
+        if (node === editorRef && offset > 0) {
+          const prevChild = editorRef.childNodes[offset - 1]
+          // 光标在 \u200B gap 文本节点之后时（focusEditorEnd 的常见落点），
+          // 往前再看一个 sibling 找 pill，避免逐字符删 \u200B 再触发浏览器插入 <br>。
+          const pill =
+            prevChild?.nodeType === Node.TEXT_NODE && /^\u200B+$/.test(prevChild.textContent ?? "")
+              ? getPill(editorRef.childNodes[offset - 2] ?? null)
+              : getPill(prevChild ?? null)
+          if (pill) {
+            event.preventDefault()
+            pill.remove()
+            handleInput()
+            requestAnimationFrame(() => {
+              editorRef.focus()
+              setCursorPosition(editorRef, prompt.cursor() ?? 0)
+            })
+            return
+          }
+        }
+      }
+    }
+
+    if (CUSTOMER_SHELL_MODE_ENABLED && event.key === "!" && store.mode === "normal") {
+      const cursorPosition = getCursorPosition(editorRef)
+      if (cursorPosition === 0) {
+        setStore("mode", "shell")
+        setStore("popover", null)
+        event.preventDefault()
+        return
+      }
+    }
+
+    if (event.key === "Escape") {
+      if (store.popover) {
+        // slash 要连会话一起作废：Escape 是用户主动放弃本次触发，若只收弹层，
+        // 保留的区间会让后续光标移动把它重新唤起，Escape 就形同失效。
+        if (store.popover === "slash") resetSlashSession()
+        else closePopover()
+        event.preventDefault()
+        event.stopPropagation()
+        return
+      }
+
+      if (store.mode === "shell") {
+        setStore("mode", "normal")
+        event.preventDefault()
+        event.stopPropagation()
+        return
+      }
+
+      // if (working()) {
+      //   abort()
+      //   event.preventDefault()
+      //   event.stopPropagation()
+      //   return
+      // }
+
+      if (escBlur()) {
+        editorRef.blur()
+        event.preventDefault()
+        event.stopPropagation()
+        return
+      }
+    }
+
+    if (store.mode === "shell") {
+      const { collapsed, cursorPosition, textLength } = getCaretState()
+      if (event.key === "Backspace" && collapsed && cursorPosition === 0 && textLength === 0) {
+        setStore("mode", "normal")
+        event.preventDefault()
+        return
+      }
+    }
+
+    // Handle Shift+Enter BEFORE IME check - Shift+Enter is never used for IME input
+    // and should always insert a newline regardless of composition state
+    if (event.key === "Enter" && event.shiftKey) {
+      addPart({ type: "text", content: "\n", start: 0, end: 0 })
+      event.preventDefault()
+      return
+    }
+
+    if (event.key === "Enter" && isImeComposing(event)) {
+      return
+    }
+
+    const ctrl = event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey
+
+    if (store.popover) {
+      if (event.key === "Tab") {
+        selectPopoverActive()
+        event.preventDefault()
+        return
+      }
+      const nav = event.key === "ArrowUp" || event.key === "ArrowDown" || event.key === "Enter"
+      const ctrlNav = ctrl && (event.key === "n" || event.key === "p")
+      if (nav || ctrlNav) {
+        if (store.popover === "at") {
+          atOnKeyDown(event)
+          event.preventDefault()
+          return
+        }
+        if (store.popover === "slash") {
+          // When the slash popover has no matching results, don't intercept
+          // Enter/Arrow keys — let the user submit messages and move the
+          // caret normally instead of swallowing the keystrokes.
+          if (slashFlat().length === 0) return
+          slashOnKeyDown(event)
+        }
+        event.preventDefault()
+        return
+      }
+    }
+
+    if (ctrl && event.code === "KeyG") {
+      if (store.popover) {
+        // 与 Escape 同为主动取消，slash 需连会话一起作废，否则光标移动会把弹层唤回。
+        if (store.popover === "slash") resetSlashSession()
+        else closePopover()
+        event.preventDefault()
+        return
+      }
+      if (working()) {
+        abort()
+        event.preventDefault()
+      }
+      return
+    }
+
+    if (event.key === "ArrowUp" || event.key === "ArrowDown") {
+      if (event.altKey || event.ctrlKey || event.metaKey) return
+      const { collapsed } = getCaretState()
+      if (!collapsed) return
+
+      const cursorPosition = getCursorPosition(editorRef)
+      const textContent = prompt
+        .current()
+        .map((part) => ("content" in part ? part.content : ""))
+        .join("")
+      const direction = event.key === "ArrowUp" ? "up" : "down"
+      if (!canNavigateHistoryAtCursor(direction, textContent, cursorPosition, store.historyIndex >= 0)) return
+      if (navigateHistory(direction)) {
+        event.preventDefault()
+      }
+      return
+    }
+
+    // Note: Shift+Enter is handled earlier, before IME check
+    if (event.key === "Enter" && !event.shiftKey) {
+      event.preventDefault()
+      if (event.repeat) return
+      if (
+        working() &&
+        prompt
+          .current()
+          .map((part) => ("content" in part ? part.content : ""))
+          .join("")
+          .trim().length === 0 &&
+        imageAttachments().length === 0 &&
+        commentCount() === 0
+      ) {
+        return
+      }
+      handleSubmit(event)
+    }
+  }
+
+  return (
+    <div classList={{
+      "relative size-full flex flex-col gap-0": true,
+      "before:content-[''] before:absolute before:-top-[80px] before:left-0 before:right-0 before:h-[80px] before:bg-[linear-gradient(to_bottom,var(--prompt-input-before-bg-start),var(--prompt-input-before-bg-end))] before:pointer-events-none before:z-[1]": params.id !== undefined
+    }}>
+      <PromptPopover
+        popover={store.popover}
+        setSlashPopoverRef={(el) => (slashPopoverRef = el)}
+        isNewSession={!params.id}
+        newSessionPopoverWidth={newSessionPopoverWidth()}
+        atFlat={atFlat()}
+        atActive={atActive() ?? undefined}
+        atKey={atKey}
+        setAtActive={setAtActive}
+        onAtSelect={handleAtSelect}
+        slashFlat={slashFlat()}
+        slashGrouped={slashGrouped() ?? []}
+        slashActive={slashActive() ?? undefined}
+        setSlashActive={setSlashActive}
+        onSlashSelect={handleSlashSelect}
+        commandKeybind={command.keybind}
+        skillsLoading={slashSkillsLoading()}
+        t={(key) => language.t(key as Parameters<typeof language.t>[0])}
+      />
+      {/* 会话任务条:子代理 + 后台进程的统一展示,作为 composer 灰色列的顶部段落
+          (与下方 hood 同底色同宽度拼成连续一列),不再悬浮独立胶囊。展开/收起、
+          进子会话、停止后台进程等交互均在组件内完成。 */}
+      <SessionTaskDock state={taskDock} connectedBelow={hoodVisible()} />
+      {/* 非新会话:输入框上方展示项目名 + 分支名(对齐 CC,只读)。
+          渐变遮罩是根节点的 before: 伪元素(位于根顶部上方 80px),故天然在本条之上;
+          待办/followup/revert 等 dock 由 SessionComposerRegion 渲染在 PromptInput 之上,也都在本条之上。 */}
+      {/* Banner hood：分支信息 banner(上)与进度/目标 banner(下)合并成一块连续灰色底座——圆角只在
+          顶部,底部平直,与下方输入框灰色外框无缝衔接成一列。展示一个 → padding 8/16/32/16;展示两个
+          → padding 12/12/46/12 并在两条之间加 1px 分隔线。底部较大的 padding 是与输入框衔接的留白。 */}
+      {/* hood 始终渲染,以便内部的进度 banner 始终挂载并上抬其可见性(goalBannerVisible);
+          仅在有内容(bannerCount>0)时才应用底色/圆角/内边距,否则塌缩为 0 高度不可见。 */}
+      <div
+        data-component="composer-banner-hood"
+        class="relative z-[2] shrink-0 w-full flex flex-col transition-colors duration-200 ease-out"
+        classList={{
+          // hood 只提供底色/圆角/水平内边距;上下留白、以及两条 banner 之间的间距,统一由各 banner
+          // 自身的 pt-[9px]/pb-[7px] 提供。因此单/双 banner 顶部间距一致(9px),底部与输入框衔接的间距也一致
+          // (7+外框2=9px,小间距);双 banner 时中间靠 pb-7 + 分隔线 + pt-9 分隔,不再有多余的大块留白。
+          // 水平缩进:下方 inline style 设 width:calc(100%-40px)+margin:auto,确保左右始终各留 20px 间隙,
+          //   max-width:760px 在宽屏下封顶——窄屏时缩进不消失。
+          // 底色改由下方 style 控制。
+          // 任务条可见时顶部圆角归任务条,hood 只保留平直顶边,两段拼成连续灰色列。
+          "rounded-[30px_30px_0_0] backdrop-blur-[2px] text-[14px] leading-[22px] px-4": hoodVisible() && !taskDock.visible(),
+          "rounded-t-[0px] backdrop-blur-[2px] text-[14px] leading-[22px] px-4": hoodVisible() && taskDock.visible(),
+        }}
+        style={hoodVisible() ? {
+          background: "var(--hood-bg)",
+          width: "calc(100% - 40px)",
+          margin: "0 auto",
+          "max-width": "760px",
+        } : undefined}
+      >
+      {/* 非 git 项目不展示整行(项目+分支+变更);gitHeaderVisible 由父级按 sync.project.vcs==="git" 计算。 */}
+      <Show when={branchHeaderVisible()}>
+        <div
+          data-component="prompt-session-header"
+          data-banner="branch"
+          // min-h-[44px] 锁死整行高度:提交更改/PR 按钮(h-7=28px)出现或消失时,行高恒为 44px,不再抖动。
+          // 上下内边距 9/7(非对称):hood 高度仍 44px,但内容整体下移 1px,基本抵消下方 composer 外框 p-[1px]
+          // 垫的 1px 灰边,内容在整条灰带(hood 44 + 外框 1 = 45)里接近垂直居中(上 9 / 下 7+1=8)。
+          // 不再补 pl-[6px]:进度 banner 的图标按钮已由 size-7 收窄为 w-4,图标glyph 落在 hood 左内边距(16px);
+          //   folder 图标同样落在 16px,与进度图标、以及两 banner 间的分隔线左对齐(否则 folder 会内缩 6px,
+          //   使分隔线看起来比图标更靠左、过长)。
+          // display: inline-flex + justify-between,左右两端对齐;左侧 nowrap,避免按钮出现时项目/分支换行。
+          class="relative inline-flex w-full items-center justify-between pt-[9px] pb-[7px] min-h-[44px]"
+        >
+          <div class="flex items-center flex-nowrap gap-x-5 min-w-0">
+            <Tooltip placement="top" value={effectiveProjectDir()} contentStyle={{ "word-break": "break-all", "white-space": "normal" }}>
+              <span class="flex items-center gap-1 min-w-0 max-w-[280px] text-center text-[var(--neutral-600,rgba(0,0,0,0.64))] font-normal">
+                <Icon name="folder-group" size="small" class="size-4 shrink-0" />
+                {/* 窄会话面板(≤420px)由 prompt-input-bar.css 隐藏 prompt-hood-name 仅留图标；hover 全名走本 Tooltip */}
+                <span class="truncate prompt-hood-name">{selectedProjectName()}</span>
+              </span>
+            </Tooltip>
+            {/* 分支块:窄态同样仅留图标；Tooltip 补充 hover 全名，与项目块行为一致 */}
+            <Show when={currentBranch()}>
+              <Tooltip placement="top" value={currentBranch()}>
+                <span class="flex items-center gap-1 min-w-0 max-w-[240px] text-center text-[var(--neutral-600,rgba(0,0,0,0.64))] font-normal">
+                  <Icon name="git-branch-network" size="small" class="size-4 shrink-0" />
+                  <span class="truncate prompt-hood-name">{currentBranch()}</span>
+                </span>
+              </Tooltip>
+            </Show>
+          </div>
+          <Show when={props.gitHeaderReady}>
+          <div class="flex items-center gap-5 shrink-0">
+            <Show when={((props.gitHeaderDiff?.additions ?? 0) + (props.gitHeaderDiff?.deletions ?? 0)) > 0}>
+              <Tooltip placement="top" value={language.t("git.header.changes")}>
+                <button
+                  type="button"
+                  data-action="git-header-changes"
+                  class="inline-flex items-center [&_[data-slot='diff-changes-additions']]:!font-[inherit] [&_[data-slot='diff-changes-additions']]:!text-[14px] [&_[data-slot='diff-changes-additions']]:!font-normal [&_[data-slot='diff-changes-additions']]:!leading-[22px] [&_[data-slot='diff-changes-additions']]:!text-center [&_[data-slot='diff-changes-additions']]:!text-[var(--green-600,#04B545)] [&_[data-slot='diff-changes-deletions']]:!font-[inherit] [&_[data-slot='diff-changes-deletions']]:!text-[14px] [&_[data-slot='diff-changes-deletions']]:!font-normal [&_[data-slot='diff-changes-deletions']]:!leading-[22px] [&_[data-slot='diff-changes-deletions']]:!text-center [&_[data-slot='diff-changes-deletions']]:!text-[var(--red-600,#F12234)]"
+                  onClick={() => props.onGitHeaderOpenReview?.()}
+                >
+                  <DiffChanges changes={props.gitHeaderDiff ?? { additions: 0, deletions: 0 }} />
+                </button>
+              </Tooltip>
+            </Show>
+            <Show when={props.gitHeaderMode === "commit"}>
+              <Tooltip
+                placement="top"
+                inactive={!props.gitHeaderBusy && !specLocked()}
+                value={specLocked() ? language.t("git.header.specLocked") : language.t("git.header.busy")}
+              >
+                <Button
+                  variant="primary"
+                  size="normal"
+                  class="h-7 px-3 rounded-[999px] text-[14px] leading-[22px] font-normal disabled:!bg-[var(--primary-300,#B7C1FF)] disabled:!cursor-not-allowed"
+                  style={buttons()}
+                  disabled={props.gitHeaderBusy || specLocked()}
+                  onClick={() => props.onGitHeaderCommit?.()}
+                >
+                  {language.t("git.header.commit")}
+                </Button>
+              </Tooltip>
+            </Show>
+            <Show when={props.gitHeaderMode === "pr"}>
+            <div class="flex items-center self-stretch">
+              <Tooltip
+                placement="top"
+                inactive={!props.gitHeaderBusy && !specLocked()}
+                value={specLocked() ? language.t("git.header.specLocked") : language.t("git.header.busy")}
+              >
+                <Button
+                  variant="ghost"
+                  size="normal"
+                  class="h-7 flex items-center gap-2 !pt-0 !pb-0 !pl-2 !pr-1 rounded-[24px_0_0_24px] !border-0 enabled:hover:!bg-[var(--neutral-50,rgba(0,0,0,0.03))] text-[14px] leading-[22px] font-normal text-[var(--neutral-700,rgba(0,0,0,0.82))] disabled:cursor-not-allowed disabled:!text-[var(--neutral-400)]"
+                  style={{ background: "var(--surface-raised-strong,#fff)" }}
+                  disabled={prMainDisabled()}
+                  onClick={() => runPrMode()}
+                >
+                  {prModeLabel()}
+                </Button>
+              </Tooltip>
+              <DropdownMenu placement="top-end" gutter={6}>
+                <DropdownMenu.Trigger
+                  as={Button}
+                  variant="ghost"
+                  size="normal"
+                  aria-label={language.t("git.header.pr")}
+                  disabled={props.gitHeaderBusy || specLocked()}
+                  class="group h-7 aspect-square !p-1 flex items-center justify-center rounded-[0_12px_12px_0] !border-0 enabled:hover:!bg-[var(--neutral-50,rgba(0,0,0,0.03))] transition-colors enabled:data-[expanded]:!bg-[var(--neutral-50,rgba(0,0,0,0.03))] disabled:cursor-not-allowed"
+                  style={{ background: "var(--surface-raised-strong,#fff)" }}
+                >
+                  <Icon
+                    name="chevron-down-16"
+                    size="small"
+                    class="!size-4 shrink-0 transition-transform duration-150 group-data-[expanded]:rotate-180 text-[var(--neutral-700,rgba(0,0,0,0.82))] group-disabled:!text-[var(--neutral-500,rgba(0,0,0,0.46))]"
+                    style={{ width: "16px", height: "16px" }}
+                  />
+                </DropdownMenu.Trigger>
+                <DropdownMenu.Portal>
+                  <DropdownMenu.Content class="min-w-[200px]">
+                    <DropdownMenu.Item onSelect={() => setPrMode("mode", "create")}>
+                      <DropdownMenu.ItemLabel class="flex-1">{language.t("git.header.pr")}</DropdownMenu.ItemLabel>
+                      <Show when={prMode.mode === "create"}><Icon name="check" size="small" class="text-[var(--neutral-600)]" /></Show>
+                    </DropdownMenu.Item>
+                    <DropdownMenu.Item onSelect={() => setPrMode("mode", "draft")}>
+                      <DropdownMenu.ItemLabel class="flex-1">{language.t("git.header.prDraft")}</DropdownMenu.ItemLabel>
+                      <Show when={prMode.mode === "draft"}><Icon name="check" size="small" class="text-[var(--neutral-600)]" /></Show>
+                    </DropdownMenu.Item>
+                    <DropdownMenu.Item onSelect={() => setPrMode("mode", "manual")}>
+                      <DropdownMenu.ItemLabel class="flex-1">
+                        {language.t(props.gitHeaderHasOpenPr ? "git.header.prView" : "git.header.prManual")}
+                      </DropdownMenu.ItemLabel>
+                      <Show when={prMode.mode === "manual"}><Icon name="check" size="small" class="text-[var(--neutral-600)]" /></Show>
+                    </DropdownMenu.Item>
+                  </DropdownMenu.Content>
+                </DropdownMenu.Portal>
+              </DropdownMenu>
+            </div>
+            </Show>
+          </div>
+          </Show>
+        </div>
+      </Show>
+      {/* 两个 banner 都在时,中间 1px 分隔线:随 hood px-4 内缩到 16px,左端与两 banner 的图标对齐。
+          颜色用 --neutral-100(浅色 black-6 / 暗黑 white-6)以适配暗黑。 */}
+      <Show when={bannerCount() === 2}>
+        <div class="h-px w-full shrink-0 bg-[var(--neutral-100)]" />
+      </Show>
+      {/* 进度/目标 banner:位于 hood 底部(分支行之下)。始终挂载(内部自控显隐并上抬可见性)。 */}
+      {props.goalBanner}
+      </div>
+      <Show
+        when={!sessionArchived()}
+        fallback={
+          <div
+            data-component="prompt-archived-notice"
+            class="flex min-h-[128px] flex-col items-center justify-center gap-4 rounded-[32px] border border-[var(--session-down-border-color)] bg-[var(--prompt-input-bg)] px-6 py-8 [box-shadow:var(--prompt-input-shadow-normal)]"
+          >
+            <span class="text-center leading-[22px] font-[400] text-[var(--neutral-500)] [font-size:var(--font-size-base)]">
+              {language.t("prompt.archived.notice")}
+            </span>
+            <Button
+              variant="secondary"
+              size="large"
+              icon="unarchive"
+              disabled={unarchiving()}
+              onClick={() => void unarchiveSession()}
+              style={{ height: "36px", padding: "0 12px", "font-size": "14px", "font-weight": "500", "line-height": "22px" }}
+              class="rounded-[36px] border-[var(--brand-button-primary-base)] text-[var(--brand-button-primary-base)] hover:bg-[var(--surface-base-hover)] [&_[data-slot='icon-svg']]:text-[var(--brand-button-primary-base)]"
+            >
+              {language.t("prompt.archived.unarchive")}
+            </Button>
+          </div>
+        }
+      >
+      {/* hood 在上方时,输入框外框顶部改为直角,与 hood 平直的底边拼成一条连续灰色列;无 hood(如新会话)保持四角全圆。
+          外框灰边宽度按场景区分:会话中(有 session id)1px,新会话保持 3px;
+          hood 可见时去掉 padding(无边框),让输入区域与 hood 拼成连续底色;
+          聚焦时外框过渡为主色微染(--primary-500-6),对齐上游 beta 的焦点态高亮。 */}
+      <div
+        class="flex flex-col gap-0 transition-colors duration-200 ease-out"
+        classList={{
+          "p-[1px]": params.id !== undefined && !hoodVisible() && !taskDock.visible(),
+          "p-[3px]": params.id === undefined,
+          "rounded-[30px]": true,
+        }}
+        style={{
+          background: store.focused ? "var(--primary-500-6)" : "var(--neutral-50)",
+          "box-shadow": hoodVisible() || taskDock.visible() ? "0px -3px 10px 0px var(--shadow-colorblack-subtle)" : undefined,
+        }}
+      >
+      <DockContainer
+        ref={dockContainerRef}
+        // 会话中(有 session id)去掉阴影改用细边框展示;新会话保持阴影(见 index.css data-in-session 规则)
+        data-in-session={params.id !== undefined ? "" : undefined}
+
+        classList={{
+          "group/prompt-input": true,
+          "h-auto min-h-[96px]": !!params.id,
+          "min-h-[unset]": !params.id,
+          "!p-0": true,
+          "border-icon-info-active border-dashed": store.draggingType !== null,
+          // 未拖拽时清除默认边框样式;会话中(有 session id)保留边框,配合 data-in-session 规则用细边框替代阴影
+          "!border-0": store.draggingType === null && params.id === undefined,
+          [props.class ?? ""]: !!props.class,
+        }}
+      >
+      <DockShellForm
+        onSubmit={handleSubmit}
+        class="flex h-full min-h-0 flex-col"
+      >
+        <PromptDragOverlay
+          type={store.draggingType}
+          label={language.t(store.draggingType === "@mention" ? "prompt.dropzone.file.label" : "prompt.dropzone.label")}
+        />
+        <div
+          class="relative flex-1 min-h-0 max-h-[220px] overflow-y-auto no-scrollbar"
+          ref={(el) => (scrollRef = el)}
+          style={{ "scroll-padding-bottom": space() }}
+          onMouseDown={(e) => {
+            const target = e.target
+            if (!(target instanceof HTMLElement)) return
+            if (target.closest('[data-action="prompt-attach"], [data-action="prompt-local-test-agent"], [data-action="prompt-submit"], [data-action="prompt-asr"], [data-action="prompt-enhance"]')) {
+              return
+            }
+            editorRef?.focus()
+          }}
+        >
+          <PromptContextItems
+            items={contextItems()}
+            active={(item) => {
+              if (item.type !== "file") return false
+              const active = comments.active()
+              return !!item.commentID && item.commentID === active?.id && item.path === active?.file
+            }}
+            openComment={(item) => {
+              if (item.type !== "file") return
+              openComment(item)
+            }}
+            remove={(item) => {
+              if (item.type === "file" && item.commentID) comments.remove(item.path, item.commentID)
+              prompt.context.remove(item.key)
+            }}
+            t={(key) => language.t(key as Parameters<typeof language.t>[0])}
+          />
+          <PromptImageAttachments
+            attachments={imageAttachments()}
+            onOpen={(attachment) =>
+              dialog.show(() => <ImagePreview src={previewUrl(attachment)} alt={attachment.filename} />)
+            }
+            onRemove={removeAttachment}
+            removeLabel={language.t("prompt.attachment.remove")}
+          />
+          <Show when={selectedKnowledge().length > 0}>
+            <div class="relative px-4 pb-1 pt-4">
+              <div
+                ref={setKnowledgeScrollEl}
+                class="flex gap-1 overflow-x-auto no-scrollbar"
+                onScroll={updateKnowledgeScrollState}
+                onWheel={(e) => {
+                  if (e.deltaX !== 0) return
+                  const el = e.currentTarget
+                  if (el.scrollWidth <= el.clientWidth) return
+                  el.scrollLeft += e.deltaY
+                  e.preventDefault()
+                }}
+              >
+                <For each={selectedKnowledge()}>
+                  {(item) => (
+                    <div class="flex items-center justify-center gap-1 px-2 py-1 rounded-[12px] bg-[var(--primary-50)] whitespace-nowrap shrink-0">
+                      <Icon
+                        name={item.id === ENTERPRISE_KNOWLEDGE_BASE_ID ? "building-16" : "wiki-16"}
+                        class="size-4 shrink-0 text-[var(--primary-600)]"
+                      />
+                      <span class="text-[14px] font-[500] leading-[22px] text-[var(--primary-600)] truncate max-w-[160px]">{item.name}</span>
+                      <button
+                        type="button"
+                        aria-label={language.t("prompt.tools.knowledgeRemove")}
+                        class="ml-[2px] shrink-0 flex items-center justify-center size-[14px] text-[var(--primary-400)] cursor-pointer"
+                        onClick={() => removeKnowledge(item.id)}
+                      >
+                        <Icon name="close-small-fill" class="size-3.5" style={{ color: "var(--primary-400)" }} />
+                      </button>
+                    </div>
+                  )}
+                </For>
+              </div>
+              <Show when={canScrollKnowledgeLeft()}>
+                <div class="absolute left-0 top-4 bottom-1 z-10 flex items-stretch pointer-events-none">
+                  <div class="flex items-center justify-center pointer-events-auto" style={{ background: "var(--background-base)" }}>
+                    <button
+                      type="button"
+                      onClick={() => scrollKnowledgeTags("left")}
+                      aria-label="scroll left"
+                      class="flex items-center justify-center rounded-full border border-[var(--surface-raised-base)] text-[var(--neutral-700)] cursor-pointer hover:bg-[var(--neutral-100)] transition-colors shrink-0 leading-none"
+                      style={{ width: "20px", height: "20px" }}
+                    >
+                      <Icon name="chevron-left-sm" size="small" class="size-3.5" />
+                    </button>
+                  </div>
+                  <div class="w-6 pointer-events-none" style={{ background: "linear-gradient(to right, var(--background-base), transparent)" }} />
+                </div>
+              </Show>
+              <Show when={canScrollKnowledgeRight()}>
+                <div class="absolute right-0 top-4 bottom-1 z-10 flex items-stretch pointer-events-none">
+                  <div class="w-6 pointer-events-none" style={{ background: "linear-gradient(to left, var(--background-base), transparent)" }} />
+                  <div class="flex items-center justify-center pointer-events-auto" style={{ background: "var(--background-base)" }}>
+                    <button
+                      type="button"
+                      onClick={() => scrollKnowledgeTags("right")}
+                      aria-label="scroll right"
+                      class="flex items-center justify-center rounded-full border border-[var(--surface-raised-base)] text-[var(--neutral-700)] cursor-pointer hover:bg-[var(--neutral-100)] transition-colors shrink-0 leading-none"
+                      style={{ width: "20px", height: "20px" }}
+                    >
+                      <Icon name="chevron-right-sm" size="small" class="size-3.5" />
+                    </button>
+                  </div>
+                </div>
+              </Show>
+            </div>
+          </Show>
+          <div class="relative">
+            <div
+              data-component="prompt-input"
+              ref={(el) => {
+                editorRef = el
+                props.ref?.(el)
+              }}
+              role="textbox"
+              aria-multiline="true"
+              aria-label={placeholder()}
+              contenteditable="true"
+              autocapitalize={store.mode === "normal" ? "sentences" : "off"}
+              autocorrect={store.mode === "normal" ? "on" : "off"}
+              spellcheck={false}
+              inputMode="text"
+              // @ts-expect-error
+              autocomplete="off"
+              onInput={handleInput}
+              onPaste={handlePaste}
+              onCopy={handleCopy}
+              onFocus={() => setStore("focused", true)}
+              onCompositionStart={handleCompositionStart}
+              onCompositionEnd={handleCompositionEnd}
+              onBlur={handleBlur}
+              onKeyDown={handleKeyDown}
+              // 光标移动不产生 input 事件，需单独同步 slash 弹窗的关键词与开关。
+              // 用 keyup 而非 keydown：keydown 时光标尚未移动到新位置。
+              onKeyUp={handleCaretKeyUp}
+              onMouseUp={syncSlashOnCaretMove}
+              classList={{
+                "select-text": true,
+                "w-full px-4 pb-4 text-[16px] leading-[30px] text-[var(--prompt-input-text)] focus:outline-none whitespace-pre-wrap": true,
+                "pt-4": selectedKnowledge().length === 0 && imageAttachments().length === 0,
+                // 有附件时间距由附件区的 pb-3(12px) 提供,输入框不再加上内边距
+                "pt-0": selectedKnowledge().length === 0 && imageAttachments().length > 0,
+                "pt-1": selectedKnowledge().length > 0,
+                "mb-4": !params.id,
+                "[&_[data-type=file]]:text-syntax-property": true,
+                "[&_[data-type=agent]]:text-syntax-type": true,
+                "[&_[data-type=agent]]:mr-[8px]": true,
+                "font-mono!": store.mode === "shell",
+                "enhance-text-shimmer": enhance.enhancing(),
+              }}
+              style={{ "padding-bottom": space() }}
+            />
+            <Show when={cosmicAppTriggerMount()}>
+              <Portal mount={cosmicAppTriggerMount()!}>
+                <CosmicAppDropdown
+                  embedded
+                  placement={promptDropdownPlacement()}
+                  selected={() => {
+                    const a = selectedApp()
+                    return a ? { name: a.name, appId: (a.data?.appId as string) || a.title } : null
+                  }}
+                  onPick={handlePickCosmicApp}
+                  appRequired={appRequired}
+                />
+              </Portal>
+            </Show>
+            <Show when={!prompt.dirty()}>
+              <div
+              class="absolute top-0 inset-x-0 px-4 text-[16px] leading-[30px] text-[var(--prompt-input-placeholder)] pointer-events-none whitespace-nowrap truncate"
+              classList={{
+                "font-mono!": store.mode === "shell",
+                "pt-4": selectedKnowledge().length === 0 && imageAttachments().length === 0,
+                "pt-0": selectedKnowledge().length === 0 && imageAttachments().length > 0,
+                "pt-1": selectedKnowledge().length > 0,
+              }}
+                style={{ "padding-bottom": space() }}
+              >
+                {placeholder()}
+              </div>
+            </Show>
+          </div>
+        </div>
+      <input
+        ref={fileInputRef}
+        type="file"
+        multiple
+        accept={ACCEPTED_FILE_TYPES.join(",")}
+        class="hidden"
+        onChange={(e) => {
+          const list = e.currentTarget.files
+          if (list) void addAttachments(Array.from(list))
+          e.currentTarget.value = ""
+          // 文件选择对话框关闭后将焦点归还编辑器，避免 Enter 键再次触发 file input 的 click
+          editorRef?.focus()
+        }}
+      />
+      <Show when={store.mode === "normal" || store.mode === "shell"}>
+        <DockTray attach="top" class="shrink-0">
+          <div class="flex items-center justify-between gap-1 min-w-0 px-2.5 pb-2.5">
+            <div
+              aria-hidden={store.mode !== "normal"}
+              style={{
+                display: store.mode !== "normal" ? "none" : undefined,
+                "pointer-events": buttonsSpring() > 0.5 ? "auto" : "none",
+              }}
+            >
+              <div class="flex items-center gap-2">
+                  <DropdownMenu placement={promptDropdownPlacement()} gutter={10}>
+                    <DropdownMenu.Trigger
+                      as={Button}
+                      data-action="prompt-attach"
+                      type="button"
+                      variant="ghost"
+                      class="size-9 p-0 rounded-[50%] hover:bg-[var(--neutral-50)] hover:[--icon-fill:var(--neutral-900)] [--icon-fill:var(--neutral-700)] bg-transparent border-none"
+                      style={buttons()}
+                      disabled={store.mode !== "normal"}
+                      tabIndex={store.mode === "normal" ? undefined : -1}
+                      aria-label={language.t("prompt.action.attachFile")}
+                    >
+                      <Icon name="plus" class="size-9" />
+                    </DropdownMenu.Trigger>
+                    <DropdownMenu.Portal>
+                      <DropdownMenu.Content
+                        class="min-w-[260px] p-1 rounded-[16px] flex flex-col gap-[2px]"
+                        onCloseAutoFocus={(event) => {
+                          event.preventDefault()
+                          restoreFocus()
+                        }}
+                      >
+                        <DropdownMenu.Item
+                          class="flex items-center gap-1 px-2 cursor-pointer text-[var(--neutral-700)]"
+                          onSelect={pick}
+                        >
+                          <Icon name="attachment" size="small" class="text-[var(--neutral-600)]" />
+                          <span class="text-[14px] font-[400] leading-[20px]">{language.t("prompt.tools.upload")}</span>
+                        </DropdownMenu.Item>
+                        <DropdownMenu.Item
+                          class="flex items-center gap-1 px-2 cursor-pointer text-[var(--neutral-700)]"
+                          onSelect={pickFolder}
+                        >
+                          <Icon name="folder-16" size="small" class="text-[var(--neutral-600)]" />
+                          <span class="text-[14px] font-[400] leading-[20px]">{language.t("prompt.tools.uploadFolder")}</span>
+                        </DropdownMenu.Item>
+                        {/* 引用知识 submenu：仅当 bootstrap 返回 knowledgeEnabled=true 时显示 */}
+                        <Show when={getLingeeBridge()?.getConfig()?.auth?.knowledgeEnabled ?? false}>
+                          <DropdownMenu.Sub placement="right-start" gutter={4}>
+                          <DropdownMenu.SubTrigger class="flex items-center justify-between gap-1 px-2 cursor-pointer text-[var(--neutral-700)]">
+                            <span class="flex items-center gap-1">
+                              <Icon name="wiki-16" size="small" class="text-[var(--neutral-600)]" />
+                              <span class="text-[14px] font-[400] leading-[20px]">{language.t("prompt.tools.referenceKnowledge")}</span>
+                            </span>
+                            <Icon name="chevron-right-16" size="small" class="text-[var(--neutral-400)]" />
+                          </DropdownMenu.SubTrigger>
+                          <DropdownMenu.Portal>
+                            <DropdownMenu.SubContent class="p-1 rounded-[16px] ml-1 flex flex-col gap-[2px]" style={{ "min-width": "220px" }}>
+                              {/* 最近选择：无记录时不显示 */}
+                              <Show when={recentKnowledgeFiltered().length > 0}>
+                                <div class="flex items-center justify-between px-2 pt-1">
+                                  <span class="text-[11px] leading-[16px] text-[var(--neutral-400)]">{language.t("prompt.tools.knowledgeRecent")}</span>
+                                  <span
+                                    class="flex items-center gap-1 text-[11px] leading-[16px] text-[var(--neutral-400)] hover:text-[var(--neutral-600)] cursor-pointer [--icon-fill:currentColor]"
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      setRecentKnowledge([])
+                                    }}
+                                    onPointerDown={(e) => e.stopPropagation()}
+                                  >
+                                    <Icon name="trash-16" size="xs" class="shrink-0" />
+                                    {language.t("prompt.tools.knowledgeClearAll")}
+                                  </span>
+                                </div>
+                                {/* 单条菜单项高 32px + 2px 间距，186px 恰好露出 5.5 条，超出滚动 */}
+                                <CustomScrollContainer maxHeight="186px" contentClass="flex flex-col gap-[2px]">
+                                  <For each={recentKnowledgeFiltered()}>
+                                    {(item) => (
+                                      <DropdownMenu.Item
+                                        class="group flex items-center gap-1 px-2 cursor-pointer text-[var(--neutral-700)]"
+                                        onSelect={() => addKnowledge(item)}
+                                      >
+                                        <Icon
+                                          name={item.id === ENTERPRISE_KNOWLEDGE_BASE_ID ? "building-16" : "wiki-16"}
+                                          size="small"
+                                          class="shrink-0 text-[var(--neutral-600)]"
+                                        />
+                                        <span class="text-[14px] font-[400] leading-[20px] truncate flex-1 min-w-0">{item.name}</span>
+                                        <span
+                                          class="shrink-0 cursor-pointer text-[var(--neutral-400)] hover:text-[var(--neutral-600)] opacity-0 group-hover:opacity-100 transition-opacity"
+                                          on:pointerdown={(e) => e.stopPropagation()}
+                                          on:pointerup={(e) => e.stopPropagation()}
+                                          on:click={(e) => {
+                                            e.stopPropagation()
+                                            setRecentKnowledge((prev) => prev.filter((k) => k.id !== item.id))
+                                          }}
+                                        >
+                                          <Icon name="close-small" size="small" />
+                                        </span>
+                                      </DropdownMenu.Item>
+                                    )}
+                                  </For>
+                                </CustomScrollContainer>
+                                <DropdownMenu.Separator class="mx-0" />
+                              </Show>
+                              <DropdownMenu.Item
+                                class="flex items-center justify-between gap-2 px-2 cursor-pointer text-[var(--neutral-700)]"
+                                onSelect={openKnowledgePicker}
+                              >
+                                <span class="flex items-center gap-1">
+                                <Icon name="grid-16" size="small" class="text-[var(--neutral-600)]" />
+                                <span class="text-[14px] font-[400] leading-[20px]">{language.t("prompt.tools.knowledgeSelectEnterprise")}</span>
+                                </span>
+                                <span class="text-[11px] text-[var(--neutral-400)]">{language.t("prompt.tools.knowledgeCustomSelect")}</span>
+                              </DropdownMenu.Item>
+                              <DropdownMenu.Item
+                                class="flex items-center justify-between gap-2 px-2 cursor-pointer text-[var(--neutral-700)]"
+                                onSelect={() => {
+                                  const item = {
+                                    id: ENTERPRISE_KNOWLEDGE_BASE_ID,
+                                    name: language.t("prompt.tools.knowledgeAutoRetrieve"),
+                                    path: "",
+                                    kind: "catalog" as const,
+                                    scope: "enterprise" as KnowledgeBinding["scope"],
+                                  }
+                                  if (selectedKnowledge().some((k) => k.id === ENTERPRISE_KNOWLEDGE_BASE_ID)) return
+                                  setSelectedKnowledge((prev) => [...prev, item])
+                                }}
+                              >
+                                <span class="flex items-center gap-1">
+                                <Icon name="building-16" size="small" class="text-[var(--neutral-600)]" />
+                                <span class="text-[14px] font-[400] leading-[20px]">{language.t("prompt.tools.knowledgeAutoRetrieve")}</span>
+                                </span>
+                                <span class="text-[11px] text-[var(--neutral-400)]">{language.t("prompt.tools.knowledgeAutoRetrieveHint")}</span>
+                              </DropdownMenu.Item>
+                            </DropdownMenu.SubContent>
+                          </DropdownMenu.Portal>
+                          </DropdownMenu.Sub>
+                        </Show>
+                        {/* Mutually-exclusive Spec / 目标 modes (flag-gated); picking the active one clears it. */}
+                        <Show when={specEnabled() || questEnabled()}>
+                          <div style={{ display: "flex", padding: "0 8px", "flex-direction": "column", "align-items": "flex-start", "align-self": "stretch" }}>
+                            <DropdownMenu.Separator class="mx-0 w-full" />
+                          </div>
+                        </Show>
+                        <Show when={specEnabled()}>
+                          <DropdownMenu.Item
+                            class="mode-card-item flex items-start justify-between gap-2 cursor-pointer"
+                            onSelect={() => toggleMode("spec")}
+                          >
+                            <span class="flex flex-col gap-[2px] min-w-0">
+                              <span class="flex items-center gap-2">
+                                <Icon name="spec" size="small" class="text-[var(--neutral-600)]" />
+                                <span class="text-[14px] font-[600] leading-[20px]">{agentLabel("spec")}</span>
+                              </span>
+                              <span class="text-[12px] font-[400] leading-[16px] text-[var(--dropdown-fg-color-text-grouplabel)]">{language.t("agent.desc.spec")}</span>
+                            </span>
+                            <Show when={currentMode() === "spec"}>
+                              <Icon name="check" size="small" style={{ color: "var(--neutral-600, rgba(0,0,0,0.64))" }} class="mt-[2px]" />
+                            </Show>
+                          </DropdownMenu.Item>
+                        </Show>
+                        <Show when={questEnabled()}>
+                          <DropdownMenu.Item
+                            class="mode-card-item flex items-start justify-between gap-2 cursor-pointer"
+                            onSelect={() => toggleMode("quest")}
+                          >
+                            <span class="flex flex-col gap-[2px] min-w-0">
+                              <span class="flex items-center gap-2">
+                                <Icon name="goal" size="small" class="text-[var(--neutral-600)]" />
+                                <span class="text-[14px] font-[600] leading-[20px]">{agentLabel("quest")}</span>
+                              </span>
+                              <span class="text-[12px] font-[400] leading-[16px] text-[var(--dropdown-fg-color-text-grouplabel)]">{language.t("agent.desc.quest")}</span>
+                            </span>
+                            <Show when={currentMode() === "quest"}>
+                              <Icon name="check" size="small" style={{ color: "var(--neutral-600, rgba(0,0,0,0.64))" }} class="mt-[2px]" />
+                            </Show>
+                          </DropdownMenu.Item>
+                        </Show>
+                        {/* "My tools" submenu is skill-dev only. */}
+                        <Show when={isSkillDevMode()}>
+                        <DropdownMenu.Separator class="mx-0" />
+                        <DropdownMenu.Sub placement="right-start" gutter={4}>
+                          <DropdownMenu.SubTrigger class="flex items-center justify-between gap-1 px-2 cursor-pointer text-[var(--neutral-700)]">
+                            <span class="flex items-center gap-1">
+                              <CubeIcon class="text-[var(--neutral-600)]" />
+                              <span class="text-[12px] font-[400] leading-[18px]">{language.t("prompt.tools.trigger")}</span>
+                            </span>
+                            <Icon name="chevron-right-16" size="small" class="text-[var(--neutral-400)]" />
+                          </DropdownMenu.SubTrigger>
+                          <DropdownMenu.Portal>
+                            <DropdownMenu.SubContent
+                              class="p-1 rounded-[20px] ml-1 flex flex-col gap-0.5"
+                              style={{ "min-width": "260px", width: "260px" }}
+                            >
+                              <List
+                                class="max-h-[280px] gap-0 px-0"
+                                items={() => myToolsStore.items}
+                                key={(x) => x?.toolId ?? ""}
+                              >
+                                {(entry) => (
+                                  // Block focus entering menu content from row interactions: mousedown would
+                                  // focus the row <button>, and Kobalte Switch focuses its inner input on click.
+                                  // Both focusin events make Kobalte auto-highlight its first item (工具管理).
+                                  <div
+                                    class="w-full flex items-center justify-between gap-x-2 h-8 px-2 rounded-[16px] hover:bg-[rgba(0,0,0,0.03)] transition-colors"
+                                    onMouseDown={(e) => e.preventDefault()}
+                                    on:focusin={(e) => e.stopPropagation()}
+                                  >
+                                    <span class="flex items-center gap-1 min-w-0">
+                                      <span
+                                        class="size-5 shrink-0 rounded-[6px] flex items-center justify-center text-[10px] font-normal"
+                                        style={(() => {
+                                          const index = myToolsStore.items.findIndex((i) => i.toolId === entry.toolId)
+                                          const colors = deriveToolIconColors(index < 0 ? 0 : index)
+                                          return { background: colors.bg, color: colors.fg }
+                                        })()}
+                                      >
+                                        {entry.data.toolName.slice(0, 1)}
+                                      </span>
+                                      <span class="truncate text-[14px] leading-[24px] text-[var(--neutral-800)]">
+                                        {entry.data.toolName}
+                                      </span>
+                                    </span>
+                                    <div onClick={(e) => e.stopPropagation()}>
+                                      <Switch
+                                        checked={entry.enabled}
+                                        onChange={() => toggleMyTool(entry.toolId)}
+                                      />
+                                    </div>
+                                  </div>
+                                )}
+                              </List>
+                              <DropdownMenu.Separator class="mx-0" />
+                              <DropdownMenu.Item
+                                class="rounded-[16px] flex items-center gap-1 px-2 h-8 cursor-pointer text-[var(--neutral-700)] hover:bg-[rgba(0,0,0,0.03)] transition-colors"
+                                onSelect={() => {
+                                  setActiveHomeView("tool")
+                                  navigate("/")
+                                }}
+                              >
+                                <SettingsGearIcon class="text-[rgba(0,0,0,0.55)]" />
+                                <span class="text-[14px] font-[400] leading-[20px]">{language.t("prompt.tools.manage")}</span>
+                              </DropdownMenu.Item>
+                            </DropdownMenu.SubContent>
+                          </DropdownMenu.Portal>
+                        </DropdownMenu.Sub>
+                        </Show>
+                      </DropdownMenu.Content>
+                    </DropdownMenu.Portal>
+                  </DropdownMenu>
+              </div>
+            </div>
+            <div class="flex items-center gap-2 min-w-0 flex-1 relative">
+              {/* [SECURITY] shell 模式 UI 标签已隐藏，配合后端 /shell 接口禁用 */}
+              {/* <div
+                class="h-7 flex items-center gap-1.5 max-w-[160px] min-w-0 absolute left-0"
+                style={{
+                  padding: "0 4px 0 8px",
+                  ...shell(),
+                }}
+              >
+                <span class="truncate text-13-medium text-text-strong">{language.t("prompt.mode.shell")}</span>
+                <div class="size-4 shrink-0" />
+              </div> */}
+              <div class="flex items-center gap-2 min-w-0 flex-1">
+                {/* Build / Spec / 目标 now live in the "+" dropdown; the selected non-build mode is shown
+                    as a clearable chip after the model selector below. */}
+                <Show when={store.mode !== "shell"}>
+                  <Show when={localTestAgentName()}>
+                    <div
+                      data-action="prompt-local-test-agent"
+                      class="prompt-local-test-agent flex items-center gap-1.5 px-2.5 h-8 rounded-[12px] shrink-0 select-none cursor-default font-medium text-[13px] bg-[#F5F1FE] text-[#7530EA] dark:bg-[rgba(127,42,243,0.15)] dark:text-[#B37EFF]"
+                      style={{ ...buttons(), "--icon-fill": "currentColor" }}
+                      title={localTestAgentName()}
+                    >
+                      <Icon
+                        name="ai-partner"
+                        size="small"
+                        class="shrink-0"
+                        style={{ "--icon-fill": "currentColor", color: "inherit" }}
+                      />
+                      <span class="max-w-[140px] truncate leading-none">{localTestAgentName()}</span>
+                    </div>
+                  </Show>
+                </Show>
+                
+                {/* 新会话 + ERP(苍穹) 应用开发模式：模型选择器右侧的苍穹应用下拉 */}
+                <Show when={!params.id && isErpAppDevMode()}>
+                  <CosmicAppDropdown
+                    placement={promptDropdownPlacement()}
+                    selected={() => {
+                      const a = selectedApp()
+                      return a ? { name: a.name, appId: (a.data?.appId as string) || a.title } : null
+                    }}
+                    onPick={handlePickCosmicApp}
+                    appRequired={appRequired}
+                  />
+                </Show>
+
+                {/* Expert picker — allows user to select a specific expert team or individual expert.
+                    协作任务会话里专家团由任务绑定（见 collab-adopt.ts 的 handoffCollabExpertTeam），
+                    不允许在会话里改：只读 chip，既不渲染「×」，清空后也不会冒出选择入口。 */}
+                <Show when={expertSelectionAllowed()}>
+                  <Show when={tenantFeature.tenantCode() ?? "local"} keyed>
+                    {(tenantCode) => <ExpertTeamPicker
+                      tenantCode={tenantCode}
+                      placement={promptDropdownPlacement()}
+                      readonly={collabSession}
+                      selected={() => selectedExpert() ?? undefined}
+                      onPick={(team) => {
+                        const selection = { type: "team" as const, ...team }
+                        setSelectedExpertSignal(selection)
+                        local.expertTeam.set(selection)
+                      }}
+                      onPickExpert={(expert) => {
+                        const selection = { type: "expert" as const, ...expert }
+                        setSelectedExpertSignal(selection)
+                        local.expertTeam.set(selection)
+                      }}
+                      onClear={() => {
+                        setSelectedExpertSignal(null)
+                        local.expertTeam.set(null)
+                      }}
+                    />}
+                  </Show>
+                </Show>
+              </div>
+            </div>
+            {/* Selected-mode chip (Spec / 目标) — close icon replaces the front icon on hover */}
+                <Show when={store.mode !== "shell" && modeChip()} keyed>
+                  {(mode) => (
+                    <span
+                      class="group inline-flex items-center justify-center rounded-[12px] hover:bg-[var(--neutral-50)] transition-colors"
+                      style={{
+                        height: "32px",
+                        "max-height": "32px",
+                        padding: "7px 8px",
+                        gap: "6px",
+                      }}
+                    >
+                      <span class="flex items-center gap-1">
+                        <Icon
+                          name={mode === "spec" ? "spec" : "goal"}
+                          size="small"
+                          containerClass="shrink-0 group-hover:hidden"
+                          class="text-[var(--text-color-secondary-82)]"
+                        />
+                        <button
+                          type="button"
+                          class="flex items-center justify-center size-[14px] cursor-pointer [--x-color:var(--text-color-secondary-82)] hidden group-hover:flex"
+                          onClick={() => {
+                            local.agent.set("build")
+                            restoreFocus()
+                          }}
+                          aria-label={language.t("common.clear")}
+                        >
+                          <Icon
+                            name="close-small-fill"
+                            containerClass="!size-[14px]"
+                            class="shrink-0"
+                            style={{ color: "var(--x-color)", transition: "color 0.15s" }}
+                          />
+                        </button>
+                        <span
+                          class="truncate prompt-mode-label text-[var(--text-color-secondary-82)]"
+                          style={{ "font-size": "14px", "font-weight": "500", "line-height": "22px" }}
+                        >
+                          {agentLabel(mode)}
+                        </span>
+                      </span>
+                    </span>
+                  )}
+                </Show>
+            <Show when={store.mode !== "shell"}>
+              <div class="flex items-center gap-1 shrink-0">
+                <Show when={params.id}>
+                  <div
+                    data-component="prompt-context-usage-control"
+                    class="shrink-0 size-7 flex items-center justify-center rounded-[8px] transition-colors hover:bg-[var(--prompt-input-trigger-bg)] text-[var(--prompt-input-trigger-text)]"
+                  >
+                    <SessionContextUsage variant="popover" placement="top-end" />
+                  </div>
+                </Show>
+                <ModelSelector
+                  placement={promptDropdownPlacement()}
+                  buttonsStyle={buttons}
+                  restoreFocus={restoreFocus}
+                />
+              </div>
+            </Show>
+            <EnhanceButton
+              state={enhance.state}
+              onEnhance={() => {
+                void trackBuildPromptEnhance()
+                void enhance.startEnhance()
+              }}
+              onUndo={enhance.undoEnhance}
+              onCancel={enhance.cancelEnhance}
+            />
+            {asrOverlay.micButton}
+            <div
+              class="inline-flex"
+              onPointerDown={() => {
+                const disabled = store.mode !== "normal" || (!working() && blank()) || enhance.enhancing()
+                if (disabled) {
+                  setSubmitShake(false)
+                  requestAnimationFrame(() => setSubmitShake(true))
+                }
+              }}
+            >
+              <Tooltip placement="top" value={tip()}>
+                <IconButton
+                  data-action="prompt-submit"
+                  type="submit"
+                  size="normal"
+                  disabled={store.mode !== "normal" || (!working() && blank()) || enhance.enhancing()}
+                  tabIndex={store.mode === "normal" ? undefined : -1}
+                  icon={stopping() ? "stop" : "arrow-up"}
+                  iconClass="text-[var(--neutral-400)]"
+                  iconSize="normal"
+                  variant="ghost"
+                  class="size-9 min-w-9 min-h-9 rounded-[50%]"
+                  classList={{
+                    "bg-[var(--primary-600)] [&_[data-slot=icon-svg]]:!text-[var(--white-100)]":
+                      !blank() || working(),
+                    "bg-[rgba(0,0,0,0.03)]":  blank() && !working(),
+                    "prompt-submit-shake": submitShake(),
+                  }}
+                  onAnimationEnd={(e) => {
+                    if (e.animationName === "prompt-submit-shake") {
+                      setSubmitShake(false)
+                    }
+                  }}
+                  style={buttons()}
+                  aria-label={stopping() ? language.t("prompt.action.stop") : language.t("prompt.action.send")}
+                />
+              </Tooltip>
+            </div>
+          </div>
+        </DockTray>
+      </Show>
+      </DockShellForm>
+      </DockContainer>
+      <Show when={newSessionHeaderVisible()}>
+        <div
+          ref={setNewSessionHeaderEl}
+          data-component="prompt-new-session-header"
+          class="shrink-0 flex items-center flex-wrap px-3 pt-1 pb-1"
+          classList={{ collapsed: newSessionHeaderCollapsed() }}
+          style={{ gap: "var(--2x-small, 4px)" }}
+        >
+          <div data-component="prompt-project-top-control">
+            <DropdownMenu placement="bottom-start" gutter={10} open={projectDropdownOpen()} onOpenChange={setProjectDropdownOpen}>
+              <DropdownMenu.Trigger
+                as={Button}
+                variant="ghost"
+                size="normal"
+                class="group max-w-[280px] rounded-[8px] border-none bg-transparent hover:[--fg-color-black-muted:var(--fg-color-black-muted-hover)] data-[expanded]:[--fg-color-black-muted:var(--fg-color-black-muted-hover)]"
+                style={{
+                  ...buttons(),
+                  display: "flex",
+                  height: "32px",
+                  padding: "0 var(--x-small, 8px)",
+                  "flex-direction": "column",
+                  "justify-content": "center",
+                  "align-items": "center",
+                }}
+                data-action="prompt-project-top"
+              >
+                {/* w-full 是关键:Button 外层已是 flex-direction:column,align-items:center 只按内容居中不会
+                    把子项宽度钳制到父级 max-w-[280px],这里必须让本行撑满父级宽度,truncate 才能在超长项目名时生效 */}
+                {/* Tooltip 而非原生 title:仅 label 收起(newSessionHeaderCollapsed,仅剩图标)后 hover
+                    图标/箭头才显示全名;label 可见时文字本身就是全名,Tooltip inactive 不挂气泡;
+                    点击打开项目下拉时 Tooltip 自身会 arm 收起,不干扰下拉交互 */}
+                <Tooltip placement="top" value={selectedProjectName()} inactive={!newSessionHeaderCollapsed()} class="flex items-center min-w-0 w-full">
+                  <span class="flex items-center min-w-0 w-full" style={{ gap: "var(--2x-small, 4px)" }}>
+                    <Icon name="folder-group" size="small" class="size-4 shrink-0" style={{ color: "var(--fg-color-black-muted, rgba(0, 0, 0, 0.64))" }} />
+                    <span
+                      class="truncate prompt-new-session-name"
+                      style={{
+                        color: "var(--fg-color-black-muted, rgba(0, 0, 0, 0.64))",
+                        "font-size": "var(--font-size-small-14, 14px)",
+                        "font-style": "normal",
+                        "font-weight": 400,
+                        "line-height": "18px",
+                      }}
+                    >
+                      {selectedProjectName()}
+                    </span>
+                    {/* git 项目时,项目名后展示右箭头,引导视线到分支块 */}
+                    <Show when={projectIsGit()}>
+                      <Icon name="chevron-right-16" size="small" class="size-4 shrink-0" style={{ color: "var(--fg-color-black-muted, rgba(0, 0, 0, 0.64))" }} />
+                    </Show>
+                    {/* 非 git 项目时,展示下拉箭头:面板打开时朝上,默认朝下 */}
+                    <Show when={!projectIsGit()}>
+                      <Icon name="chevron-down" size="small" class="size-4 shrink-0 transition-transform duration-200" classList={{ "rotate-180": projectDropdownOpen() }} style={{ color: "var(--fg-color-black-muted, rgba(0, 0, 0, 0.64))" }} />
+                    </Show>
+                  </span>
+                </Tooltip>
+              </DropdownMenu.Trigger>
+              <DropdownMenu.Portal>
+                <DropdownMenu.Content>
+                  {/* 限高 202px = 6 行(32px) + 5 个 2px 间距，第 7 项起滚动；
+                      分隔线与「新增项目」留在滚动区外保持吸底 */}
+                  <CustomScrollContainer maxHeight="202px" contentClass="flex flex-col gap-[2px]">
+                  <For each={allProjects()}>
+                    {(project) => (
+                      <DropdownMenu.Item
+                        onSelect={() => {
+                          const target = project.worktree
+                          // 新会话切项目时导航到目标项目的新会话路由,保留当前开发模式(starterAgentID);
+                          // 草稿保留在当前项目 scope（navigateToNewSessionDirectory 内 prompt.set 用 params.dir），不跟随切换。
+                          if (!params.id && workspaceKey(target) !== workspaceKey(routeProjectDir())) {
+                            navigateToNewSessionDirectory(target)
+                            return
+                          }
+                          setSelectedProjectDir(target)
+                          restoreFocus()
+                        }}
+                        classList={{
+                          "flex items-center justify-between cursor-pointer gap-1 text-[var(--neutral-700)]": true,
+                          "text-[var(--neutral-900)]": project.worktree === effectiveProjectDir()
+                        }}
+                      >
+                        <Tooltip placement="top" value={project.worktree} contentStyle={{ "word-break": "break-all", "white-space": "normal", "max-width": "400px" }} class="flex-1 min-w-0">
+                          <span class="min-w-0 max-w-[200px] truncate text-[14px] font-[400] leading-[20px]">{getProjectDisplayName(project)}</span>
+                        </Tooltip>
+                        <Show when={project.worktree === effectiveProjectDir()}>
+                          <Icon name="check" size="small" class="ml-3 shrink-0 text-[var(--neutral-600)]" />
+                        </Show>
+                      </DropdownMenu.Item>
+                    )}
+                  </For>
+                  </CustomScrollContainer>
+                  <DropdownMenu.Separator />
+                  <DropdownMenu.Item
+                    onSelect={() => handleCreateProjectForSession()}
+                    class="group flex items-center cursor-pointer gap-2 text-[var(--neutral-700)] active:text-[var(--neutral-900)]"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" fill="none" style={{ width: "16px", height: "16px", "aspect-ratio": "1/1", "flex-shrink": "0" }}>
+                      <path d="M6.25938 2C7.03773 2 7.7775 2.3401 8.28411 2.93099L9.08685 3.86784C9.3401 4.16325 9.71012 4.33326 10.0992 4.33333H12.359C13.9093 4.33333 15.133 5.65114 15.0185 7.19727L14.9059 8.71615C14.8785 9.08321 14.5588 9.35857 14.1917 9.33138C13.8247 9.30399 13.5493 8.98424 13.5764 8.61719L13.6884 7.09831C13.7456 6.32532 13.1341 5.66667 12.359 5.66667H3.33294C2.55795 5.66682 1.94637 6.32541 2.00352 7.09831L2.37331 12.0983C2.42488 12.7945 3.00534 13.3332 3.70339 13.3333H8.51263C8.88082 13.3333 9.1793 13.6318 9.1793 14C9.1793 14.3682 8.88082 14.6667 8.51263 14.6667H3.70339C2.30726 14.6665 1.14715 13.5896 1.04388 12.1973L0.673437 7.19727C0.599746 6.20234 1.08092 5.30263 1.84596 4.78711V4.66667C1.84596 3.194 3.03999 2.00014 4.51263 2H6.25938ZM12.5126 10C12.8808 10 13.1793 10.2985 13.1793 10.6667V11.6667H14.1793C14.5475 11.6667 14.846 11.9651 14.846 12.3333C14.846 12.7015 14.5475 13 14.1793 13H13.1793V14C13.1793 14.3682 12.8808 14.6667 12.5126 14.6667C12.1446 14.6665 11.846 14.3681 11.846 14V13H10.846C10.4779 12.9999 10.1793 12.7014 10.1793 12.3333C10.1793 11.9652 10.4779 11.6668 10.846 11.6667H11.846V10.6667C11.846 10.2986 12.1446 10.0001 12.5126 10ZM4.51263 3.33333C3.89065 3.33345 3.36947 3.75979 3.22227 4.33594C3.25897 4.33444 3.29585 4.33334 3.33294 4.33333H7.72943L7.27175 3.79883C7.01844 3.50343 6.64852 3.33333 6.25938 3.33333H4.51263Z" fill="currentColor" />
+                    </svg>
+                    <span class="text-[var(--neutral-700)] text-[14px] font-[400] leading-[20px] group-active:text-[var(--neutral-900)]">{language.t("kcode.nav.newProject")}</span>
+                  </DropdownMenu.Item>
+                </DropdownMenu.Content>
+              </DropdownMenu.Portal>
+            </DropdownMenu>
+          </div>
+          {/* 分支下拉 + worktree 勾选(与项目一起置于输入框下方) */}
+          <Show when={worktreeToggleVisible()}>
+            <WorktreeToggle
+              checked={worktreeChecked()}
+              disabled={worktreeLocked()}
+              switching={branchSwitching()}
+              branch={worktreeBranch()}
+              labelHidden={newSessionHeaderCollapsed()}
+              branches={props.worktreeBranches}
+              onChange={(next) => {
+                props.onNewSessionWorktreeChange?.(next ? "create" : "main")
+              }}
+              onBranchChange={(name, worktree) => {
+                // 选中的分支已被其他 worktree 占用:直接复用该 worktree 目录(不是新建),
+                // checkbox 联动锁定为选中态(见 worktreeChecked/worktreeLocked)。不涉及主目录
+                // checkout,无需切换检测。
+                if (worktree) {
+                  props.onNewSessionBaseBranchChange?.(name)
+                  props.onNewSessionWorktreeChange?.(worktree)
+                  return
+                }
+                // 勾选了「新建 worktree」:选中的普通分支只是新 worktree 的基分支,不影响主目录
+                // 当前 checkout 的分支,不需要真正切换。
+                if (props.newSessionWorktree === "create") {
+                  props.onNewSessionBaseBranchChange?.(name)
+                  return
+                }
+                // 普通分支 + 未勾选 worktree:在这里(选中的那一刻)就真正切换主目录分支,而不是
+                // 等到点击发送才切——避免“选了却看起来没反应”。并行会话冲突直接拦截提示;
+                // 未提交变更由 git 判断是否允许切换,checkout 失败才报错。只有 checkout 成功才更新选中态。
+                if (branchSwitching()) return
+                setBranchSwitching(true)
+                void switchMainBranch(name).then((ok) => {
+                  setBranchSwitching(false)
+                  if (!ok) return
+                  props.onNewSessionBaseBranchChange?.(name)
+                  // 若之前是因为选中占用分支而被自动锁定("main" 以外的目录值),这里回落为
+                  // "main",把 checkbox 交还给用户手动控制。
+                  if (props.newSessionWorktree !== "create") props.onNewSessionWorktreeChange?.("main")
+                  if (effectiveProjectDir() !== sdk.directory) {
+                    navigateToNewSessionDirectory(effectiveProjectDir())
+                    return
+                  }
+                  void files.tree.refreshLoaded()
+                })
+              }}
+            />
+          </Show>
+
+        </div>
+      </Show>
+      </div>
+      </Show>
+    </div>
+  )
+}

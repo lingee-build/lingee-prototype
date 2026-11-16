@@ -1,0 +1,337 @@
+import type { Todo } from "@opencode-ai/sdk/v2"
+import { AnimatedNumber } from "@kcode/ui/animated-number"
+import { DockTray } from "@kcode/ui/dock-surface"
+import { TextStrikethrough } from "@kcode/ui/text-strikethrough"
+import { createResizeObserver } from "@solid-primitives/resize-observer"
+import { Index, createEffect, createMemo, createSignal, onCleanup } from "solid-js"
+import { createStore } from "solid-js/store"
+import { composerEnabled, composerProbe } from "@/testing/session-composer"
+import { useLanguage } from "@/context/language"
+
+export function SessionTodoDock(props: {
+  sessionID?: string
+  todos: Todo[]
+  collapseLabel: string
+  expandLabel: string
+  dockProgress: number
+}) {
+  const language = useLanguage()
+  const [store, setStore] = createStore({
+    collapsed: true,
+    height: 320,
+    headerHeight: 28,
+  })
+
+  const todos = createMemo(() => props.todos)
+
+  // 折叠面板语义：点击标题自由收起 / 展开，不再根据任务状态强制展开
+  const toggle = () => {
+    setStore("collapsed", (value) => !value)
+  }
+
+  const total = createMemo(() => todos().length)
+  const done = createMemo(() => todos().filter((todo) => todo.status === "completed").length)
+  const inProgress = createMemo(() => todos().filter((todo) => todo.status === "in_progress").length)
+
+  const active = createMemo(
+    () =>
+      todos().findLast((todo) => todo.status === "in_progress") ??
+      todos().find((todo) => todo.status === "pending") ??
+      todos().filter((todo) => todo.status === "completed").at(-1) ??
+      todos()[0],
+  )
+
+  const activeIndex = createMemo(() => {
+    const list = todos()
+    const task = active()
+    if (!task) return 0
+    const idx = list.findIndex((t) => t === task)
+    return idx >= 0 ? idx : 0
+  })
+  const preview = createMemo(() => active()?.content ?? "")
+  const dock = createMemo(() => Math.max(0, Math.min(1, props.dockProgress)))
+  const shut = createMemo(() => 1 - dock())
+  const off = createMemo(() => shut() > 0.98)
+  // 容器 padding(16*2) + 头部行高度，保证收起时头部完整可见
+  const chrome = 16 * 2
+  const min = createMemo(() => store.headerHeight + chrome)
+  const max = 338
+  const full = createMemo(() => Math.max(min(), Math.min(max, store.height + chrome)))
+
+  // 分阶段渲染：收起时立即卸载列表（停掉 spinner 动画与渲染），
+  // 采用快照的展开高度驱动 max-height 过度；展开时立即挂载列表、隐藏内联任务。
+  const [showInline, setShowInline] = createSignal(true)
+  const [listMounted, setListMounted] = createSignal(false)
+  const [snapshot, setSnapshot] = createSignal(full())
+  createEffect(() => {
+    if (!store.collapsed) setSnapshot(full())
+  })
+  let inlineTimer: number | undefined
+  createEffect(() => {
+    const collapsed = store.collapsed
+    if (inlineTimer) window.clearTimeout(inlineTimer)
+    if (collapsed) {
+      // 收起：立即隐内联、立即卸载列表；280ms 过度结束后显示内联预览
+      setShowInline(false)
+      setListMounted(false)
+      inlineTimer = window.setTimeout(() => setShowInline(true), 280)
+    } else {
+      // 展开：立即隐内联、立即挂列表
+      setShowInline(false)
+      setListMounted(true)
+    }
+  })
+  onCleanup(() => {
+    if (inlineTimer) window.clearTimeout(inlineTimer)
+  })
+  const e2e = composerEnabled()
+  const probe = composerProbe(props.sessionID)
+  let contentRef: HTMLDivElement | undefined
+  let headerRef: HTMLDivElement | undefined
+
+  createEffect(() => {
+    const el = contentRef
+    if (!el) return
+    const update = () => {
+      setStore("height", el.scrollHeight)
+    }
+    update()
+    createResizeObserver(el, update)
+  })
+
+  createEffect(() => {
+    const el = headerRef
+    if (!el) return
+    const update = () => {
+      setStore("headerHeight", el.offsetHeight)
+    }
+    update()
+    createResizeObserver(el, update)
+  })
+
+  createEffect(() => {
+    if (!e2e) return
+
+    probe.set({
+      mounted: true,
+      collapsed: store.collapsed,
+      hidden: store.collapsed || off(),
+      count: todos().length,
+      states: todos().map((todo) => todo.status),
+    })
+  })
+
+  onCleanup(() => {
+    if (!e2e) return
+    probe.drop()
+  })
+
+  return (
+    <DockTray
+      data-component="session-todo-dock"
+      style={{
+        "overflow-x": "visible",
+        "overflow-y": "hidden",
+        "max-height": `${store.collapsed ? min() : full()}px`,
+        transition: "max-height 260ms cubic-bezier(0.22, 1, 0.36, 1)",
+      }}
+    >
+      <div ref={contentRef}>
+        <div
+          ref={headerRef}
+          data-action="session-todo-toggle"
+          class="flex items-center gap-1.5 overflow-visible cursor-pointer select-none"
+          tabIndex={0}
+          role="button"
+          aria-expanded={!store.collapsed}
+          aria-label={store.collapsed ? props.expandLabel : props.collapseLabel}
+          title={store.collapsed ? props.expandLabel : props.collapseLabel}
+        >
+          <p class="text-[16px] leading-[24px] font-[500] text-[var(--todo-docker-title)] shrink-0">
+            {language.t("session.todo.title")}
+          </p>
+          {showInline() && store.collapsed && preview() && (
+            <div class="flex items-center gap-1.5 ml-2 min-w-0 flex-1 overflow-hidden">
+              {active()?.status === "in_progress" && (
+                <span class="session-todo-item-num">
+                  <span>{activeIndex() + 1}</span>
+                  <span class="session-todo-item-spinner">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 13 13" fill="none">
+                      <path
+                        d="M12.5 12.5C12.5 5.87258 7.12742 0.5 0.5 0.5"
+                        stroke="url(#sessionTodoSpinnerGradientHeader)"
+                        stroke-width="0.5"
+                        stroke-linecap="round"
+                      />
+                      <defs>
+                        <linearGradient
+                          id="sessionTodoSpinnerGradientHeader"
+                          x1="0.5"
+                          y1="0.5"
+                          x2="12.5"
+                          y2="12.5"
+                          gradientUnits="userSpaceOnUse"
+                        >
+                          <stop stop-color="var(--todo-docker-progress)" stop-opacity="0" />
+                          <stop offset="1" stop-color="var(--todo-docker-progress)" />
+                        </linearGradient>
+                      </defs>
+                    </svg>
+                  </span>
+                </span>
+              )}
+              <span class="text-[14px] leading-[22px] text-[var(--text-base)] truncate">
+                {preview()}
+              </span>
+            </div>
+          )}
+          <p class="text-[16px] leading-[24px] font-[400] text-[var(--todo-docker-num)] ml-auto shrink-0">
+            <AnimatedNumber value={done() + inProgress()} />/<AnimatedNumber value={total()} />
+          </p>
+          <button
+            class="flex items-center justify-center ml-1.5 w-7 h-7 text-[var(--neutral-600)] hover:bg-[var(--icon-bg-hover)] active:text-[var(--neutral-900)] cursor-pointer rounded-[8px]"
+            onClick={toggle}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault()
+                toggle()
+              }
+            }}
+          >
+            {store.collapsed
+              ? <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" fill="none">
+                <path d="M11.862 9.19556C12.1223 8.93521 12.5443 8.93521 12.8047 9.19556C13.0649 9.45592 13.065 9.87797 12.8047 10.1383L9.03708 13.9059C8.46435 14.4786 7.53562 14.4785 6.96285 13.9059L3.19525 10.1383C2.93491 9.87793 2.93493 9.45591 3.19525 9.19556C3.4556 8.93521 3.87761 8.93521 4.13796 9.19556L7.90556 12.9632C7.95763 13.0151 8.04234 13.0152 8.09436 12.9632L11.862 9.19556ZM6.96285 2.09462C7.53562 1.52185 8.46431 1.52185 9.03708 2.09462L12.8047 5.86221C13.0649 6.12258 13.065 6.54463 12.8047 6.80492C12.5444 7.06516 12.1223 7.06509 11.862 6.80492L8.09436 3.03733C8.04229 2.98526 7.95763 2.98526 7.90556 3.03733L4.13796 6.80492C3.87766 7.06516 3.45559 7.06509 3.19525 6.80492C2.93492 6.54459 2.93496 6.12257 3.19525 5.86221L6.96285 2.09462Z" fill="currentColor" />
+              </svg>
+              : <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" fill="none">
+                <path d="M6.96285 9.42778C7.53562 8.85501 8.4643 8.85501 9.03707 9.42778L12.8047 13.1954C13.0649 13.4557 13.065 13.8778 12.8047 14.1381C12.5444 14.3984 12.1223 14.3983 11.862 14.1381L8.09436 10.3705C8.04229 10.3184 7.95763 10.3184 7.90556 10.3705L4.13797 14.1381C3.87766 14.3984 3.45561 14.3983 3.19526 14.1381C2.93492 13.8777 2.93494 13.4557 3.19526 13.1954L6.96285 9.42778ZM11.862 1.86201C12.1223 1.60166 12.5443 1.60166 12.8047 1.86201C13.0649 2.12237 13.065 2.5444 12.8047 2.80472L9.03707 6.57231C8.46434 7.14504 7.53563 7.14498 6.96285 6.57231L3.19526 2.80472C2.93491 2.54437 2.93491 2.12236 3.19526 1.86201C3.45561 1.60166 3.87762 1.60166 4.13797 1.86201L7.90556 5.6296C7.95764 5.68157 8.04233 5.68163 8.09436 5.6296L11.862 1.86201Z" fill="currentColor" />
+              </svg>
+            }
+          </button>
+        </div>
+
+        <div
+          data-slot="session-todo-list"
+          aria-hidden={store.collapsed || off()}
+          classList={{
+            "pointer-events-none": store.collapsed || shut() > 0.1,
+          }}
+          style={{
+            visibility: off() ? "hidden" : "visible",
+            display: listMounted() ? undefined : "none",
+            opacity: store.collapsed ? 0 : `${Math.max(0, Math.min(1, 1 - shut()))}`,
+            transition: "opacity 240ms cubic-bezier(0.22, 1, 0.36, 1)",
+          }}
+        >
+          {listMounted() && <TodoList todos={todos()} />}
+        </div>
+      </div>
+    </DockTray>
+  )
+}
+
+function TodoList(props: { todos: Todo[] }) {
+  const [store, setStore] = createStore({
+    stuck: false,
+  })
+  const scrollable = createMemo(() => props.todos.length > 5)
+
+  return (
+    <div class="relative">
+      <div
+        data-slot="session-todo-scroll"
+        class="mt-3 pb-3 flex flex-col gap-4"
+        style={{
+          "overflow-anchor": "none",
+          "overflow-y": scrollable() ? "auto" : "visible",
+          "max-height": scrollable() ? "260px" : "none",
+        }}
+        onScroll={(e) => {
+          setStore("stuck", e.currentTarget.scrollTop > 0)
+        }}
+      >
+        <Index each={props.todos}>
+          {(todo, index) => (
+            <div
+              class="session-todo-item"
+              data-in-progress={todo().status === "in_progress" ? "" : undefined}
+              data-state={todo().status}
+              style={{
+                transition: "opacity 220ms var(--tool-motion-ease, cubic-bezier(0.22, 1, 0.36, 1))",
+                opacity: todo().status === "pending" ? "0.94" : "1",
+              }}
+            >
+              <span class="session-todo-item-num" aria-hidden="true">
+                {todo().status === "completed" ? (
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="10"
+                    height="9"
+                    viewBox="0 0 10 9"
+                    fill="none"
+                    class="session-todo-item-check"
+                  >
+                    <path
+                      d="M8.64743 0.407045C8.92824 0.598505 9.00067 0.981352 8.80921 1.26216L4.19383 8.03137C4.09061 8.18277 3.92528 8.2803 3.74284 8.2974C3.56039 8.31451 3.37982 8.24942 3.25025 8.11985L0.481023 5.35062C0.240701 5.1103 0.240701 4.72066 0.481023 4.48034C0.721345 4.24002 1.11098 4.24002 1.35131 4.48034L3.59535 6.72438L7.79232 0.568824C7.98378 0.288016 8.36662 0.215586 8.64743 0.407045Z"
+                      fill="currentColor"
+                    />
+                    <path
+                      d="M7.66797 0.484619C7.90606 0.135423 8.38221 0.0454684 8.73145 0.283447C9.08069 0.521568 9.1717 0.997672 8.93359 1.34692L4.31738 8.11548C4.189 8.30378 3.98374 8.42525 3.75684 8.44653C3.52999 8.4678 3.30568 8.3869 3.14453 8.22583L0.375 5.4563C0.076273 5.15738 0.0761573 4.67311 0.375 4.37427C0.673845 4.07545 1.15812 4.07555 1.45703 4.37427L3.57324 6.49048L7.66797 0.484619Z"
+                      stroke="currentColor"
+                      stroke-width="0.3"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    />
+                  </svg>
+                ) : (
+                  <span>{index + 1}</span>
+                )}
+                {todo().status === "in_progress" ? (
+                  <span class="session-todo-item-spinner">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 13 13" fill="none">
+                      <path
+                        d="M12.5 12.5C12.5 5.87258 7.12742 0.5 0.5 0.5"
+                        stroke="url(#sessionTodoSpinnerGradient)"
+                        stroke-width="0.5"
+                        stroke-linecap="round"
+                      />
+                      <defs>
+                        <linearGradient
+                          id="sessionTodoSpinnerGradient"
+                          x1="0.5"
+                          y1="0.5"
+                          x2="12.5"
+                          y2="12.5"
+                          gradientUnits="userSpaceOnUse"
+                        >
+                          <stop stop-color="var(--todo-docker-progress)" stop-opacity="0" />
+                          <stop offset="1" stop-color="var(--todo-docker-progress)" />
+                        </linearGradient>
+                      </defs>
+                    </svg>
+                  </span>
+                ) : null}
+              </span>
+              <TextStrikethrough
+                active={todo().status === "cancelled"}
+                text={todo().content}
+                class="text-[14px] leading-[22px] font-[400] min-w-0 break-words "
+                style={{
+                  "line-height": "var(--line-height-normal)",
+                  transition:
+                    "color 220ms var(--tool-motion-ease, cubic-bezier(0.22, 1, 0.36, 1)), opacity 220ms var(--tool-motion-ease, cubic-bezier(0.22, 1, 0.36, 1))",
+                  color:
+                    todo().status === "completed"
+                      ? "var(--todo-docker-text-done)"
+                      : todo().status === "cancelled"
+                        ? "var(--text-weak)"
+                      : "var(--text-strong)",
+                  opacity: todo().status === "pending" ? "0.92" : "1",
+                }}
+              />
+            </div>
+          )}
+        </Index>
+      </div>
+    </div>
+  )
+}

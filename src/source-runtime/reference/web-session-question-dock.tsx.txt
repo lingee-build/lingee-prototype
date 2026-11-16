@@ -1,0 +1,1015 @@
+import { batch, For, Show, createMemo, onCleanup, onMount, type Component } from "solid-js"
+import { createStore } from "solid-js/store"
+import { useMutation } from "@tanstack/solid-query"
+import { Button } from "@kcode/ui/button"
+import { DockPrompt } from "@kcode/ui/dock-prompt"
+import { Icon } from "@kcode/ui/icon"
+import { showToast } from "@kcode/ui/toast"
+import type { QuestionAnswer, QuestionRequest } from "@opencode-ai/sdk/v2"
+import { useLanguage } from "@/context/language"
+import { useSDK } from "@/context/sdk"
+import { SmartIdentifierIcon } from "@/components/icon"
+import { makeEventListener } from "@solid-primitives/event-listener"
+import { createResizeObserver } from "@solid-primitives/resize-observer"
+import { findActiveSectionIndex, findNearestSectionIndex } from "./session-question-dock.helpers"
+
+const cache = new Map<string, { tab: number; skipped: boolean[] }>()
+
+let selectionAtMouseDown = ""
+
+const RECOMMENDED_RE = /^(.*)\s*[（(](?:Recommended|推荐)[）)]$/i
+
+const isRecommendedOption = (opt: { label: string; recommended?: boolean }) =>
+  opt.recommended === true || RECOMMENDED_RE.test(opt.label)
+
+// 将文本中的 **xxx** Markdown 加粗语法转换为 <strong>xxx</strong>，并先做 HTML 转义以避免 XSS。
+function renderInlineBold(text: string): string {
+  const escaped = text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;")
+  // 非贪婪匹配且不跨行，避免误吞后续内容
+  return escaped.replace(/\*\*([^*\n]+?)\*\*/g, "<strong>$1</strong>")
+}
+
+/**
+ * 自定义 rAF 滚动动画，替代浏览器内置 scrollTo({ behavior: "smooth" })。
+ * - 精确控制时长（300ms）和 easing（ease-out-cubic），避免浏览器默认动画尾部过长减速导致的卡顿
+ * - 动画结束时精确落到目标 scrollTop，无需后续验证修正
+ * - 尊重 prefers-reduced-motion 无障碍偏好
+ * @returns 动画的 requestAnimationFrame ID，可用于取消
+ */
+function animateScrollTo(
+  container: HTMLElement,
+  targetTop: number,
+  onComplete?: () => void,
+  duration: number = 300,
+): number {
+  if (typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    container.scrollTop = targetTop
+    onComplete?.()
+    return 0
+  }
+
+  const startTop = container.scrollTop
+  const delta = targetTop - startTop
+  if (Math.abs(delta) < 1) {
+    onComplete?.()
+    return 0
+  }
+  const startTime = performance.now()
+
+  let frameId = 0
+  const step = (now: number) => {
+    const elapsed = now - startTime
+    const progress = Math.min(elapsed / duration, 1)
+    // ease-out-cubic: 1 - (1-t)^3
+    const eased = 1 - Math.pow(1 - progress, 3)
+    container.scrollTo({ top: startTop + delta * eased, behavior: "instant" as ScrollBehavior })
+    if (progress < 1) {
+      frameId = requestAnimationFrame(step)
+    } else {
+      onComplete?.()
+    }
+  }
+
+  frameId = requestAnimationFrame(step)
+  return frameId
+}
+
+function Mark(props: { multi: boolean; picked: boolean; index?: number; onClick?: (event: MouseEvent) => void }) {
+  return (
+    <span data-slot="question-option-check" aria-hidden="true" onClick={props.onClick}>
+      <Show
+        when={props.multi}
+        fallback={
+          <span data-slot="question-option-box" data-type="number" data-picked={props.picked}>
+            <span data-slot="question-option-index">{props.index}</span>
+          </span>
+        }
+      >
+        <span data-slot="question-option-box" data-type="checkbox" data-picked={props.picked}>
+          <svg
+            data-slot="question-option-checkmark"
+            width="19"
+            height="19"
+            viewBox="0 0 19 19"
+            fill="none"
+            xmlns="http://www.w3.org/2000/svg"
+          >
+            <path d="M9.16667 0C14.2293 0 18.3333 4.10406 18.3333 9.16667C18.3333 14.2293 14.2293 18.3333 9.16667 18.3333C4.10406 18.3333 0 14.2293 0 9.16667C0 4.10406 4.10406 0 9.16667 0ZM12.8491 5.45654C12.4705 5.19487 11.9511 5.28955 11.6895 5.66813L7.97119 11.0466L6.34033 9.28792C6.02744 8.95049 5.50024 8.93035 5.16276 9.24316C4.82531 9.55607 4.80514 10.0833 5.118 10.4207L7.45524 12.9419C7.62699 13.1271 7.87388 13.2243 8.12581 13.2064C8.37782 13.1883 8.60876 13.0569 8.75244 12.8491L13.0607 6.6154C13.3221 6.23696 13.2273 5.71828 12.8491 5.45654Z" fill="var(--primary-600)"/>
+          </svg>
+        </span>
+      </Show>
+    </span>
+  )
+}
+
+function Option(props: {
+  multi: boolean
+  picked: boolean
+  label: string
+  description?: string
+  recommended?: boolean
+  disabled: boolean
+  index: number
+  ref?: (el: HTMLButtonElement) => void
+  onFocus?: VoidFunction
+  onClick: VoidFunction
+}) {
+  const language = useLanguage()
+  const parsed = () => {
+    // New structured field takes priority
+    if (props.recommended === true)
+      return { text: props.label, tag: language.t("dialog.provider.tag.recommended" as any) }
+    // Backward compat: detect (Recommended) / (推荐) suffix from old data
+    const m = props.label.match(RECOMMENDED_RE)
+    if (!m) return undefined
+    return { text: m[1], tag: language.t("dialog.provider.tag.recommended" as any) }
+  }
+
+  return (
+    <button
+      type="button"
+      ref={props.ref}
+      data-slot="question-option"
+      data-picked={props.picked}
+      role={props.multi ? "checkbox" : "radio"}
+      aria-checked={props.picked}
+      disabled={props.disabled}
+      onFocus={props.onFocus}
+      onMouseDown={() => {
+        selectionAtMouseDown = window.getSelection()?.toString() ?? ""
+      }}
+      onClick={(event) => {
+        if (event.detail === 0) {
+          props.onClick()
+          return
+        }
+        const sel = window.getSelection()?.toString() ?? ""
+        if (sel && sel !== selectionAtMouseDown) return
+        props.onClick()
+      }}
+    >
+      <Mark multi={props.multi} picked={props.picked} index={props.index} />
+      <span data-slot="question-option-main">
+        <span data-slot="option-label">
+          <Show
+            when={parsed()}
+            fallback={<span data-slot="option-label-text">{props.label}</span>}
+          >
+            {(item) => (
+              <>
+                <span data-slot="option-label-text">{item().text}</span>
+                <span data-slot="option-label-tag">{item().tag}</span>
+              </>
+            )}
+          </Show>
+        </span>
+        <Show when={props.description}>
+          <span data-slot="option-description">{props.description}</span>
+        </Show>
+      </span>
+    </button>
+  )
+}
+
+export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit: () => void }> = (props) => {
+  const sdk = useSDK()
+  const language = useLanguage()
+
+  const questions = createMemo(() => props.request.questions)
+  const total = createMemo(() => questions().length)
+
+  const cached = cache.get(props.request.id)
+  const [store, setStore] = createStore({
+    tab: cached?.tab ?? 0,
+    answers: [] as QuestionAnswer[],
+    custom: [] as string[],
+    customOn: [] as boolean[],
+    skipped: cached?.skipped ?? ([] as boolean[]),
+    editing: false,
+    focus: 0,
+    hoverConfirm: false,
+  })
+
+  let root: HTMLDivElement | undefined
+  let optionsRef: HTMLDivElement | undefined
+  let sectionsRef: HTMLDivElement[] = []
+  let optsRefs: HTMLButtonElement[][] = []
+  let customRefs: HTMLButtonElement[] = []
+  let replied = false
+  let focusFrame: number | undefined
+  let settleTimer: number | undefined
+  let smoothUntil = 0
+  let scrollAnimFrame: number | undefined
+  let hoverTimer: number | undefined
+
+  const question = createMemo(() => questions()[store.tab])
+  const options = createMemo(() => question()?.options ?? [])
+  const custom = createMemo(() => question()?.custom !== false)
+  const input = createMemo(() => store.custom[store.tab] ?? "")
+  const on = createMemo(() => store.customOn[store.tab] === true)
+  const multi = createMemo(() => question()?.multiple === true)
+  const count = createMemo(() => options().length + (custom() ? 1 : 0))
+  const customPickedAt = (tab: number) => {
+    const value = (store.custom[tab] ?? "").trim()
+    if (!value) return false
+    const answers = store.answers[tab] ?? []
+    if (questions()[tab]?.multiple === true) return answers.some((answer) => answer.trim() === value)
+    return answers.length === 1 && answers[0]?.trim() === value
+  }
+
+  const index = createMemo(() => Math.min(store.tab + 1, total()))
+  const summary = createMemo(() => `${index()}/${total()}`)
+  const single = createMemo(() => total() <= 1)
+  const hasRecommended = createMemo(() =>
+    questions().some((q) => q.options.some((o) => isRecommendedOption(o))),
+  )
+
+  const customLabel = () => language.t("ui.messagePart.option.typeOwnAnswer")
+  const customPlaceholder = () => language.t("ui.question.custom.placeholder")
+
+  const last = createMemo(() => store.tab >= total() - 1)
+  const answered = (tab: number) => {
+    if (store.skipped[tab] === true) return true
+    const values = store.answers[tab] ?? []
+    return values.some((value) => value.trim().length > 0)
+  }
+  const allAnswered = createMemo(() => questions().every((_, i) => answered(i)))
+  const firstUnanswered = createMemo(() => questions().findIndex((_, i) => !answered(i)))
+  const unansweredIndices = createMemo(() =>
+    questions().map((_, i) => i).filter((i) => !answered(i)),
+  )
+
+  const customUpdate = (value: string, selected: boolean = on()) => {
+    const prev = input().trim()
+    const next = value.trim()
+
+    setStore("custom", store.tab, value)
+    if (!selected) {
+      if (!prev) return
+      setStore("answers", store.tab, (current = []) => current.filter((item) => item.trim() !== prev))
+      return
+    }
+
+    if (multi()) {
+      setStore("answers", store.tab, (current = []) => {
+        const removed = prev ? current.filter((item) => item.trim() !== prev) : current
+        if (!next) return removed
+        if (removed.some((item) => item.trim() === next)) return removed
+        return [...removed, next]
+      })
+      return
+    }
+
+    setStore("answers", store.tab, next ? [next] : [])
+  }
+
+  const measure = () => {
+    if (!root) return
+
+    const scroller = document.querySelector(".scroll-view__viewport")
+    const head = scroller instanceof HTMLElement ? scroller.firstElementChild : undefined
+    const top =
+      head instanceof HTMLElement && head.classList.contains("sticky") ? head.getBoundingClientRect().bottom : 0
+    if (!top) {
+      root.style.removeProperty("--question-prompt-max-height")
+      return
+    }
+
+    const dock = root.closest('[data-component="session-prompt-dock"]')
+    if (!(dock instanceof HTMLElement)) return
+
+    const dockBottom = dock.getBoundingClientRect().bottom
+    const below = Math.max(0, dockBottom - root.getBoundingClientRect().bottom)
+    const gap = 8
+    const max = Math.max(240, Math.floor(dockBottom - top - gap - below))
+    root.style.setProperty("--question-prompt-max-height", `${max}px`)
+  }
+
+  const clamp = (i: number) => Math.max(0, Math.min(count() - 1, i))
+
+  const pickFocus = (tab: number = store.tab) => {
+    const list = questions()[tab]?.options ?? []
+    const customEnabled = questions()[tab]?.custom !== false
+    if (store.customOn[tab] === true) return list.length
+    const picked = list.findIndex((item) => store.answers[tab]?.includes(item.label) ?? false)
+    if (picked >= 0) return picked
+    if (customEnabled && (store.custom[tab] ?? "").trim()) return list.length
+    return 0
+  }
+
+  const focus = (i: number) => {
+    const next = clamp(i)
+    setStore("focus", next)
+    if (store.editing) return
+    if (focusFrame !== undefined) cancelAnimationFrame(focusFrame)
+    focusFrame = requestAnimationFrame(() => {
+      focusFrame = undefined
+      const tab = store.tab
+      const el = custom() && next === options().length ? customRefs[tab] : optsRefs[tab]?.[next]
+      el?.focus()
+    })
+  }
+
+  onMount(() => {
+    let raf: number | undefined
+    const update = () => {
+      if (raf !== undefined) cancelAnimationFrame(raf)
+      raf = requestAnimationFrame(() => {
+        raf = undefined
+        measure()
+      })
+    }
+
+    update()
+
+    makeEventListener(window, "resize", update)
+
+    const dock = root?.closest('[data-component="session-prompt-dock"]')
+    const scroller = document.querySelector(".scroll-view__viewport")
+    createResizeObserver([dock, scroller], update)
+
+    onCleanup(() => {
+      if (raf !== undefined) cancelAnimationFrame(raf)
+    })
+
+    focus(pickFocus())
+  })
+
+  onCleanup(() => {
+    if (settleTimer !== undefined) window.clearTimeout(settleTimer)
+    if (focusFrame !== undefined) cancelAnimationFrame(focusFrame)
+    if (scrollAnimFrame !== undefined) cancelAnimationFrame(scrollAnimFrame)
+    if (hoverTimer !== undefined) window.clearTimeout(hoverTimer)
+    if (replied) return
+    cache.set(props.request.id, {
+      tab: store.tab,
+      skipped: store.skipped.map((b) => b ?? false),
+    })
+  })
+
+  const fail = (err: unknown) => {
+    const message = err instanceof Error ? err.message : String(err)
+    showToast({ title: language.t("common.requestFailed"), description: message })
+  }
+
+  const replyMutation = useMutation(() => ({
+    mutationFn: (answers: QuestionAnswer[]) => sdk.client.question.reply({ requestID: props.request.id, answers }),
+    onMutate: () => {
+      props.onSubmit()
+    },
+    onSuccess: () => {
+      replied = true
+      cache.delete(props.request.id)
+    },
+    onError: fail,
+  }))
+
+  const rejectMutation = useMutation(() => ({
+    mutationFn: () => sdk.client.question.reject({ requestID: props.request.id }),
+    onMutate: () => {
+      props.onSubmit()
+    },
+    onSuccess: () => {
+      replied = true
+      cache.delete(props.request.id)
+    },
+    onError: fail,
+  }))
+
+  const sending = createMemo(() => replyMutation.isPending || rejectMutation.isPending)
+
+  const reply = async (answers: QuestionAnswer[]) => {
+    if (sending()) return
+    await replyMutation.mutateAsync(answers)
+  }
+
+  const reject = async () => {
+    if (sending()) return
+    await rejectMutation.mutateAsync()
+  }
+
+  const submit = () => void reply(questions().map((_, i) => store.answers[i] ?? []))
+
+  const selectAllRecommended = () => {
+    batch(() => {
+      for (const [qi, question] of questions().entries()) {
+        const recommended = question.options.filter((o) => isRecommendedOption(o))
+        if (recommended.length === 0) continue
+        if (question.multiple) {
+          // Replace answers with only recommended options (clears non-recommended)
+          setStore("answers", qi, recommended.map((o) => o.label))
+        } else {
+          setStore("answers", qi, [recommended[0].label])
+        }
+        setStore("skipped", qi, false)
+      }
+    })
+    showToast({ variant: "success", title: language.t("ui.question.selectAllRecommended.toast") })
+
+    const target = firstUnanswered()
+    const finalTarget = target >= 0 ? target : total() - 1
+    setStore("tab", finalTarget)
+    setStore("editing", false)
+    scrollToTab(finalTarget)
+    focus(pickFocus(finalTarget))
+  }
+
+  const jumpTo = (index: number) => {
+    setStore("tab", index)
+    const sectionTop = sectionsRef[index]?.offsetTop
+    if (sectionTop !== undefined && optionsRef) {
+      animateScrollTo(optionsRef, sectionTop)
+    }
+    focus(0)
+  }
+
+  const picked = (answer: string) => store.answers[store.tab]?.includes(answer) ?? false
+
+  const pick = (answer: string, custom: boolean = false) => {
+    setStore("answers", store.tab, [answer])
+    setStore("skipped", store.tab, false)
+    if (custom) setStore("custom", store.tab, answer)
+    if (!custom) setStore("customOn", store.tab, false)
+    setStore("editing", false)
+  }
+
+  const toggle = (answer: string) => {
+    setStore("answers", store.tab, (current = []) => {
+      if (current.includes(answer)) return current.filter((item) => item !== answer)
+      return [...current, answer]
+    })
+    setStore("skipped", store.tab, false)
+  }
+
+  const customToggle = () => {
+    if (!custom()) return
+    if (sending()) return
+    setStore("focus", options().length)
+
+    if (!multi()) {
+      setStore("skipped", store.tab, false)
+      setStore("customOn", store.tab, true)
+      setStore("editing", true)
+      customUpdate(input(), true)
+      return
+    }
+
+    const next = !on()
+    if (next) setStore("skipped", store.tab, false)
+    setStore("customOn", store.tab, next)
+    if (next) {
+      setStore("editing", true)
+      customUpdate(input(), true)
+      return
+    }
+
+    const value = input().trim()
+    if (value) setStore("answers", store.tab, (current = []) => current.filter((item) => item.trim() !== value))
+    setStore("editing", false)
+    focus(options().length)
+  }
+
+  const customOpen = () => {
+    if (!custom()) return
+    if (sending()) return
+    setStore("skipped", store.tab, false)
+    setStore("focus", options().length)
+    if (!on()) setStore("customOn", store.tab, true)
+    setStore("editing", true)
+    customUpdate(input(), true)
+  }
+
+  const move = (step: number) => {
+    if (store.editing || sending()) return
+    focus(store.focus + step)
+  }
+
+  const nav = (event: KeyboardEvent) => {
+    if (event.defaultPrevented) return
+
+    if (event.key === "Escape") {
+      event.preventDefault()
+      void reject()
+      return
+    }
+
+    const mod = (event.metaKey || event.ctrlKey) && !event.altKey
+    if (mod && event.key === "Enter") {
+      if (event.repeat) return
+      event.preventDefault()
+      next()
+      return
+    }
+
+    const target =
+      event.target instanceof HTMLElement ? event.target.closest('[data-slot="question-options"]') : undefined
+    if (store.editing) return
+    if (!(target instanceof HTMLElement)) return
+    if (event.altKey || event.ctrlKey || event.metaKey) return
+
+    if (event.key === "ArrowDown" || event.key === "ArrowRight") {
+      event.preventDefault()
+      move(1)
+      return
+    }
+
+    if (event.key === "ArrowUp" || event.key === "ArrowLeft") {
+      event.preventDefault()
+      move(-1)
+      return
+    }
+
+    if (event.key === "Home") {
+      event.preventDefault()
+      focus(0)
+      return
+    }
+
+    if (event.key !== "End") return
+    event.preventDefault()
+    focus(count() - 1)
+  }
+
+  const selectOption = (optIndex: number) => {
+    if (sending()) return
+
+    if (custom() && optIndex === options().length) {
+      customOpen()
+      return
+    }
+
+    const opt = options()[optIndex]
+    if (!opt) return
+    if (multi()) {
+      setStore("editing", false)
+      toggle(opt.label)
+      return
+    }
+    pick(opt.label)
+    if (!last()) next()
+  }
+
+  const commitCustom = () => {
+    if (!custom()) return
+    setStore("editing", false)
+    customUpdate(input())
+    if (!last()) next()
+  }
+
+  const resizeInput = (el: HTMLTextAreaElement) => {
+    el.style.height = "28px"
+    const lineHeight = 28
+    const maxHeight = lineHeight * 3
+    const scrollHeight = el.scrollHeight
+    el.style.height = `${Math.min(scrollHeight, maxHeight)}px`
+  }
+
+  const focusCustom = (el: HTMLTextAreaElement) => {
+    setTimeout(() => {
+      el.focus({ preventScroll: true })
+      resizeInput(el)
+    }, 0)
+  }
+
+  const toggleCustomMark = (event: MouseEvent) => {
+    event.preventDefault()
+    event.stopPropagation()
+    customToggle()
+  }
+
+  const scrollToTab = (tab: number) => {
+    const el = sectionsRef[tab]
+    const container = optionsRef
+    if (!el || !container) return
+
+    // Cancel any ongoing scroll animation to prevent race conditions
+    if (scrollAnimFrame !== undefined) {
+      cancelAnimationFrame(scrollAnimFrame)
+      scrollAnimFrame = undefined
+    }
+
+    // Block settleToNearest for long enough to let rAF animation complete (300ms + 50ms buffer)
+    smoothUntil = performance.now() + 350
+
+    // Use getBoundingClientRect for reliable position calculation regardless of
+    // offsetParent nesting. container.scrollTop accounts for current scroll offset.
+    const containerRect = container.getBoundingClientRect()
+    const elRect = el.getBoundingClientRect()
+    const targetScrollTop = container.scrollTop + elRect.top - containerRect.top
+
+    scrollAnimFrame = animateScrollTo(container, targetScrollTop, () => {
+      scrollAnimFrame = undefined
+    })
+  }
+
+  const settleToNearest = () => {
+    const container = optionsRef
+    if (!container) return
+    const base = container.offsetTop
+    const top = container.scrollTop
+    const sectionTops = sectionsRef.map((section) => (section ? section.offsetTop - base : Number.POSITIVE_INFINITY))
+    const nearest = findNearestSectionIndex(sectionTops, top)
+    if (nearest === undefined || !Number.isFinite(sectionTops[nearest])) return
+    const currentTop = sectionTops[store.tab]
+    const currentSection = sectionsRef[store.tab]
+    // If we're still within the current oversized section, do not force snap.
+    if (currentSection && Number.isFinite(currentTop) && nearest === store.tab) {
+      const currentBottom = currentTop + currentSection.offsetHeight
+      const viewportBottom = top + container.clientHeight
+      if (top >= currentTop && viewportBottom <= currentBottom) return
+    }
+    if (Math.abs(container.scrollTop - sectionTops[nearest]) > 1) {
+      smoothUntil = performance.now() + 260
+      container.scrollTo({ top: sectionTops[nearest], behavior: "smooth" })
+    }
+    if (nearest !== store.tab) setStore("tab", nearest)
+  }
+
+  const next = () => {
+    if (sending()) return
+    if (store.editing) commitCustom()
+
+    if (store.tab >= total() - 1) {
+      if (!allAnswered()) {
+        const target = firstUnanswered()
+        if (target >= 0) {
+          setStore("tab", target)
+          scrollToTab(target)
+          focus(pickFocus(target))
+        }
+        return
+      }
+      submit()
+      return
+    }
+
+    const tab = store.tab + 1
+    setStore("tab", tab)
+    setStore("editing", false)
+    scrollToTab(tab)
+    focus(pickFocus(tab))
+  }
+
+  const back = () => {
+    if (sending()) return
+    if (store.tab <= 0) return
+    const tab = store.tab - 1
+    setStore("tab", tab)
+    setStore("editing", false)
+    scrollToTab(tab)
+    focus(pickFocus(tab))
+  }
+
+  const skipCurrent = () => {
+    if (sending()) return
+    setStore("skipped", store.tab, true)
+    setStore("answers", store.tab, [])
+    if (store.editing) setStore("editing", false)
+    if (last()) {
+      submit()
+      return
+    }
+    const tab = store.tab + 1
+    setStore("tab", tab)
+    scrollToTab(tab)
+    focus(pickFocus(tab))
+  }
+
+  const onScroll = () => {
+    if (store.editing) return
+    if (performance.now() < smoothUntil) return
+    const container = optionsRef
+    if (!container) return
+    const top = container.scrollTop
+    const base = container.offsetTop
+    const sectionTops = sectionsRef.map((section) => (section ? section.offsetTop - base : Number.POSITIVE_INFINITY))
+    const active = findActiveSectionIndex(sectionTops, top, 40)
+    if (active !== store.tab) {
+      setStore("tab", active)
+    }
+    if (settleTimer !== undefined) window.clearTimeout(settleTimer)
+    settleTimer = window.setTimeout(() => {
+      // The user may have entered editing mode (e.g. clicked the custom-input option)
+      // between the scroll event and this timer firing. Skip settling in that case to
+      // avoid a delayed snap that would jump past the current question.
+      if (store.editing) return
+      const containerNow = optionsRef
+      if (!containerNow) return
+      const baseNow = containerNow.offsetTop
+      const topNow = containerNow.scrollTop
+      // Use the physical scroll position (not store.tab, which may have been updated
+      // prematurely by findActiveSectionIndex's look-ahead threshold) to determine
+      // which section the user is actually reading right now.
+      const sectionTopsNow = sectionsRef.map((sec) => (sec ? sec.offsetTop - baseNow : Number.POSITIVE_INFINITY))
+      const physicalActive = findActiveSectionIndex(sectionTopsNow, topNow, 0)
+      const physicalSectionTop = sectionTopsNow[physicalActive]
+      if (!Number.isFinite(physicalSectionTop)) return
+      const distanceFromActiveTop = Math.abs(topNow - physicalSectionTop)
+      // Avoid snapping during in-question reading scroll; only settle near boundaries.
+      if (distanceFromActiveTop > 24) return
+      settleToNearest()
+    }, 120)
+  }
+
+  return (
+    <DockPrompt
+      kind="question"
+      ref={(el) => (root = el)}
+      onKeyDown={nav}
+      header={
+        !single() ? (
+          <div data-slot="question-progress-row">
+            <Show when={!single()}>
+              <span data-slot="question-multi-title">{language.t("ui.question.multiSelectTitle")}</span>
+              <div data-slot="question-progress-text">
+                <button
+                  type="button"
+                  data-slot="question-progress-nav"
+                  data-direction="prev"
+                  disabled={sending() || store.tab <= 0}
+                  onClick={back}
+                  aria-label={language.t("ui.common.back")}
+                >
+                  <Icon name="question-up" size="small" />
+                </button>
+                <span data-slot="question-progress-count">{summary()}</span>
+                <button
+                  type="button"
+                  data-slot="question-progress-nav"
+                  data-direction="next"
+                  disabled={sending() || last()}
+                  onClick={next}
+                  aria-label={language.t("ui.common.next")}
+                >
+                  <Icon name="question-down" size="small" />
+                </button>
+              </div>
+            </Show>
+          </div>
+        ) : undefined
+      }
+      footer={
+        <>
+          <Show when={hasRecommended()}>
+            <Button
+              variant="ghost"
+              size="large"
+              disabled={sending()}
+              onClick={selectAllRecommended}
+              aria-keyshortcuts="Alt+R"
+              classList={{ "mr-auto inline-flex items-center gap-1.5": true }}
+            >
+              <SmartIdentifierIcon class="size-4 shrink-0" />
+              {language.t("ui.question.selectAllRecommended")}
+            </Button>
+          </Show>
+          <Button
+            variant="ghost"
+            size="large"
+            disabled={sending()}
+            onClick={skipCurrent}
+            aria-keyshortcuts="Escape"
+          >
+            {language.t("ui.common.skip")}
+          </Button>
+          <div
+            data-slot="question-confirm-area"
+            onMouseEnter={() => {
+              if (hoverTimer !== undefined) {
+                window.clearTimeout(hoverTimer)
+                hoverTimer = undefined
+              }
+              setStore("hoverConfirm", true)
+            }}
+            onMouseLeave={() => {
+              hoverTimer = window.setTimeout(() => setStore("hoverConfirm", false), 300)
+            }}
+          >
+            <div data-slot="question-footer-actions">
+              <Button
+                variant="primary"
+                classList={{
+                  "h-9 px-3 py-2 leading-[20px] text-[14px] font-[400] cursor-pointer rounded-[12px] bg-[var(--primary-600)] border-none hover:bg-[var(--primary-700)]": true,
+                  "!cursor-not-allowed": sending() || !allAnswered(),
+                }}
+                size="large"
+                disabled={sending() || !allAnswered()}
+                onClick={next}
+                aria-keyshortcuts="Meta+Enter Control+Enter"
+              >
+                {language.t("ui.common.confirm")}
+              </Button>
+            </div>
+            <Show when={store.hoverConfirm && unansweredIndices().length > 0 && total() > 1}>
+              <div
+                data-slot="question-unanswered-popup"
+                onMouseEnter={() => {
+                  if (hoverTimer !== undefined) {
+                    window.clearTimeout(hoverTimer)
+                    hoverTimer = undefined
+                  }
+                }}
+              >
+                <span data-slot="popup-hint">
+                  {language.t("ui.question.unanswered.hint", { count: unansweredIndices().length })}
+                </span>
+                <div data-slot="popup-numbers">
+                  <For each={unansweredIndices()}>
+                    {(idx) => (
+                      <button
+                        type="button"
+                        data-slot="popup-number-btn"
+                        onClick={() => jumpTo(idx)}
+                      >
+                        {idx + 1}
+                      </button>
+                    )}
+                  </For>
+                </div>
+              </div>
+            </Show>
+          </div>
+        </>
+      }
+    >
+      <div data-slot="question-options" ref={(el) => (optionsRef = el)} onScroll={onScroll}>
+        <For each={questions()}>
+          {(q, ti) => (
+            <div
+              data-slot="question-section"
+              data-active={store.tab === ti()}
+              ref={(el) => (sectionsRef[ti()] = el)}
+            >
+              <div data-slot="question-header-main">
+                <div data-slot="question-header-title" title={q.question} innerHTML={renderInlineBold(q.question)} />
+                {/* <Show
+                  when={q.multiple === true}
+                  fallback={<div data-slot="question-hint">{language.t("ui.question.singleHint")}</div>}
+                >
+                  <div data-slot="question-hint">{language.t("ui.question.multiHint")}</div>
+                </Show> */}
+              </div>
+              <For each={q.options}>
+                {(opt, i) => (
+                  <Option
+                    multi={q.multiple === true}
+                    picked={store.answers[ti()]?.includes(opt.label) ?? false}
+                    label={opt.label}
+                    description={opt.description}
+                    recommended={opt.recommended}
+                    disabled={sending()}
+                    index={i() + 1}
+                    ref={(el) => {
+                      if (!optsRefs[ti()]) optsRefs[ti()] = []
+                      optsRefs[ti()][i()] = el
+                    }}
+                    onFocus={() => {
+                      setStore("tab", ti())
+                      setStore("focus", i())
+                    }}
+                    onClick={() => {
+                      setStore("tab", ti())
+                      selectOption(i())
+                    }}
+                  />
+                )}
+              </For>
+              <Show when={q.custom !== false}>
+                <Show
+                  when={store.editing && store.tab === ti()}
+                  fallback={
+                    <button
+                      type="button"
+                      ref={(el) => (customRefs[ti()] = el)}
+                      data-slot="question-option"
+                      data-custom="true"
+                      data-picked={customPickedAt(ti())}
+                      role={q.multiple === true ? "checkbox" : "radio"}
+                      aria-checked={customPickedAt(ti())}
+                      disabled={sending()}
+                      onMouseDown={(e) => {
+                        selectionAtMouseDown = window.getSelection()?.toString() ?? ""
+                        if (
+                          e.target instanceof HTMLElement &&
+                          e.target.closest('[data-slot="option-label"], [data-slot="option-description"]')
+                        )
+                          return
+                        // Prevent the browser's native focus-on-click behavior, which on
+                        // Windows triggers scrollIntoView and can push the viewport past
+                        // the current question's section boundary. The textarea that
+                        // replaces this button after onClick will receive focus via
+                        // focusCustom (with preventScroll: true).
+                        e.preventDefault()
+                      }}
+                      onFocus={() => {
+                        setStore("tab", ti())
+                        setStore("focus", q.options.length)
+                      }}
+                      onClick={(event) => {
+                        setStore("tab", ti())
+                        if (event.detail === 0) {
+                          customOpen()
+                          return
+                        }
+                        const sel = window.getSelection()?.toString() ?? ""
+                        if (sel && sel !== selectionAtMouseDown) return
+                        customOpen()
+                      }}
+                    >
+                      <Mark
+                        multi={q.multiple === true}
+                        picked={customPickedAt(ti())}
+                        index={q.options.length + 1}
+                        onClick={(e) => {
+                          setStore("tab", ti())
+                          toggleCustomMark(e)
+                        }}
+                      />
+                      <span data-slot="question-option-main">
+                        <span data-slot="option-label">{customLabel()}</span>
+                        <span data-slot="option-description">{(store.custom[ti()] ?? "") || customPlaceholder()}</span>
+                      </span>
+                    </button>
+                  }
+                >
+                  <form
+                    data-slot="question-option"
+                    data-custom="true"
+                    data-picked={customPickedAt(ti())}
+                    role={q.multiple === true ? "checkbox" : "radio"}
+                    aria-checked={customPickedAt(ti())}
+                    onMouseDown={(e) => {
+                      if (sending()) {
+                        e.preventDefault()
+                        return
+                      }
+                      if (e.target instanceof HTMLTextAreaElement) {
+                        setStore("tab", ti())
+                        setStore("focus", q.options.length)
+                        if (q.multiple === true) setStore("customOn", ti(), true)
+                        return
+                      }
+                      const input = e.currentTarget.querySelector('[data-slot="question-custom-input"]')
+                      if (input instanceof HTMLTextAreaElement) input.focus()
+                    }}
+                    onSubmit={(e) => {
+                      e.preventDefault()
+                      commitCustom()
+                    }}
+                  >
+                    <Mark
+                      multi={q.multiple === true}
+                      picked={customPickedAt(ti())}
+                      index={q.options.length + 1}
+                      onClick={toggleCustomMark}
+                    />
+                    <span data-slot="question-option-main">
+                      <span data-slot="option-label">{customLabel()}</span>
+                      <textarea
+                        ref={focusCustom}
+                        data-slot="question-custom-input"
+                        placeholder={customPlaceholder()}
+                        value={store.custom[ti()] ?? ""}
+                        rows={1}
+                        wrap="soft"
+                        disabled={sending()}
+                        onFocus={() => {
+                          setStore("tab", ti())
+                          setStore("focus", q.options.length)
+                          if (q.multiple === true) setStore("customOn", ti(), true)
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === "Escape") {
+                            e.preventDefault()
+                            setStore("editing", false)
+                            focus(q.options.length)
+                            return
+                          }
+                          if ((e.metaKey || e.ctrlKey) && !e.altKey) return
+                          if (e.key !== "Enter" || e.shiftKey) return
+                          e.preventDefault()
+                          commitCustom()
+                        }}
+                        onInput={(e) => {
+                          const hasValue = e.currentTarget.value.trim().length > 0
+                          setStore("customOn", ti(), hasValue)
+                          customUpdate(e.currentTarget.value, hasValue)
+                          resizeInput(e.currentTarget)
+                        }}
+                      />
+                    </span>
+                  </form>
+                </Show>
+              </Show>
+            </div>
+          )}
+        </For>
+      </div>
+    </DockPrompt>
+  )
+}

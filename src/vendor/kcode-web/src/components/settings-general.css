@@ -1,0 +1,16 @@
+/* watchdog idle 输入框:聚焦态边框改用 gray-blue-1000(取自 nova.json),并去掉组件自带的聚焦光环;
+   非聚焦态保持组件默认边框色(--border-weak-base)。写法参照 dialog-add-app.css 的 focus 覆盖。 */
+.settings-watchdog-input [data-slot="input-wrapper"]:focus-within:not(:has([data-readonly])) {
+  border-color: var(--gray-blue-1000, #495DFF);
+  box-shadow: none;
+}
+
+/* watchdog idle 输入框文本右对齐 */
+.settings-watchdog-input input {
+  text-align: right;
+}
+
+/* Sounds 区 Select 的文字与最右侧图标之间增加 4px 间距(默认 trigger 无 gap) */
+[data-action^="settings-sounds-"] [data-slot="select-select-trigger"] {
+  gap: 8px;
+}

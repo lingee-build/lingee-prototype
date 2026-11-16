@@ -1,0 +1,302 @@
+/* Model selector popover — unified list of level models and specific models */
+.kcode-model-selector__popover {
+  --kcode-model-surface: #fff;
+  --kcode-model-surface-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  box-sizing: border-box;
+  display: block;
+  width: 270px;
+  min-width: 0;
+  min-height: 0;
+  padding: 0;
+  overflow: hidden;
+  color: var(--neutral-800, #1f1f1f);
+  background: var(--kcode-model-surface);
+  border: 0;
+  border-radius: 20px;
+  box-shadow: inset 0 0 0 0.5px var(--neutral-200, #e5e5e5), var(--kcode-model-surface-shadow);
+  transform-origin: bottom center;
+  z-index: 50;
+}
+
+:root[data-color-scheme="dark"] .kcode-model-selector__popover {
+  --kcode-model-surface: #1c1c1c;
+  --kcode-model-surface-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+}
+
+.kcode-model-selector__viewport {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  border-radius: inherit;
+}
+
+.kcode-model-selector__panel {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  box-sizing: border-box;
+}
+
+.kcode-model-selector__panel--models {
+  display: flex;
+  flex-direction: column;
+  padding: 4px;
+}
+
+/* Model list */
+.kcode-model-selector__model-list {
+  display: flex;
+  width: 100%;
+  height: auto;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 2px;
+}
+
+.kcode-model-selector__model-option {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  height: 32px;
+  min-height: 32px;
+  padding: 5px 8px;
+  flex: 0 0 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 4px;
+  position: relative;
+  color: var(--neutral-800, #1f1f1f);
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 22px;
+  background: transparent;
+  border: 0;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.kcode-model-selector__model-option:hover {
+  background: var(--neutral-50, #fafafa);
+}
+
+.kcode-model-selector__model-option:focus-visible {
+  outline: 2px solid var(--primary-600, #495dff);
+  outline-offset: -2px;
+}
+
+.kcode-model-selector__model-main {
+  display: inline-flex;
+  min-width: 0;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: 4px;
+}
+
+.kcode-model-selector__model-label {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--neutral-800, #1f1f1f);
+  font-weight: 400;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.kcode-model-selector__model-ratio {
+  flex: 0 0 auto;
+  color: rgba(0, 0, 0, 0.46);
+  font-size: 12px;
+  font-weight: 400;
+}
+
+:root[data-color-scheme="dark"] .kcode-model-selector__model-ratio {
+  color: rgba(255, 255, 255, 0.46);
+}
+
+.kcode-model-selector__model-end {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  position: relative;
+  /* Reserve 20px (16px icon + 4px gap) on the right for the check icon
+     so the coefficient text stays right-aligned regardless of selection state */
+  padding-right: 20px;
+}
+
+.kcode-model-selector__model-check {
+  position: absolute;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  color: var(--neutral-500, #737373);
+}
+
+/* Offset scrollbar to the popover's right edge, compensating for panel padding */
+.kcode-model-selector__scroll .custom-scrollbar {
+  right: -4px;
+}
+
+/* ===== 模型上下文大小编辑入口 ===== */
+/* 可编辑模型项：编辑按钮绝对定位覆盖在系数位置，不占用布局空间 */
+.kcode-model-selector__model-selectable {
+  flex: 1;
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+}
+
+/* 编辑按钮：hover 模型项或菜单展开时显示，绝对定位覆盖在系数位置 */
+.kcode-model-selector__edit-btn {
+  display: none;
+  position: absolute;
+  right: 20px;
+  top: 50%;
+  transform: translateY(-50%);
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  height: 20px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--neutral-500, #737373);
+  font-size: 12px;
+  font-weight: 400;
+  cursor: pointer;
+  padding: 0 4px;
+  z-index: 1;
+}
+
+.kcode-model-selector__edit-btn-label {
+  white-space: nowrap;
+}
+
+.kcode-model-selector__edit-btn:hover {
+  background: var(--neutral-100, rgba(0, 0, 0, 0.06));
+  color: var(--neutral-700, #404040);
+}
+
+:root[data-color-scheme="dark"] .kcode-model-selector__edit-btn:hover {
+  background: var(--neutral-700, rgba(255, 255, 255, 0.12));
+  color: var(--neutral-300, #d4d4d4);
+}
+
+/* hover 或菜单展开时：隐藏系数、显示编辑按钮 */
+.kcode-model-selector__model-option[data-can-edit]:hover .kcode-model-selector__model-ratio,
+.kcode-model-selector__model-option[data-edit-open] .kcode-model-selector__model-ratio {
+  display: none;
+}
+
+.kcode-model-selector__model-option[data-can-edit]:hover .kcode-model-selector__edit-btn,
+.kcode-model-selector__model-option[data-edit-open] .kcode-model-selector__edit-btn {
+  display: inline-flex;
+}
+
+/* 二级编辑菜单 */
+.kcode-model-selector__edit-popover {
+  min-width: 152px;
+  padding: 4px;
+  border-radius: 16px;
+  border: 0.5px solid var(--neutral-200, rgba(0, 0, 0, 0.12));
+  background: var(--surface-raised-stronger-non-alpha, #fff);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  z-index: 60;
+  /* 关闭时立即移除，避免 Trigger 消失后 Content 跑到左上角的退出动画 */
+  animation: none !important;
+  transition: none !important;
+}
+
+/* 关闭瞬间直接隐藏，不保留在 DOM 中做退出动画 */
+.kcode-model-selector__edit-popover[data-closed] {
+  display: none;
+}
+
+:root[data-color-scheme="dark"] .kcode-model-selector__edit-popover {
+  background: var(--surface-raised-stronger-non-alpha, #1c1c1c);
+  border-color: var(--neutral-700, rgba(255, 255, 255, 0.12));
+}
+
+.kcode-model-selector__edit-title {
+  padding: 4px 8px;
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--neutral-500, #737373);
+}
+
+.kcode-model-selector__edit-option {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  height: 32px;
+  padding: 0 8px;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--neutral-700, #404040);
+  font-size: 13px;
+  font-weight: 400;
+  cursor: pointer;
+}
+
+.kcode-model-selector__edit-option:hover {
+  background: var(--neutral-100, rgba(0, 0, 0, 0.06));
+}
+
+.kcode-model-selector__edit-option--active {
+  color: var(--neutral-900, #171717);
+  font-weight: 500;
+}
+
+:root[data-color-scheme="dark"] .kcode-model-selector__edit-option {
+  color: var(--neutral-300, #d4d4d4);
+}
+
+:root[data-color-scheme="dark"] .kcode-model-selector__edit-option:hover {
+  background: var(--neutral-700, rgba(255, 255, 255, 0.12));
+}
+
+:root[data-color-scheme="dark"] .kcode-model-selector__edit-option--active {
+  color: var(--neutral-100, #f5f5f5);
+}
+
+:root[data-color-scheme="dark"] .kcode-model-selector__edit-check {
+  color: var(--neutral-100, #f5f5f5);
+}
+
+/* 窄会话面板（≤420px）下隐藏触发器文字与下拉箭头，仅留图标，避免底栏元素重叠；
+   hover 全名由外层 TooltipKeybind 提供。断点与 expert-team-picker.css 保持一致。 */
+@container (max-width: 420px) {
+  .kcode-model-selector__trigger-label {
+    display: none;
+  }
+
+  /* Icon 组件的容器 div（data-component="icon"）不接收 class，class 只落在 svg 上；
+     仅隐藏 svg 会留下空容器占位并把图标挤偏，故用 :has 连容器一起隐藏 */
+  div[data-component="icon"]:has(> svg.kcode-model-selector__trigger-chevron) {
+    display: none;
+  }
+
+  /* 纯图标态收为 32x32 圆形按钮，hover 背景呈圆形且无残留空白；
+     触发器宽态非 flex 容器，此处强制 flex 居中，保证图标位于圆心 */
+  .kcode-model-selector__trigger {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    width: 32px;
+    height: 32px;
+    border-radius: 9999px;
+  }
+}

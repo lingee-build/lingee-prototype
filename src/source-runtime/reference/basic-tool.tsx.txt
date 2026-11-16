@@ -1,0 +1,531 @@
+import { createEffect, createMemo, For, Match, on, onCleanup, Show, Switch, type JSX } from "solid-js"
+import { Portal } from "solid-js/web"
+import { animate, type AnimationPlaybackControls } from "motion"
+import { useI18n } from "../context/i18n"
+import { createStore } from "solid-js/store"
+import { Collapsible } from "./collapsible"
+import type { IconProps } from "./icon"
+import { Icon } from "./icon"
+import { TextShimmer } from "./text-shimmer"
+import { Tooltip } from "./tooltip"
+import { getFilename } from "@opencode-ai/core/util/path"
+
+// 找到最近的可滚动祖先节点，用于模拟 position: sticky 的吸顶判定基准。
+// 找不到则说明是随整个 window/文档滚动。
+function findScrollParent(el: HTMLElement): HTMLElement | Window {
+  let node = el.parentElement
+  while (node) {
+    const style = getComputedStyle(node)
+    if (/(auto|scroll)/.test(style.overflowY) && node.scrollHeight > node.clientHeight) return node
+    node = node.parentElement
+  }
+  return window
+}
+
+// 从 el 开始向上遍历 DOM，返回第一个非透明背景色。
+// 镜像节点通过 Portal 挂载在 document.body，脱离了会话区的祖先链，
+// 无法继承会话区背景色变量（如 --background-base / --background-stronger）。
+// 需运行时读取会话区实际使用的背景色，动态应用到镜像外层遮罩和内层容器，
+// 确保暗黑模式下圆角外侧的遮罩背景与会话区背景一致。
+function findEffectiveBackground(el: HTMLElement): string {
+  let node: HTMLElement | null = el
+  while (node) {
+    const bg = getComputedStyle(node).backgroundColor
+    if (bg && bg !== "transparent" && bg !== "rgba(0, 0, 0, 0)") return bg
+    node = node.parentElement
+  }
+  return ""
+}
+
+export type TriggerTitle = {
+  title: string
+  titleCopyable?: string
+  titleSuffix?: string
+  titleClass?: string
+  subtitle?: string
+  subtitleTitle?: string
+  subtitleClass?: string
+  args?: string[]
+  argsClass?: string
+  action?: JSX.Element
+}
+
+const isTriggerTitle = (val: any): val is TriggerTitle => {
+  return (
+    typeof val === "object" && val !== null && "title" in val && (typeof Node === "undefined" || !(val instanceof Node))
+  )
+}
+
+export interface BasicToolProps {
+  icon: IconProps["name"]
+  trigger: TriggerTitle | JSX.Element
+  kind?: string
+  compactToolRow?: boolean
+  children?: JSX.Element
+  status?: string
+  hideDetails?: boolean
+  defaultOpen?: boolean
+  forceOpen?: boolean
+  defer?: boolean
+  locked?: boolean
+  animated?: boolean
+  // 默认在 pending/running 时锁住折叠面板（避免工具未返回时展开空内容）。
+  // 对于支持流式输出的工具（如 shell），开启本选项可让用户在运行中展开查看实时输出。
+  allowOpenWhilePending?: boolean
+  onSubtitleClick?: () => void
+  onTriggerClick?: JSX.EventHandlerUnion<HTMLElement, MouseEvent>
+  triggerHref?: string
+  clickable?: boolean
+  singleStep?: boolean
+  autoOpenWhenSingle?: boolean
+  // 开启后，原本依赖 CSS position: sticky 实现的吸顶改为由此处 JS 模拟：
+  // 当 Collapsible.Trigger 滚出可视区顶部时，额外渲染一个 fixed 定位的镜像节点展示在顶部。
+  stickyTrigger?: boolean
+}
+
+const SPRING = { type: "spring" as const, visualDuration: 0.35, bounce: 0 }
+
+export function BasicTool(props: BasicToolProps) {
+  const initialOpen = () => props.defaultOpen ?? (!!props.singleStep && (props.autoOpenWhenSingle ?? true))
+  const [state, setState] = createStore({
+    open: initialOpen(),
+    ready: initialOpen(),
+  })
+  const open = () => state.open
+  const ready = () => state.ready
+  const pending = () => props.status === "pending" || props.status === "running"
+
+  let frame: number | undefined
+
+  const cancel = () => {
+    if (frame === undefined) return
+    cancelAnimationFrame(frame)
+    frame = undefined
+  }
+
+  onCleanup(cancel)
+
+  createEffect(() => {
+    if (props.forceOpen) setState("open", true)
+  })
+
+  createEffect(
+    on(
+      open,
+      (value) => {
+        if (!props.defer) return
+        if (!value) {
+          cancel()
+          setState("ready", false)
+          return
+        }
+
+        cancel()
+        frame = requestAnimationFrame(() => {
+          frame = undefined
+          if (!open()) return
+          setState("ready", true)
+        })
+      },
+      { defer: true },
+    ),
+  )
+
+  // Animated height for collapsible open/close
+  let contentRef: HTMLDivElement | undefined
+  let heightAnim: AnimationPlaybackControls | undefined
+  const animatedInitialOpen = open()
+
+  createEffect(
+    on(
+      open,
+      (isOpen) => {
+        if (!props.animated || !contentRef) return
+        heightAnim?.stop()
+        if (isOpen) {
+          contentRef.style.overflow = "hidden"
+          heightAnim = animate(contentRef, { height: "auto" }, SPRING)
+          heightAnim.finished.then(() => {
+            if (!contentRef || !open()) return
+            contentRef.style.overflow = "visible"
+            contentRef.style.height = "auto"
+          })
+        } else {
+          contentRef.style.overflow = "hidden"
+          heightAnim = animate(contentRef, { height: "0px" }, SPRING)
+        }
+      },
+      { defer: true },
+    ),
+  )
+
+  onCleanup(() => {
+    heightAnim?.stop()
+  })
+
+  const handleOpenChange = (value: boolean) => {
+    if (pending() && !props.allowOpenWhilePending) return
+    if (props.locked && !value) return
+    setState("open", value)
+  }
+
+  // ---- 吸顶模拟（stickyTrigger）----
+  // 不再对真实 trigger 使用 position: sticky，而是通过监听滚动事件判断其是否滚出可视区顶部（data-stuck），
+  // 再把镜像容器 fixed 定位到相同位置以达到与原生 sticky 一致的视觉效果。
+  // 注意：镜像内容不能通过再调用一次 trigger() 获取，因为当 props.trigger 是已求值的 JSX.Element
+  // （即具体 DOM 节点）时，重复引用会导致该节点被从原 trigger 中“搬走”；
+  // 因此改为对真实 trigger 的 DOM 节点做原生 cloneNode(true) 拷贝，不会移动原节点。
+  let triggerEl: HTMLElement | undefined
+  let collapsibleEl: HTMLElement | undefined
+  let mirrorContainer: HTMLElement | undefined
+  const [mirror, setMirror] = createStore({ stuck: false, top: 0, left: 0, width: 0, bg: "" })
+  
+  const updateMirror = () => {
+    if (!props.stickyTrigger || !triggerEl) return
+    if (!open()) {
+      if (mirror.stuck) setMirror("stuck", false)
+      mirrorContainer?.replaceChildren()
+      return
+    }
+    const rect = triggerEl.getBoundingClientRect()
+    // 使用外层 .tool-collapsible（含 border + padding）的 rect 计算左偏移和宽度，
+    // 这样镜像宽度与外层卡片 border box 对齐，而不是仅跟随内层 trigger 内容宽度。
+    const outerRect = collapsibleEl?.getBoundingClientRect() ?? rect
+    const scrollParent = findScrollParent(triggerEl)
+    const containerTop = scrollParent === window ? 0 : (scrollParent as HTMLElement).getBoundingClientRect().top
+    // 吸顶镜像仅在"卡片仍部分可见"时展示：trigger 已滚出容器顶部（需要吸顶），
+    // 但卡片整体（outerRect，含底部边框）尚未完全滚出容器顶部之外。
+    // 一旦卡片底部也越过容器顶部（outerRect.bottom <= containerTop），说明整张卡片已经
+    // 完全滚出可视区域，此时镜像应消失，不再悬浮展示。
+    const stuck = rect.top < containerTop && outerRect.bottom > containerTop
+    // 读取会话区有效背景色：镜像通过 Portal 挂载在 document.body，脱离了会话区祖先链，
+    // 需运行时获取滚动容器（或其祖先）的实际背景色，动态应用到镜像外层遮罩和内层容器，
+    // 确保暗黑/亮色模式下圆角外侧背景与会话区一致。
+    const bgEl = scrollParent instanceof HTMLElement ? scrollParent : triggerEl
+    const bg = findEffectiveBackground(bgEl)
+    setMirror({
+      stuck,
+      top: containerTop,
+      left: outerRect.left,
+      width: outerRect.width,
+      bg,
+    })
+    if (!mirrorContainer) return
+    if (stuck) mirrorContainer.replaceChildren(triggerEl.cloneNode(true))
+    else mirrorContainer.replaceChildren()
+  }
+
+  createEffect(
+    on(
+      open,
+      () => {
+        if (!props.stickyTrigger || !triggerEl) return
+        const scrollParent = findScrollParent(triggerEl)
+        const target: HTMLElement | Window = scrollParent === window ? window : scrollParent
+        target.addEventListener("scroll", updateMirror, { passive: true })
+        window.addEventListener("resize", updateMirror)
+        updateMirror()
+        // 侧边栏开关、面板拖拽等布局变化会改变内容区域宽度，但不触发 window.resize；
+        // 需用 ResizeObserver 观测 collapsibleEl 和 scrollParent 的尺寸变化以及时更新镜像位置。
+        const ro = new ResizeObserver(() => updateMirror())
+        if (collapsibleEl) ro.observe(collapsibleEl)
+        if (scrollParent instanceof HTMLElement) ro.observe(scrollParent)
+        onCleanup(() => {
+          target.removeEventListener("scroll", updateMirror)
+          window.removeEventListener("resize", updateMirror)
+          ro.disconnect()
+        })
+      },
+    ),
+  )
+
+  const collapseFromMirror = () => {
+    if (props.locked) return
+    handleOpenChange(false)
+  }
+
+  const trigger = () => (
+    <div
+      data-component="tool-trigger"
+      data-tool-kind={props.kind ?? (props as any).tool}
+      data-clickable={props.clickable ? "true" : undefined}
+      data-hide-details={props.hideDetails ? "true" : undefined}
+    >
+      <div data-slot="basic-tool-tool-trigger-content">
+        <Show when={props.status === "completed" || props.status === "error" || props.status === "pending" || props.status === "running"}>
+          <span
+            data-slot="basic-tool-tool-indicator"
+            data-tool-status={props.status}
+          >
+            <Icon
+              name={
+                props.status === "error"
+                  ? "action-failed"
+                  : props.status === "completed"
+                    ? props.icon
+                    : "loading"
+              }
+              size="small"
+            />
+          </span>
+        </Show>
+        <div data-slot="basic-tool-tool-info">
+          <Switch>
+            <Match when={isTriggerTitle(props.trigger) && props.trigger}>
+              {(title) => {
+                const fullTitle = () => `${title().title}${title().titleCopyable ?? ""}${title().titleSuffix ?? ""}`
+                return (
+                  <div data-slot="basic-tool-tool-info-structured">
+                    <div data-slot="basic-tool-tool-info-main">
+                      <span
+                        data-slot="basic-tool-tool-title"
+                        classList={{
+                          [title().titleClass ?? ""]: !!title().titleClass,
+                        }}
+                      >
+                        <Show
+                          when={!pending() && title().titleCopyable}
+                          fallback={<TextShimmer text={fullTitle()} active={pending()} />}
+                        >
+                          {(copyable) => (
+                            <>
+                              {title().title}
+                              <span data-slot="basic-tool-copyable-title">{copyable()}</span>
+                              {title().titleSuffix}
+                            </>
+                          )}
+                        </Show>
+                      </span>
+                    <Show when={!pending()}>
+                      <Show when={title().subtitle}>
+                        <Tooltip
+                          inactive={!title().subtitleTitle}
+                          value={title().subtitleTitle ?? ""}
+                          placement="top"
+                          class="tool-file-name-tooltip"
+                          contentClass="tool-file-path-tooltip"
+                        >
+                        <span
+                          data-slot="basic-tool-tool-subtitle"
+                          title={title().subtitleTitle ? undefined : title().subtitle}
+                          classList={{
+                            [title().subtitleClass ?? ""]: !!title().subtitleClass,
+                            clickable: !!props.onSubtitleClick,
+                          }}
+                          onClick={(e) => {
+                            if (props.onSubtitleClick) {
+                              e.stopPropagation()
+                              props.onSubtitleClick()
+                            }
+                          }}
+                        >
+                          {title().subtitle}
+                        </span>
+                        </Tooltip>
+                      </Show>
+                      <Show when={title().args?.length}>
+                        <For each={title().args}>
+                          {(arg) => (
+                            <span
+                              data-slot="basic-tool-tool-arg"
+                              classList={{
+                                [title().argsClass ?? ""]: !!title().argsClass,
+                              }}
+                            >
+                              {arg}
+                            </span>
+                          )}
+                        </For>
+                      </Show>
+                    </Show>
+                    </div>
+                    <Show when={!pending() && title().action}>
+                      <span data-slot="basic-tool-tool-action">{title().action}</span>
+                    </Show>
+                  </div>
+                )
+              }}
+            </Match>
+            <Match when={true}>{props.trigger as JSX.Element}</Match>
+          </Switch>
+        </div>
+      </div>
+      <Show when={props.children && !props.hideDetails && !props.locked && (!pending() || props.allowOpenWhilePending)}>
+        <Collapsible.Arrow />
+      </Show>
+    </div>
+  )
+
+  return (
+    <>
+      <Collapsible open={open()} onOpenChange={handleOpenChange} class="tool-collapsible" data-tool-kind={props.kind ?? (props as any).tool} ref={(el: HTMLElement) => { collapsibleEl = el }}>
+        <Show
+          when={props.triggerHref}
+          fallback={
+            <Collapsible.Trigger
+              suppressClickAfterDrag
+              ref={(el: HTMLElement) => {
+                triggerEl = el
+              }}
+              data-hide-details={props.hideDetails ? "true" : undefined}
+              onClick={props.onTriggerClick}
+            >
+              {trigger()}
+            </Collapsible.Trigger>
+          }
+        >
+          {(href) => (
+            <Collapsible.Trigger
+              as="a"
+              href={href()}
+              suppressClickAfterDrag
+              // <a> 元素默认可被浏览器原生拖拽（拖动整条链接），会与卡片内文字的鼠标拖拽选中冲突：
+              // 在文字上按下并拖动会被识别为拖拽链接而非选中文本。显式禁用原生拖拽以保证文字可正常框选。
+              draggable={false}
+              ref={(el: HTMLElement) => {
+                triggerEl = el
+              }}
+              data-hide-details={props.hideDetails ? "true" : undefined}
+              onClick={props.onTriggerClick}
+            >
+              {trigger()}
+            </Collapsible.Trigger>
+          )}
+        </Show>
+        <Show when={props.animated && props.children && !props.hideDetails}>
+          <div
+            ref={contentRef}
+            data-slot="collapsible-content"
+            data-animated
+            style={{
+              height: animatedInitialOpen ? "auto" : "0px",
+              overflow: animatedInitialOpen ? "visible" : "hidden",
+            }}
+          >
+            {props.children}
+          </div>
+        </Show>
+        <Show when={!props.animated && props.children && !props.hideDetails}>
+          <Collapsible.Content>
+            <Show when={!props.defer || ready()}>{props.children}</Show>
+          </Collapsible.Content>
+        </Show>
+      </Collapsible>
+      {/* 吸顶镜像：仅开启 stickyTrigger 且真实 trigger 滚出可视区顶部时才显示，镜像内容通过对真实 trigger
+          cloneNode(true) 得到，避免与真实 trigger 共享同一个 DOM 节点导致内容被“搬走”。
+          通过 Portal 挂载到 document.body：真实 trigger 的祖先链上可能存在 transform/contain/filter
+          （例如消息卡片的进场动效、虚拟列表定位等），这些都会为 position: fixed 的子元素重新建立
+          containing block，导致镜像定位基准不再是视口而是该祖先，从而出现“位置错位”和“被其它卡片
+          盖住（层级不够）”的问题。Portal 到 body 后，fixed 定位与 z-index 都相对于真实视口/顶层
+          stacking context 计算，彻底规避这类祖先干扰。 */}
+      <Show when={props.stickyTrigger}>
+        <Portal mount={document.body}>
+          <div
+            data-mirror-trigger="true"
+            data-stuck={mirror.stuck ? "true" : undefined}
+            aria-hidden="true"
+            onClick={collapseFromMirror}
+            style={{
+              position: "fixed",
+              top: `${mirror.top}px`,
+              left: `${mirror.left}px`,
+              width: `${mirror.width}px`,
+              "background-color": mirror.bg || undefined,
+            }}
+          >
+            {/* 内层才真正携带 border-radius/border/box-shadow 与克隆内容；外层仅作为不透明白色遮码（无圆角）。
+                当内层圆角处“透出”下方真实卡片边框时，直角形外层白底会将其完全遮住，避免边框“凸显”。 */}
+            <div
+              ref={(el: HTMLElement) => {
+                mirrorContainer = el
+              }}
+              data-component="collapsible"
+              data-variant="normal"
+              class="tool-collapsible"
+              data-tool-kind={props.kind ?? (props as any).tool}
+              data-mirror-inner="true"
+              style={mirror.bg ? { "background-color": mirror.bg } : undefined}
+            />
+          </div>
+        </Portal>
+      </Show>
+    </>
+  )
+}
+
+function label(input: Record<string, unknown> | undefined) {
+  const keys = ["description", "query", "url", "filePath", "path", "pattern", "name"]
+  return keys.map((key) => input?.[key]).find((value): value is string => typeof value === "string" && value.length > 0)
+}
+
+function args(input: Record<string, unknown> | undefined) {
+  if (!input) return []
+  const skip = new Set(["description", "query", "url", "filePath", "path", "pattern", "name"])
+  return Object.entries(input)
+    .filter(([key]) => !skip.has(key))
+    .flatMap(([key, value]) => {
+      if (typeof value === "string") return [`${key}=${value}`]
+      if (typeof value === "number") return [`${key}=${value}`]
+      if (typeof value === "boolean") return [`${key}=${value}`]
+      return []
+    })
+    .slice(0, 3)
+}
+
+export function GenericTool(props: {
+  tool: string
+  status?: string
+  hideDetails?: boolean
+  input?: Record<string, unknown>
+  metadata?: Record<string, any>
+}) {
+  const i18n = useI18n()
+
+  const pending = () => props.status === "pending" || props.status === "running"
+  const progressMessage = createMemo(() => {
+    if (!pending()) return undefined
+    const meta = props.metadata
+    if (!meta?.phase) return undefined
+    const phase = meta.phase as string
+    const path = typeof props.input?.filePath === "string"
+      ? props.input.filePath
+      : typeof meta.filePath === "string"
+        ? meta.filePath
+        : undefined
+    const msg = phase === "generating_input" && path
+      ? i18n.t("ui.tool.phase.generating_file", { filename: getFilename(path) })
+      : i18n.t(`ui.tool.phase.${phase}` as any)
+    if (phase === "generating_input") {
+      const count = typeof meta.charCount === "number" ? meta.charCount : 0
+      return count > 0
+        ? `${msg} · ${i18n.t("ui.tool.generatedChars", { count })}`
+        : msg
+    }
+    return msg
+  })
+
+  // 将 i18n 模板 "调用了 `{{tool}}`" 按 {{tool}} 占位拆分为 prefix / suffix，
+  // 使工具名（search_tools 等）单独渲染为可复制元素，前缀部分不可选。
+  const SENTINEL = "\u0001"
+  const splitTitle = createMemo(() => {
+    const tpl = i18n.t("ui.basicTool.called", { tool: SENTINEL })
+    const idx = tpl.indexOf(SENTINEL)
+    if (idx < 0) return { prefix: tpl, suffix: "" }
+    return { prefix: tpl.slice(0, idx), suffix: tpl.slice(idx + SENTINEL.length) }
+  })
+
+  return (
+    <BasicTool
+      icon="mcp"
+      status={props.status}
+      trigger={{
+        title: splitTitle().prefix,
+        titleCopyable: props.tool,
+        titleSuffix: splitTitle().suffix,
+        subtitle: progressMessage() ?? label(props.input),
+        args: args(props.input),
+      }}
+      hideDetails={props.hideDetails}
+    />
+  )
+}

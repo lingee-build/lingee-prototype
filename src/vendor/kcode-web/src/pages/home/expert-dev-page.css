@@ -1,0 +1,265 @@
+/* 与原型一致：卡片按内容区宽度自动从三列折叠为两列、一列。 */
+.expert-card-grid {
+  width: 100%;
+  min-width: 0;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 330px), 1fr));
+  align-items: start;
+}
+
+/* 数字员工与专家团卡片：使用明确边界和紧凑圆角，保持浅色/深色主题一致。 */
+.expert-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  padding: 16px;
+  border-radius: 14px;
+  background: var(--surface-base);
+  border: 1px solid var(--border-weak-base);
+  overflow: hidden;
+  min-height: 159px;
+  transition: border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+}
+
+.expert-card:hover {
+  border-color: var(--primary-200);
+  box-shadow: 0 6px 16px color-mix(in srgb, var(--neutral-900) 8%, transparent);
+  transform: translateY(-1px);
+}
+
+.expert-card:focus-visible {
+  outline: 2px solid var(--primary-600);
+  outline-offset: 2px;
+}
+
+.expert-team-face {
+  flex: none;
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  margin-left: -4px;
+  border: 2px solid var(--surface-base);
+  border-radius: 50%;
+  background: var(--primary-50);
+  color: var(--primary-600);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.expert-team-face img {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.expert-team-detail-stages {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.expert-team-detail-stage {
+  position: relative;
+  min-height: 80px;
+  padding: 0 0 26px 36px;
+}
+
+.expert-team-detail-stage:not(:last-child)::before {
+  content: "";
+  position: absolute;
+  top: 10px;
+  bottom: -1px;
+  left: 4px;
+  border-left: 1px solid var(--border-weak-base);
+}
+
+.expert-team-detail-stage-dot {
+  position: absolute;
+  top: 6px;
+  left: 0;
+  width: 10px;
+  height: 10px;
+  border: 2px solid var(--primary-600);
+  border-radius: 50%;
+  background: var(--surface-base);
+}
+
+@media (hover: none) {
+  .expert-card .group-hover\:opacity-100 {
+    opacity: 1;
+  }
+}
+
+/* 新建占位卡片 — 同样的 padding、圆角和 min-height，保持网格高度一致 */
+.expert-card-new {
+  padding: 16px;
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--primary-50) 72%, var(--surface-base));
+  border: 1px dashed var(--primary-200);
+  min-height: 159px;
+  transition: border-color 200ms ease, background 200ms ease, color 200ms ease;
+}
+
+.expert-card-new:hover {
+  border-color: var(--primary-400);
+  background: color-mix(in srgb, var(--primary-100) 78%, var(--surface-base));
+}
+
+.expert-card-new:focus-visible {
+  outline: 2px solid var(--primary-600);
+  outline-offset: 2px;
+}
+
+/* 详情弹窗 — 隐藏滚动条但保留滚动功能 */
+.scrollbar-hide {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
+/* 下划线文字 Tab */
+.expert-page-tabs-underline {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  height: 36px;
+}
+
+.expert-page-tab-underline {
+  position: relative;
+  height: 36px;
+  padding: 0 12px;
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 36px;
+  color: var(--neutral-500);
+  background: none;
+  border: none;
+  cursor: pointer;
+  transition: color 200ms ease;
+  white-space: nowrap;
+}
+
+.expert-page-tab-underline:hover {
+  color: var(--neutral-700);
+}
+
+.expert-page-tab-underline--active {
+  color: var(--neutral-900);
+  font-weight: 500;
+}
+
+.expert-page-tab-underline--active::after {
+  content: "";
+  position: absolute;
+  bottom: 0;
+  left: 12px;
+  right: 12px;
+  height: 2px;
+  background: var(--primary-600);
+  border-radius: 1px;
+}
+
+/* 数字员工二级导航与分类统计 */
+.digital-employee-toolbar {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 16px;
+  border-bottom: 1px solid var(--border-weak-base);
+}
+
+.digital-employee-category-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding-bottom: 12px;
+}
+
+.digital-employee-category-tab {
+  display: inline-flex;
+  min-width: 72px;
+  height: 32px;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 12px;
+  border: 1px solid var(--border-weak-base);
+  border-radius: 16px;
+  color: var(--neutral-600);
+  background: var(--surface-base);
+  cursor: pointer;
+  transition: color 160ms ease, border-color 160ms ease, background 160ms ease;
+}
+
+.digital-employee-category-tab:hover {
+  border-color: var(--primary-300);
+  color: var(--primary-600);
+}
+
+.digital-employee-category-tab--active {
+  border-color: var(--primary-200);
+  color: var(--primary-600);
+  background: var(--primary-50);
+}
+
+.digital-employee-category-count {
+  min-width: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  color: var(--neutral-500);
+  background: var(--neutral-50);
+  font-size: 11px;
+  line-height: 18px;
+  text-align: center;
+}
+
+.digital-employee-category-tab--active .digital-employee-category-count {
+  color: var(--primary-600);
+  background: color-mix(in srgb, var(--primary-100) 78%, var(--surface-base));
+}
+
+.digital-employee-install-button {
+  position: absolute;
+  z-index: 10;
+  top: 12px;
+  right: 12px;
+  display: flex;
+  width: 30px;
+  height: 30px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--primary-200);
+  border-radius: 50%;
+  color: var(--primary-600);
+  background: var(--surface-base);
+  cursor: pointer;
+  transition: color 160ms ease, border-color 160ms ease, background 160ms ease;
+}
+
+.digital-employee-install-button:hover,
+.digital-employee-install-button:focus-visible {
+  border-color: var(--primary-600);
+  color: var(--surface-base);
+  background: var(--primary-600);
+  outline: none;
+}
+
+.digital-employee-installed-badge {
+  position: absolute;
+  z-index: 10;
+  top: 14px;
+  right: 14px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--neutral-500);
+  font-size: 12px;
+  line-height: 20px;
+}

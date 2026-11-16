@@ -1,0 +1,112 @@
+[data-component="form-search"] {
+  display: inline-flex;
+  width: auto;
+
+  /* ── Wrapper (pill shape) ── */
+  [data-slot="form-search-wrapper"] {
+    display: flex;
+    align-items: center;
+    height: 36px;
+    border-radius: 12px;
+    border: 1px solid var(--border-search-base);
+    background: transparent;
+    padding: 0 12px;
+    gap: 8px;
+    transition:
+      border-color 150ms ease,
+      background-color 150ms ease;
+
+    &:hover:not(:has([data-disabled])) {
+      border-color: var(--border-base);
+    }
+
+    &:focus-within:not(:has([data-disabled])):not(:has([data-readonly])) {
+      border-color: var(--border-selected);
+    }
+  }
+
+  /* ── Input field ── */
+  [data-slot="form-search-field"] {
+    flex: 1;
+    min-width: 0;
+    height: 100%;
+    padding: 0;
+    border: none;
+    background: transparent;
+    outline: none;
+    color: var(--text-strong);
+
+    font-family: var(--font-family-sans);
+    font-size: 14px;
+    font-weight: var(--font-weight-regular);
+    line-height: 20px;
+    letter-spacing: var(--letter-spacing-normal);
+
+    &::placeholder {
+      color: var(--text-search-placeholder);
+    }
+  }
+
+  /* ── Suffix area (search icon / clear button toggle) ── */
+  [data-slot="form-search-suffix"] {
+    position: relative;
+    flex-shrink: 0;
+    width: 16px;
+    height: 16px;
+
+    /* default: show search icon, hide clear */
+    [data-slot="form-search-clear"] {
+      display: none;
+      position: absolute;
+      inset: 0;
+    }
+    [data-slot="form-search-icon"] {
+      color: var(--icon-search-base);
+      display: block;
+      position: absolute;
+      inset: 0;
+    }
+
+    /* has value: show clear, hide search icon */
+    &[data-has-value] {
+      [data-slot="form-search-icon"] {
+        display: none;
+      }
+      [data-slot="form-search-clear"] {
+        display: flex;
+      }
+    }
+  }
+
+  /* ── Clear button ── */
+  [data-slot="form-search-clear"] {
+    appearance: none;
+    border: none;
+    background: none;
+    padding: 0;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 16px;
+    color: inherit;
+    transition: opacity 150ms ease;
+
+    &:hover {
+      opacity: 0.7;
+    }
+  }
+
+  /* ── Disabled ── */
+  &[data-disabled] {
+    [data-slot="form-search-wrapper"] {
+      background: var(--surface-search-disabled);
+      cursor: not-allowed;
+    }
+
+    [data-slot="form-search-field"] {
+      cursor: not-allowed;
+    }
+  }
+}

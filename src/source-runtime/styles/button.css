@@ -1,0 +1,251 @@
+[data-component="button"] {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  /* border-style: solid; */
+  /* border-width: 1px; */
+  border-radius: 8px;
+  text-decoration: none;
+  user-select: none;
+  cursor: pointer;
+  outline: none;
+  white-space: nowrap;
+  gap: 10px;
+  padding: 0 12px;
+
+  &[data-variant="primary"] {
+    background-color: var(--button-primary-bg);
+    /* border-color: var(--border-weak-base); */
+    color: var(--button-primary-text);
+
+    [data-slot="icon-svg"] {
+      color: var(--button-primary-text);
+    }
+
+    &:hover:not(:disabled) {
+      background-color: var(--button-primary-bg-hover);
+    }
+    &:focus:not(:disabled) {
+      background-color: var(--button-primary-bg-hover);
+    }
+    &:active:not(:disabled) {
+      background-color: var(--button-primary-bg-active);
+    }
+    &:disabled {
+      background-color: var(--button-primary-bg-disabled);
+
+      [data-slot="icon-svg"] {
+        color: var(--button-primary-text-disabled);
+      }
+    }
+  }
+
+  &[data-variant="ghost"] {
+    background-color: var(--button-ghost-bg);
+    color: var(--button-ghost-text);
+    border: 1px solid var(--button-ghost-border);
+
+    /* [data-slot="icon-svg"] {
+      color: var(--button-ghost-text);
+    } */
+
+    &:hover:not(:disabled) {
+      background-color: var(--button-ghost-bg-hover);
+      border-color: var(--button-ghost-border-hover)
+    }
+    &:focus-visible:not(:disabled) {
+      background-color: var(--button-ghost-bg-hover);
+      border-color: var(--button-ghost-border-hover);
+    }
+    &:active:not(:disabled) {
+      background-color: var(--button-ghost-bg-active);
+      border-color: var(--button-ghost-border-active);
+    }
+    &:disabled {
+      color: var(--button-ghost-text-disabled);
+      border-color: var(--button-ghost-border-disabled);
+      cursor: not-allowed;
+
+      /* [data-slot="icon-svg"] {
+        color: var(--button-ghost-text-disabled);
+      } */
+    }
+    &[data-selected="true"]:not(:disabled) {
+      background-color: var(--button-ghost-bg-hover);
+      border-color: var(--button-ghost-border-hover);
+    }
+    &[data-active="true"] {
+      background-color: var(--button-ghost-bg-active);
+      border-color: var(--button-ghost-border-active);
+    }
+  }
+
+  &[data-variant="secondary"] {
+    border-width: 1px;
+    border-style: solid;
+    border-color: var(--button-secondary-border);
+    color: var(--button-secondary-text);
+
+    &:hover:not(:disabled) {
+     border-color: var(--button-secondary-border-hover);
+    }
+    &:focus:not(:disabled) {
+      border-color: var(--button-secondary-border-hover);
+    }
+    &:focus-visible:not(:active) {
+      border-color: var(--button-secondary-border-hover);
+    }
+    &:focus-visible:active {
+      box-shadow: none;
+    }
+    &:active:not(:disabled) {
+      border-color: var(--button-secondary-border-active);
+    }
+    &:disabled {
+      border-color: var(--button-secondary-border-disabled);
+      color: var(--button-secondary-text-disabled);
+      cursor: not-allowed;
+    }
+
+    [data-slot="icon-svg"] {
+      color: var(--button-secondary-text);
+    }
+  }
+
+  &[data-variant="text"] {
+    border: none;
+    color: var(--button-text-text);
+
+    &:hover:not(:disabled) {
+     color: var(--button-text-text);
+    }
+    &:focus:not(:disabled) {
+      color: var(--button-text-text);
+    }
+    &:focus-visible:not(:active) {
+      color: var(--button-text-text);
+    }
+    &:focus-visible:active {
+      box-shadow: none;
+    }
+    &:active:not(:disabled) {
+      color: var(--button-text-text);
+    }
+    &:disabled {
+      color: var(--button-text-text-disabled);
+      cursor: not-allowed;
+    }
+  }
+
+  &[data-variant="tertiary"] {
+    border-width: 1px;
+    border-style: solid;
+    border-color: var(--neutral-200);
+    color: var(--neutral-700);
+
+    &:hover:not(:disabled) {
+     color: var(---neutral-700);
+    }
+    &:focus:not(:disabled) {
+      color: var(--neutral-700);
+    }
+    &:focus-visible:not(:active) {
+      color: var(--neutral-700);
+    }
+    &:focus-visible:active {
+      box-shadow: none;
+    }
+    &:active:not(:disabled) {
+      color: var(--neutral-900);
+    }
+    &:disabled {
+      border-color: var(--neutral-100);
+      color: var(--neutral-500);
+      cursor: not-allowed;
+    }
+  }
+
+  &[data-size="small"] {
+    height: 24px;
+    padding: 0 8px;
+    &[data-icon] {
+      padding: 0 12px 0 4px;
+    }
+
+    font-size: var(--font-size-small);
+    line-height: var(--line-height-large);
+    gap: 8px;
+
+    /* text-12-medium */
+    font-family: var(--font-family-sans);
+    font-size: var(--font-size-small);
+    font-style: normal;
+    font-weight: var(--font-weight-medium);
+    line-height: var(--line-height-large); /* 166.667% */
+    letter-spacing: var(--letter-spacing-normal);
+  }
+
+  &[data-size="normal"] {
+    height: 28px;
+    line-height: 28px;
+    padding: 0 6px;
+    &[data-icon] {
+      padding: 0 12px 0 4px;
+    }
+
+    font-size: var(--font-size-small);
+    gap: 8px;
+
+    /* text-12-medium */
+    font-family: var(--font-family-sans);
+    font-size: var(--font-size-small);
+    font-style: normal;
+    font-weight: var(--font-weight-medium);
+    letter-spacing: var(--letter-spacing-normal);
+  }
+
+  &[data-size="large"] {
+    height: 36px;
+    padding: 8px 12px;
+
+    &[data-icon] {
+      padding: 0 12px 0 8px;
+    }
+
+    gap: 8px;
+
+    /* text-14-medium */
+    font-size: 14px;
+    font-style: normal;
+    font-weight: 500;
+    line-height: 20px;
+  }
+
+  &:focus {
+    outline: none;
+  }
+}
+
+[data-component="button"].titlebar-icon[data-variant="ghost"][aria-expanded="true"] {
+  background-color: var(--surface-base-active);
+}
+
+[data-component="button"].titlebar-icon[data-variant="ghost"][aria-expanded="true"] [data-slot="icon-svg"] {
+  color: var(--icon-strong-base);
+}
+
+[data-component="button"].titlebar-icon[data-variant="ghost"][aria-expanded="true"]:hover:not(:disabled) {
+  background-color: var(--surface-base-active);
+}
+
+[data-component="button"].titlebar-icon[data-variant="ghost"][aria-current="page"] {
+  background-color: var(--surface-base-active);
+}
+
+[data-component="button"].titlebar-icon[data-variant="ghost"][aria-current="page"] [data-slot="icon-svg"] {
+  color: var(--icon-strong-base);
+}
+
+[data-component="button"].titlebar-icon[data-variant="ghost"][aria-current="page"]:hover:not(:disabled) {
+  background-color: var(--surface-base-active);
+}

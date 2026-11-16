@@ -1,0 +1,103 @@
+/**
+ * EnhanceButton — 提示词增强图标按钮
+ *
+ * 四态切换：
+ * - disabled：图标暗淡，不可点击
+ * - idle：图标正常，可点击（增强图标 ResumeOptimization）
+ * - loading：旋转加载动画 + 输入框 shimmer 流动光效
+ * - applied：撤销图标（LeftRollback），点击恢复原文
+ *
+ * 按钮常驻工具栏（麦克风左侧），不随条件隐藏，仅亮暗切换。
+ */
+
+import { Show, type Component } from "solid-js"
+import { Tooltip } from "@kcode/ui/tooltip"
+import { Button } from "@kcode/ui/button"
+import { useLanguage } from "@/context/language"
+import { SmartIdentifierIcon, LeftRollbackIcon } from "@/components/icon"
+import type { EnhanceState } from "./use-enhance"
+
+export interface EnhanceButtonProps {
+  state: () => EnhanceState
+  onEnhance: () => void
+  onUndo: () => void
+  onCancel: () => void
+}
+
+// ── 加载中旋转图标 ──
+function SpinnerIcon() {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      width="16"
+      height="16"
+      viewBox="0 0 16 16"
+      fill="none"
+      class="enhance-spinner"
+    >
+      <path
+        d="M14.0002 7.33354C14.3684 7.33356 14.6668 7.63267 14.6668 8.00086C14.6667 9.40855 14.2208 10.78 13.3934 11.9188C12.5658 13.0578 11.399 13.9057 10.0601 14.3407C8.72111 14.7757 7.27853 14.7758 5.93962 14.3407C4.60086 13.9056 3.43437 13.0576 2.60693 11.9188C1.77945 10.7799 1.3335 9.40803 1.3335 8.00021C1.33351 6.59236 1.77943 5.22056 2.60693 4.08159C3.43444 2.94269 4.60139 2.09475 5.94027 1.65971C7.27908 1.22476 8.72124 1.22476 10.0601 1.65971C10.4101 1.77345 10.602 2.14947 10.4884 2.49955C10.3747 2.84973 9.99812 3.04171 9.64795 2.92794C8.57684 2.57998 7.42281 2.57991 6.35173 2.92794C5.28073 3.276 4.34766 3.95439 3.68571 4.86544C3.0237 5.77662 2.66684 6.87393 2.66683 8.00021C2.66683 9.1264 3.02315 10.2238 3.68506 11.135C4.34701 12.0461 5.28067 12.7244 6.35173 13.0725C7.42283 13.4205 8.57682 13.4204 9.64795 13.0725C10.7191 12.7245 11.6526 12.0461 12.3146 11.135C12.9766 10.2238 13.3334 9.12644 13.3335 8.00021C13.3337 7.63215 13.6321 7.33354 14.0002 7.33354Z"
+        fill="currentColor"
+      />
+    </svg>
+  )
+}
+
+const EnhanceButton: Component<EnhanceButtonProps> = (props) => {
+  const language = useLanguage()
+
+  const handleClick = () => {
+    const s = props.state()
+    if (s === "idle") props.onEnhance()
+    else if (s === "applied") props.onUndo()
+    else if (s === "loading") props.onCancel()
+  }
+
+  return (
+    <Tooltip
+      placement="top"
+      value={
+        props.state() === "applied"
+          ? language.t("prompt.enhance.undo")
+          : language.t("prompt.enhance.tooltip")
+      }
+    >
+      <Button
+        data-action="prompt-enhance"
+        type="button"
+        variant="ghost"
+        class="relative overflow-hidden size-9 p-0 rounded-[50%] shrink-0 flex items-center justify-center hover:bg-[var(--neutral-50)] border-none bg-transparent"
+        classList={{
+          "enhance-btn--disabled": props.state() === "disabled",
+          "enhance-btn--idle": props.state() === "idle",
+          "enhance-btn--loading": props.state() === "loading",
+          "enhance-btn--applied": props.state() === "applied",
+          "opacity-40 cursor-not-allowed": props.state() === "disabled",
+        }}
+        onClick={handleClick}
+        disabled={props.state() === "disabled"}
+        aria-label={
+          props.state() === "applied"
+            ? language.t("prompt.enhance.undo")
+            : language.t("prompt.enhance.tooltip")
+        }
+      >
+        <Show
+          when={props.state() === "loading"}
+          fallback={
+            <Show
+              when={props.state() === "applied"}
+              fallback={<SmartIdentifierIcon class="size-5" />}
+            >
+              <LeftRollbackIcon class="size-5" />
+            </Show>
+          }
+        >
+          <SpinnerIcon />
+        </Show>
+      </Button>
+    </Tooltip>
+  )
+}
+
+export default EnhanceButton

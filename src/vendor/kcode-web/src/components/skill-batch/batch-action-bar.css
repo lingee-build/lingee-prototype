@@ -1,0 +1,13 @@
+/* 技能页批量操作条图标状态色（对齐原型 prototype-hifi .sk-bb .sk-btn） */
+
+/* 删除图标跟随按钮文字色：原型 .sk-btn.danger 的 svg 为 fill=currentColor；
+   kcode-ui Icon 外层默认 color: var(--icon-fill)（黑 64%），这里改为继承按钮色
+  （启用红 #F12234 / 禁用灰 rgba(0,0,0,.28)） */
+.batch-bb-btn-del [data-component="icon"] {
+  color: inherit;
+}
+
+/* 禁用态图标整体降透明度（对齐原型 .sk-bb .sk-btn:disabled svg{opacity:.44}） */
+.batch-bb-btn:disabled [data-slot="icon-svg"] {
+  opacity: 0.44;
+}

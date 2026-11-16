@@ -1,0 +1,776 @@
+import { Show, createEffect, createMemo, createSignal, onCleanup, For } from "solid-js"
+import { createStore } from "solid-js/store"
+import { useNavigate } from "@solidjs/router"
+import { useSpring } from "@kcode/ui/motion-spring"
+import { Icon } from "@kcode/ui/icon"
+import { PromptInput, getSkillDevName } from "@/components/prompt-input"
+import { SKILL_TABS, isSkillEntryTab } from "@/utils/skill-entries"
+import { useLanguage } from "@/context/language"
+import { usePrompt, type AgentPart, type ImageAttachmentPart, type Prompt } from "@/context/prompt"
+import { useSync } from "@/context/sync"
+import { useSDK } from "@/context/sdk"
+import { Persist } from "@/utils/persist"
+import { canShowSkillTab, createHostLicensePlan } from "@/utils/license-permissions"
+import { getSessionHandoff, setSessionHandoff } from "@/pages/session/handoff"
+import { useSessionKey } from "@/pages/session/session-layout"
+import { SessionPermissionDock } from "@/pages/session/composer/session-permission-dock"
+import { SessionGoalBanner } from "@/pages/session/composer/session-goal-banner"
+import { SessionQuestionDock } from "@/pages/session/composer/session-question-dock"
+import { SessionFollowupDock } from "@/pages/session/composer/session-followup-dock"
+import { SessionRevertDock } from "@/pages/session/composer/session-revert-dock"
+import { SessionStageDoneFooter, SessionStageReviewDock } from "@/pages/session/composer/session-stage-review-dock"
+import { useCollabSession, createCollabStageNamer, resumeCollabMonitoring } from "@/pages/session/collab-session"
+import { useCollabNextStageFollow } from "@/pages/session/collab-next-stage-follow"
+import { countRunningSubtasks } from "@/utils/session-status"
+import type { SessionComposerState } from "@/pages/session/composer/session-composer-state"
+import { useCharRate } from "@/pages/session/composer/use-char-rate"
+import { SessionTodoDock } from "@/pages/session/composer/session-todo-dock"
+import type { FollowupDraft } from "@/components/prompt-input/submit"
+import { createResizeObserver } from "@solid-primitives/resize-observer"
+import { Button } from "@kcode/ui/button"
+
+export function SessionComposerRegion(props: {
+  state: SessionComposerState
+  ready: boolean
+  centered: boolean
+  previewOpen: boolean
+  inputRef: (el: HTMLDivElement) => void
+  newSessionWorktree: string
+  onNewSessionWorktreeReset: () => void
+  onNewSessionWorktreeChange: (value: string) => void
+  worktreeBranches: { name: string; current: boolean }[]
+  newSessionBaseBranch?: string
+  onNewSessionBaseBranchChange: (branch: string) => void
+  // Git header row (existing session, git project): diff stat + Commit/PR quick actions.
+  // Commit and PR are mutually exclusive; `gitHeaderMode` decides which button shows.
+  gitHeaderVisible?: boolean
+  gitHeaderReady?: boolean
+  gitHeaderMode?: "commit" | "pr" | "none"
+  gitHeaderDiff?: { additions: number; deletions: number }
+  gitHeaderBusy?: boolean
+  gitHeaderManualPrAvailable?: boolean
+  gitHeaderHasOpenPr?: boolean
+  onGitHeaderOpenReview?: () => void
+  onGitHeaderCommit?: () => void
+  onGitHeaderCreatePr?: (draft: boolean) => void
+  onGitHeaderManualPr?: () => void
+  onGitHeaderViewPr?: () => void
+  onSubmit: () => void
+  onResponseSubmit: () => void
+  autoSubmit?: boolean
+  onAutoSubmitConsumed?: () => void
+  followup?: {
+    queue: () => boolean
+    items: { id: string; text: string }[]
+    sending?: string
+    edit?: { id: string; prompt: FollowupDraft["prompt"]; context: FollowupDraft["context"] }
+    onQueue: (draft: FollowupDraft) => void
+    onAbort: () => void
+    onSend: (id: string) => void
+    onEdit: (id: string) => void
+    onEditLoaded: () => void
+  }
+  revert?: {
+    items: { id: string; text: string }[]
+    restoring?: string
+    disabled?: boolean
+    onRestore: (id: string) => void
+  }
+  setPromptDockRef: (el: HTMLDivElement) => void
+  shareMode?: boolean
+  selectedCount?: number
+  isAllSelected?: boolean
+  onSelectAll?: () => void
+  onCancelShare?: () => void
+  onShareImage?: () => void
+}) {
+  const navigate = useNavigate()
+  const prompt = usePrompt()
+  const language = useLanguage()
+  const licensePlan = createHostLicensePlan()
+  const route = useSessionKey()
+  const sdk = useSDK()
+  const sync = useSync()
+  const charRate = useCharRate(() => route.params.id)
+
+  const handoffPrompt = createMemo(() => getSessionHandoff(route.sessionKey())?.prompt)
+  const info = createMemo(() => (route.params.id ? sync.session.get(route.params.id) : undefined))
+  const parentID = createMemo(() => info()?.parentID)
+  const child = createMemo(() => !!parentID())
+  /**
+   * 协作开发会话：本会话执行的计划步骤已结束（审批通过）时，输入框替换为「阶段已完成」页脚——
+   * 下一阶段会在新的 session 里执行，当前会话不再继续。状态取自计划数据，刷新后可复现。
+   *
+   * 这里是整页唯一传入 busy 的订阅点：会话跑完后由它触发退避重查，把 Agent finalize
+   * 的尾延迟盖掉。store 是共享的，所以顶部执行阶段卡片和审核条都跟着一起及时更新。
+   *
+   * busy 必须把子智能体算进去：spawn_task 的子智能体跑在自己的子会话里，父轮次结束后
+   * session_status 就回 idle，而 isSessionIdle 按设计看不见子会话（见 utils/session-status.ts
+   * 的注释）。只看 isSessionIdle 会在子智能体还在开发时就去追查审批门并弹出审核条。
+   */
+  const runningSubtasks = createMemo(() => {
+    const id = route.params.id
+    if (!id) return 0
+    return countRunningSubtasks(sync.data.message[id], sync.data.part)
+  })
+  const collabBusy = createMemo(() => props.state.busy() || runningSubtasks() > 0)
+  const collab = useCollabSession(() => route.params.id, { busy: collabBusy })
+  const stageSettled = createMemo(() => collab.boundStepSettled())
+
+  // 阶段跑完后由 sidecar 内嵌 Agent 发起下一阶段；页面开着时跟进到新会话（详见 collab-next-stage-follow.ts）。
+  const collabStageNamer = createCollabStageNamer({
+    teamSteps: collab.teamSteps,
+    locale: () => language.locale(),
+    t: (key) => language.t(key as any),
+  })
+  useCollabNextStageFollow({
+    collab,
+    sessionID: () => route.params.id,
+    projectDirectory: () => sdk.directory,
+    navigate,
+    t: (key, params) => language.t(key as any, params),
+    stageLabel: (step) => collabStageNamer.stepLabel(step),
+    enabled: () => !props.shareMode,
+  })
+
+  // 注意顺序：createMemo 创建即执行，stageSettled 必须先声明，否则命中 TDZ。
+  const showComposer = createMemo(() => (!props.state.blocked() || child()) && !stageSettled())
+
+  // 目标进度 banner 是否可见——由 SessionGoalBanner 上抬到此处，供 PromptInput 计算 banner「hood」
+  // 的单/双条布局（padding + 分隔线）以及输入框顶部圆角是否需要变直角。
+  const [goalBannerVisible, setGoalBannerVisible] = createSignal(false)
+
+  const previewPrompt = () =>
+    prompt
+      .current()
+      .map((part) => {
+        if (part.type === "file") return `[file:${part.path}]`
+        if (part.type === "agent") return `@${part.name}`
+        if (part.type === "image") return `[image:${part.filename}]`
+        return part.content
+      })
+      .join("")
+      .trim()
+
+  createEffect(() => {
+    if (!prompt.ready()) return
+    setSessionHandoff(route.sessionKey(), { prompt: previewPrompt() })
+  })
+
+  const [store, setStore] = createStore({
+    ready: false,
+    height: 320,
+    body: undefined as HTMLDivElement | undefined,
+  })
+  let timer: number | undefined
+  let frame: number | undefined
+
+  const clear = () => {
+    if (timer !== undefined) {
+      window.clearTimeout(timer)
+      timer = undefined
+    }
+    if (frame !== undefined) {
+      cancelAnimationFrame(frame)
+      frame = undefined
+    }
+  }
+
+  createEffect(() => {
+    route.sessionKey()
+    const ready = props.ready
+    const delay = 140
+
+    clear()
+    setStore("ready", false)
+    if (!ready) return
+
+    frame = requestAnimationFrame(() => {
+      frame = undefined
+      timer = window.setTimeout(() => {
+        setStore("ready", true)
+        timer = undefined
+      }, delay)
+    })
+  })
+
+  onCleanup(clear)
+
+  const open = createMemo(() => store.ready && !props.state.closing() && props.state.dock())
+  const progress = useSpring(() => (open() ? 1 : 0), { visualDuration: 0.3, bounce: 0 })
+  const value = createMemo(() => Math.max(0, Math.min(1, progress())))
+  const dock = createMemo(() => props.state.dock() && (store.ready || value() > 0.001))
+  const rolled = createMemo(() => (props.revert?.items.length ? props.revert : undefined))
+  const dockItemCount = createMemo(() => props.followup?.items?.length ?? 0)
+  const lift = createMemo(() => {
+    if (dockItemCount()) return 18
+    return 0
+  })
+  const full = createMemo(() => Math.max(78, store.height))
+
+  /** 输入框上方的技能标签：对应 builtin-skills 中的技能，点击即在光标位置插入技能 pill
+   *  （可重复添加，已有技能 pill 保留）；
+   *  名单同时是 build_skill_send 的上报口径，定义见 utils/skill-entries.ts */
+  const visibleSkillTabs = createMemo(() =>
+    SKILL_TABS.filter((tab) => canShowSkillTab(licensePlan(), tab.name)),
+  )
+
+  /** 当前套餐允许的技能标签名，用于阻止恢复或提交已隐藏的入口。 */
+  const skillTabNames = createMemo(() => new Set(visibleSkillTabs().map((tab) => tab.name)))
+
+  /** 当前选中的技能名称（用于标签 radio 状态） */
+  const activeSkillName = createMemo(() => {
+    for (const p of prompt.current()) {
+      const name = getSkillDevName(p)
+      if (name) return name
+    }
+    return undefined
+  })
+
+  /** 技能标签横向滚动：溢出时显示左右箭头，点击滚动一屏（不足一屏直接到端） */
+  const [skillScrollEl, setSkillScrollEl] = createSignal<HTMLDivElement>()
+  const [canScrollLeft, setCanScrollLeft] = createSignal(false)
+  const [canScrollRight, setCanScrollRight] = createSignal(false)
+
+  const updateSkillScrollState = () => {
+    const el = skillScrollEl()
+    if (!el) return
+    setCanScrollLeft(el.scrollLeft > 1)
+    setCanScrollRight(el.scrollLeft < el.scrollWidth - el.clientWidth - 1)
+  }
+
+  const scrollSkillTabs = (dir: "left" | "right") => {
+    const el = skillScrollEl()
+    if (!el) return
+    const page = el.clientWidth
+    if (dir === "right") {
+      const remaining = el.scrollWidth - el.clientWidth - el.scrollLeft
+      el.scrollTo({ left: el.scrollLeft + (remaining <= page ? remaining : page), behavior: "smooth" })
+    } else {
+      el.scrollTo({ left: el.scrollLeft - (el.scrollLeft <= page ? el.scrollLeft : page), behavior: "smooth" })
+    }
+  }
+
+  createEffect(() => {
+    const el = skillScrollEl()
+    if (!el) return
+    createResizeObserver(skillScrollEl, updateSkillScrollState)
+    updateSkillScrollState()
+  })
+
+  // 语言切换后标签文本宽度变化（scrollWidth 变），但容器 clientWidth 不变，
+  // ResizeObserver 和 scroll 事件都不会触发，需手动重新检测溢出状态。
+  createEffect(() => {
+    language.locale()
+    const raf = requestAnimationFrame(() => updateSkillScrollState())
+    onCleanup(() => cancelAnimationFrame(raf))
+  })
+
+  /**
+   * 技能 tag 持久化缓存：仅缓存 SKILL_TABS 技能的选中态。
+   * 参考 prompt-input.tsx 中 starter agent 的缓存方案，使用 workspace 级 localStorage。
+   *
+   * 缓存结构（与 starter agent 一致）：
+   *   { session: { "draft:<dir>": "<skill-name>" } }
+   *
+   * - 缓存键：workspace 级（Persist.workspace），与 starter agent 同存储不同 key
+   * - 发送会话时（新会话即将创建）：若当前选中技能 ∈ SKILL_TABS → 写缓存
+   * - 手动删除技能 pill：新会话期间 activeSkillName 从有值→undefined → 清缓存
+   * - 下次进入新会话：prompt ready 后读缓存恢复选中（不覆盖已有 agent part / draft）
+   *
+   * 用同步裸 localStorage 而非 persisted：handleSubmit 写入后立即 props.onSubmit() 触发
+   * 路由切换，persisted 的 makePersisted 包装层存在写入时序/normalize 边角问题，
+   * 同步 localStorage 无此风险。
+   */
+  const skillTabPersistTarget = Persist.workspace(sdk.directory, "skill-tab")
+  const SKILL_TAB_CACHE_KEY = `${skillTabPersistTarget.storage}:${skillTabPersistTarget.key}`
+
+  /** scope key：新会话使用 draft 域（对应 starter agent 的 starterAgentScopeKey） */
+  const skillTabScopeKey = createMemo(() => `draft:${sdk.directory}`)
+
+  /** 校验缓存的技能名是否属于 SKILL_TABS（对应 starter agent 的 normalizeStarterAgentID） */
+  const normalizeSkillTabName = (value?: string): string | undefined => {
+    if (!value) return undefined
+    if (!skillTabNames().has(value)) return undefined
+    return value
+  }
+
+  /** 同步读取 workspace 级缓存中当前 scope 的技能名 */
+  const readSkillTabCache = (): string | undefined => {
+    try {
+      const raw = localStorage.getItem(SKILL_TAB_CACHE_KEY)
+      if (!raw) return undefined
+      const parsed = JSON.parse(raw)
+      const session = typeof parsed?.session === "object" && parsed.session !== null ? parsed.session : {}
+      const name = session[skillTabScopeKey()]
+      return normalizeSkillTabName(typeof name === "string" ? name : undefined)
+    } catch {
+      return undefined
+    }
+  }
+
+  /** 同步写入 workspace 级缓存（对应 starter agent 的 setStarterAgentStore） */
+  const writeSkillTabCache = (name: string | undefined) => {
+    try {
+      const raw = localStorage.getItem(SKILL_TAB_CACHE_KEY)
+      const parsed = raw ? JSON.parse(raw) : { session: {} }
+      if (!parsed.session || typeof parsed.session !== "object") parsed.session = {}
+      const key = skillTabScopeKey()
+      if (name) {
+        parsed.session[key] = name
+      } else {
+        delete parsed.session[key]
+      }
+      localStorage.setItem(SKILL_TAB_CACHE_KEY, JSON.stringify(parsed))
+    } catch {
+      // ignore quota / parse errors
+    }
+  }
+
+  /** 初始化标志：确保每个新会话只恢复一次（对应 starter agent 的 newSessionStarterInitialized） */
+  const [skillTabInitialized, setSkillTabInitialized] = createSignal(false)
+
+  /** 提交中标志：handleSubmit 写缓存后 → props.onSubmit() 清空输入框 → 会话创建路由切换
+   *  这段过渡期内 activeSkillName 会从有值变为 undefined，但并非用户手动删除，
+   *  必须跳过清除逻辑，否则刚写入的缓存会被立即误删。 */
+  const [skillTabSubmitting, setSkillTabSubmitting] = createSignal(false)
+
+  // ① 恢复：仅新会话、prompt ready 后、无已有技能 pill 时恢复
+  createEffect(() => {
+    if (route.params.id) {
+      if (skillTabInitialized()) setSkillTabInitialized(false)
+      return
+    }
+    if (!prompt.ready()) return
+    if (skillTabInitialized()) return
+    setSkillTabInitialized(true)
+
+    const hasSkill = prompt.current().some((p) => getSkillDevName(p) !== undefined)
+    if (hasSkill) return // draft / query 已带技能，不覆盖
+
+    const saved = readSkillTabCache()
+    if (saved) handleSkillTabClick(saved)
+  })
+
+  // ② 删除检测：新会话期间技能从有值→无值，清缓存（发送过渡期跳过）
+  let prevActiveSkill: string | undefined
+  createEffect(() => {
+    if (route.params.id) {
+      prevActiveSkill = undefined
+      setSkillTabSubmitting(false) // 会话已创建，解除提交锁
+      writeSkillTabCache(undefined) // 发送成功后清除技能缓存，下次新会话不再恢复旧技能 pill
+      return
+    }
+    if (skillTabSubmitting()) return // 发送过渡期：输入框被清空，非用户手动删除
+    const name = activeSkillName()
+    if (prevActiveSkill && !name && skillTabNames().has(prevActiveSkill)) {
+      writeSkillTabCache(undefined)
+    }
+    prevActiveSkill = name
+  })
+
+  /**
+   * 点击技能标签：只作用于提示词段首技能，而非在光标处追加。
+   * - 段首无技能，或段首技能不属于快捷选项名单 → 在段首前置新增该技能
+   * - 段首技能属于快捷选项名单且与点击一致 → 删除段首技能（含其后分隔空格）
+   * - 段首技能属于快捷选项名单且与点击不一致 → 切换段首技能为点击项
+   * 直接写 prompt store：reconcile effect 会据此重建 contenteditable DOM。
+   */
+  const handleSkillTabClick = (skillName: string) => {
+    const head: AgentPart = { type: "agent", name: skillName, content: `/${skillName}`, start: 0, end: 0 }
+    const current = prompt.current()
+    const images = current.filter((part): part is ImageAttachmentPart => part.type === "image")
+    const base = current.filter((part) => part.type !== "image")
+
+    const first = base[0]
+    const headSkillName = first ? getSkillDevName(first) : undefined
+
+    // 段首技能属于快捷选项名单：一致则删除，否则切换
+    if (headSkillName && isSkillEntryTab(headSkillName)) {
+      // 切换：替换段首为 head，保留后续内容（含原分隔空格）
+      if (headSkillName !== skillName) {
+        window.getSelection()?.removeAllRanges()
+        prompt.set([head, ...base.slice(1), ...images], Number.MAX_SAFE_INTEGER)
+        return
+      }
+      // 删除：移除段首技能，并连带其后用于分隔的空格文本
+      const dropCount = base[1]?.type === "text" && base[1].content === " " ? 2 : 1
+      window.getSelection()?.removeAllRanges()
+      prompt.set([...base.slice(dropCount), ...images], Number.MAX_SAFE_INTEGER)
+      return
+    }
+
+    // 段首无技能 / 段首技能非快捷选项名单 → 段首前置新增（保留原内容）
+    const hasContent = base.some((part) => part.type !== "text" || part.content.trim().length > 0)
+    const next: Prompt = [head]
+    if (hasContent) {
+      const needsGap = first?.type !== "text" || (!!first.content && !first.content.startsWith(" "))
+      if (needsGap) next.push({ type: "text", content: " ", start: 0, end: 0 })
+      next.push(...base)
+    }
+    window.getSelection()?.removeAllRanges()
+    prompt.set([...next, ...images], Number.MAX_SAFE_INTEGER)
+  }
+
+  const openParent = () => {
+    const id = parentID()
+    if (!id) return
+    navigate(`/${route.params.dir}/session/${id}`)
+  }
+
+  // ③ 发送时写缓存：仅新会话即将创建会话的那一刻捕获当前技能
+  const handleSubmit = () => {
+    if (!route.params.id) {
+      const name = activeSkillName()
+      if (name && skillTabNames().has(name)) {
+        writeSkillTabCache(name)
+      }
+      setSkillTabSubmitting(true) // 加锁：防止 onSubmit 清空输入框触发误删缓存
+    }
+    props.onSubmit()
+  }
+
+  // 协作任务在等待用户回复或已阻塞时 Agent 已退出监控：消息确实发出后才把会话交回 Agent，具体恢复还是重试由后端执行摘要判定。
+  const handleSent = (sent: { sessionId: string }) => {
+    const status = collab.boundStep()?.status
+    if (props.shareMode || (status !== "running" && status !== "blocked")) return
+    void resumeCollabMonitoring(sent.sessionId, { projectDirectory: sdk.directory }).then((handedBack) => {
+      if (handedBack) void collab.refresh()
+    })
+  }
+
+  createEffect(() => {
+    const el = store.body
+    if (!el) return
+    const update = () => setStore("height", el.scrollHeight)
+    createResizeObserver(store.body, update)
+    update()
+  })
+
+  return (
+    <div
+      ref={props.setPromptDockRef}
+      data-component="session-prompt-dock"
+      class="shrink-0 w-full flex flex-col justify-center items-center pointer-events-none"
+    >
+      <div
+        classList={{
+          "w-full pointer-events-auto": true,
+          "md:max-w-[710px] md:mx-auto": props.centered && !route.params.id,
+          "md:max-w-[800px] md:mx-auto": props.centered && !!route.params.id,
+          "md:max-w-[800px]": !!route.params.id && props.previewOpen,
+        }}
+      >
+        {/* 协作开发阶段审核条：按产品要求排在最上方，与 question / permission dock 并存不互斥。
+            不点确认时输入框仍可用，用户可以继续让智能体调整产物。
+            分享模式下不渲染：那是选择消息导出的界面，混进一个「确认」按钮会误触发阶段流转。 */}
+        <Show when={!props.shareMode}>
+          <SessionStageReviewDock
+            sessionID={() => route.params.id}
+            projectDirectory={sdk.directory}
+            suppressed={collabBusy()}
+          />
+        </Show>
+
+        <Show when={props.state.questionRequest()} keyed>
+          {(request) => (
+            <div>
+              <SessionQuestionDock request={request} onSubmit={props.onResponseSubmit} />
+            </div>
+          )}
+        </Show>
+
+        <Show when={props.state.permissionRequest()} keyed>
+          {(request) => (
+            <div>
+              <SessionPermissionDock
+                request={request}
+                responding={props.state.permissionResponding()}
+                onDecide={(response) => {
+                  props.onResponseSubmit()
+                  props.state.decide(response)
+                }}
+              />
+            </div>
+          )}
+        </Show>
+
+        {/* 阶段审批通过后，输入框位置改为「「X」已完成」页脚 */}
+        <Show when={stageSettled()}>
+          <SessionStageDoneFooter sessionID={() => route.params.id} />
+        </Show>
+
+        <Show when={showComposer()}>
+          <Show when={props.shareMode}>
+            <div class="w-full px-4 py-3 flex items-center justify-between gap-3 share-toolbar">
+              <button
+                type="button"
+                class="flex items-center gap-2 cursor-pointer select-none"
+                onClick={() => props.onSelectAll?.()}
+              >
+                <span
+                  class="share-radio-btn"
+                  data-selected={props.isAllSelected ? "true" : undefined}
+                >
+                  <Show when={props.isAllSelected}>
+                    <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                      <path d="M3 7.5L5.5 10L11 4.5" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+                    </svg>
+                  </Show>
+                </span>
+                <span class="text-14-medium text-text-base">{language.t("kcode.session.share.selectAll" as any)}</span>
+                <Show when={(props.selectedCount ?? 0) > 0}>
+                  <span class="text-12-regular text-text-weak">({props.selectedCount})</span>
+                </Show>
+              </button>
+              <div class="flex items-center gap-2">
+                <Button
+                  variant="text"
+                  size="normal"
+                  onClick={() => props.onCancelShare?.()}
+                  style={{ height: "36px", padding: "0 12px" }}
+                >
+                  {language.t("common.cancel")}
+                </Button>
+                <Button
+                  variant="primary"
+                  size="normal"
+                  disabled={(props.selectedCount ?? 0) === 0}
+                  onClick={() => props.onShareImage?.()}
+                  class="flex items-center gap-1.5"
+                  style={{ height: "36px", padding: "0 12px" }}
+                >
+                  <Icon name="recognition-image" size="small" />
+                  <span>{language.t("kcode.session.share.imageShare" as any)}</span>
+                </Button>
+              </div>
+            </div>
+          </Show>
+          <Show when={!props.shareMode}>
+            <Show
+              when={prompt.ready()}
+              fallback={
+                <>
+                  <Show when={rolled()} keyed>
+                    {(revert) => (
+                      <div
+                        style={{
+                          "margin-top": `${-36 * value()}px`,
+                        }}
+                      >
+                        <SessionRevertDock
+                          items={revert.items}
+                          restoring={revert.restoring}
+                          disabled={revert.disabled}
+                          onRestore={revert.onRestore}
+                        />
+                      </div>
+                    )}
+                  </Show>
+                  <div class="w-full min-h-32 md:min-h-40 rounded-md border border-border-weak-base bg-background-base/50 px-4 py-3 text-text-weak whitespace-pre-wrap pointer-events-none">
+                    {handoffPrompt() || language.t("prompt.loading")}
+                  </div>
+                </>
+              }
+            >
+              <Show when={dock()}>
+                <div
+                  classList={{
+                    "overflow-hidden": true,
+                    "pointer-events-none": value() < 0.98,
+                  }}
+                  style={{
+                    "max-height": `${full() * value()}px`,
+                  }}
+                >
+                  <div ref={(el) => setStore("body", el)} class="pb-1">
+                    <SessionTodoDock
+                      sessionID={route.params.id}
+                      todos={props.state.todos()}
+                      collapseLabel={language.t("session.todo.collapse")}
+                      expandLabel={language.t("session.todo.expand")}
+                      dockProgress={value()}
+                    />
+                  </div>
+                </div>
+              </Show>
+              <Show when={rolled()} keyed>
+                {(revert) => (
+                  <div
+                    style={{
+                      "margin-top": `${-36 * value() - 16}px`,
+                    }}
+                  >
+                    <SessionRevertDock
+                      items={revert.items}
+                      restoring={revert.restoring}
+                      disabled={revert.disabled}
+                      onRestore={revert.onRestore}
+                    />
+                  </div>
+                )}
+              </Show>
+              <div
+                classList={{
+                  "relative": true,
+                }}
+                style={{
+                  "margin-top": `${-lift() + (rolled() ? 8 : 0)}px`,
+                }}
+              >
+                <Show when={dockItemCount()}>
+                  <div style={{ "margin-top": `${lift()}px` }}>
+                    <SessionFollowupDock
+                      items={props.followup!.items}
+                      sending={props.followup!.sending}
+                      onSend={props.followup!.onSend}
+                      onEdit={props.followup!.onEdit}
+                    />
+                  </div>
+                </Show>
+                <Show
+                  when={child()}
+                  fallback={
+                    <>
+                      <Show when={!props.state.blocked()}>
+          <PromptInput
+            ref={props.inputRef}
+                          newSessionWorktree={props.newSessionWorktree}
+                          onNewSessionWorktreeReset={props.onNewSessionWorktreeReset}
+                          onNewSessionWorktreeChange={props.onNewSessionWorktreeChange}
+                          worktreeBranches={props.worktreeBranches}
+                          newSessionBaseBranch={props.newSessionBaseBranch}
+                          onNewSessionBaseBranchChange={props.onNewSessionBaseBranchChange}
+                          gitHeaderVisible={props.gitHeaderVisible}
+                          gitHeaderReady={props.gitHeaderReady}
+                          gitHeaderMode={props.gitHeaderMode}
+                          gitHeaderDiff={props.gitHeaderDiff}
+                          gitHeaderBusy={props.gitHeaderBusy}
+                          gitHeaderManualPrAvailable={props.gitHeaderManualPrAvailable}
+                          gitHeaderHasOpenPr={props.gitHeaderHasOpenPr}
+                          onGitHeaderOpenReview={props.onGitHeaderOpenReview}
+                          onGitHeaderCommit={props.onGitHeaderCommit}
+                          onGitHeaderCreatePr={props.onGitHeaderCreatePr}
+                          onGitHeaderManualPr={props.onGitHeaderManualPr}
+                          onGitHeaderViewPr={props.onGitHeaderViewPr}
+                          edit={props.followup?.edit}
+                          onEditLoaded={props.followup?.onEditLoaded}
+                          shouldQueue={props.followup?.queue}
+                          onQueue={props.followup?.onQueue}
+                          onAbort={props.followup?.onAbort}
+                          onSubmit={handleSubmit}
+                          onSent={handleSent}
+                          autoSubmit={props.autoSubmit}
+                          onAutoSubmitConsumed={props.onAutoSubmitConsumed}
+                          goalBannerVisible={goalBannerVisible()}
+                          goalBanner={
+                            <Show when={route.params.id} keyed>
+                              {(id) => <SessionGoalBanner sessionID={id} onVisible={setGoalBannerVisible} />}
+                            </Show>
+                          }
+                        />
+                      </Show>
+                      <Show when={!route.params.id}>
+                        <div class="relative shrink-0" style={{ "padding-top": "24px" }}>
+                          <div
+                            ref={setSkillScrollEl}
+                            class="flex items-center gap-2 overflow-x-auto no-scrollbar"
+                            onScroll={updateSkillScrollState}
+                          >
+                            <For each={visibleSkillTabs()}>
+                              {(tab) => {
+                                return (
+                  <button
+                    type="button"
+                    onMouseDown={(event) => event.preventDefault()}
+                    onClick={() => handleSkillTabClick(tab.name)}
+                                    classList={{
+                                      "inline-flex items-center gap-1 px-3 py-2 h-[36px] rounded-[999px] text-[13px] font-[400] leading-[20px] cursor-pointer transition-colors border whitespace-nowrap text-[var(--neutral-700)] border-[var(--neutral-100,rgba(0,0,0,0.06))] bg-[var(--white-46)] hover:bg-[var(--white-94)] active:bg-[var(--white-94)] hover:text-[var(--black-94)] active:text-[var(--black-94)] hover:[&_[data-slot=icon-svg]]:text-[var(--black-94)] active:[&_[data-slot=icon-svg]]:text-[var(--black-94)]": true,
+                                    }}
+                                  >
+                                    <Icon
+                                      name={tab.iconName}
+                                      size="small"
+                                      class="size-4 shrink-0 text-[var(--neutral-700)]"
+                                    />
+                                    <span>{language.t(tab.labelKey as Parameters<typeof language.t>[0])}</span>
+                                  </button>
+                                )
+                              }}
+                            </For>
+                          </div>
+                          <Show when={canScrollLeft()}>
+                            <div class="absolute left-0 z-10 flex items-center" style={{ height: "36px", top: "24px" }}>
+                              <div class="flex items-center justify-center" style={{ height: "36px", background: "var(--prompt-input-before-bg-end)" }}>
+                                <button
+                                  type="button"
+                                  onClick={() => scrollSkillTabs("left")}
+                                  aria-label="scroll left"
+                                  class="flex items-center justify-center rounded-full border border-[var(--prompt-skill-scroll-border)] bg-[var(--prompt-skill-scroll-bg)] shadow-[var(--prompt-skill-scroll-shadow)] text-[var(--prompt-skill-scroll-fg)] cursor-pointer hover:bg-[var(--prompt-skill-scroll-bg-hover)] transition-colors shrink-0 leading-none"
+                                  style={{ width: "24px", height: "24px" }}
+                                >
+                                  <Icon name="chevron-left-round" size="medium" />
+                                </button>
+                              </div>
+                              <div
+                                class="w-8 pointer-events-none"
+                                style={{ height: "36px", background: "linear-gradient(to right, var(--prompt-input-before-bg-end), var(--prompt-input-before-bg-start))" }}
+                              />
+                            </div>
+                          </Show>
+                          <Show when={canScrollRight()}>
+                            <div class="absolute right-0 z-10 flex items-center" style={{ height: "36px", top: "24px" }}>
+                              <div
+                                class="w-8 pointer-events-none"
+                                style={{ height: "36px", background: "linear-gradient(to left, var(--prompt-input-before-bg-end), var(--prompt-input-before-bg-start))" }}
+                              />
+                              <div class="flex items-center justify-center" style={{ height: "36px", background: "var(--prompt-input-before-bg-end)" }}>
+                                <button
+                                  type="button"
+                                  onClick={() => scrollSkillTabs("right")}
+                                  aria-label="scroll right"
+                                  class="flex items-center justify-center rounded-full border border-[var(--prompt-skill-scroll-border)] bg-[var(--prompt-skill-scroll-bg)] shadow-[var(--prompt-skill-scroll-shadow)] text-[var(--prompt-skill-scroll-fg)] cursor-pointer hover:bg-[var(--prompt-skill-scroll-bg-hover)] transition-colors shrink-0 leading-none"
+                                  style={{ width: "24px", height: "24px" }}
+                                >
+                                  <Icon name="chevron-right-round" size="medium" />
+                                </button>
+                              </div>
+                            </div>
+                          </Show>
+                        </div>
+                      </Show>
+                    </>
+                  }
+                >
+                  <div
+                    ref={props.inputRef}
+                    class="w-full rounded-[12px] border border-border-weak-base bg-background-base p-3 text-16-regular text-text-weak"
+                  >
+                    <span>{language.t("session.child.promptDisabled")} </span>
+                    <Show when={parentID()}>
+                      <button
+                        type="button"
+                        class="cursor-pointer transition-colors text-[#495DFF] hover:text-[var(--button-text-text-hover)] active:text-[var(--button-text-text-active)]"
+                        onClick={openParent}
+                      >
+                        {language.t("session.child.backToParent")}
+                      </button>
+                    </Show>
+                  </div>
+                </Show>
+              </div>
+              <Show when={route.params.id}>
+                <p class="text-center text-[12px] text-[var(--neutral-400)] leading-[18px] mt-2">
+                  {language.t("prompt.disclaimer")}
+                  <Show when={charRate.rate()}>
+                    <span> · {charRate.rate()} {language.t("prompt.charRateUnit")}</span>
+                  </Show>
+                </p>
+              </Show>
+            </Show>
+          </Show>
+        </Show>
+      </div>
+    </div>
+  )
+}

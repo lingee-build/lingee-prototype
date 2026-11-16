@@ -1,0 +1,114 @@
+[data-component="segmented-control"] {
+  display: inline-flex;
+
+  [data-slot="segmented-control-list"] {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px;
+    border-radius: 20px;
+    background-color: var(--surface-segmented-track);
+  }
+
+  [data-slot="segmented-control-indicator"] {
+    position: absolute;
+    top: 4px;
+    left: 0;
+    bottom: 4px;
+    border-radius: 16px;
+    background-color: var(--surface-segmented-selected);
+    /* 滑块动效：时长 0.5s，请勿改回 1s，也不要删掉这段过渡。
+     *
+     * 背景：这个曲线是 easeOutQuint（前重后轻），原值 1s 的话前 ~0.4s 就基本滑到位，
+     * 剩下 ~0.6s 只是极缓慢收尾，视觉上非常「拖沓」——尤其本组件各 tab 文案宽度不一
+     * （全部/已保存/已提交/已发布/已驳回），切换时滑块要同时平移 + 变宽，拖沓感更明显。
+     *
+     * 为什么是 0.5s：desktop 端对应组件（lingee-desktop SegmentedTabs）用的是 1s + 同曲线，
+     * 因 easeOutQuint 前重后轻，其「感知落位」约在 0.4~0.5s。build 取 0.5s 是为了在
+     * 「手感利落」和「与 desktop 落位速度一致」之间取到的平衡点（0.3s 会明显比 desktop 快）。
+     * 若日后要两端严格统一，应 build 与 desktop 一起调同一个值，而不是把这里单方面改回 1s。
+     * 曲线保留 cubic-bezier(0.23,1,0.32,1) 以维持与 desktop 一致的滑动质感。 */
+    transition:
+      transform 0.5s cubic-bezier(0.23, 1, 0.32, 1),
+      width 0.5s cubic-bezier(0.23, 1, 0.32, 1);
+  }
+
+  [data-slot="segmented-control-item"] {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 32px;
+    padding: 0 16px;
+    border-radius: 16px;
+    overflow: clip;
+    white-space: nowrap;
+    cursor: pointer;
+    flex-shrink: 0;
+    outline: none;
+    border: none;
+    background-color: transparent;
+    position: relative;
+    z-index: 1;
+
+    /* text-14-regular */
+    font-family: var(--font-family-sans);
+    font-size: 14px;
+    font-style: normal;
+    font-weight: var(--font-weight-regular);
+    line-height: 20px;
+    letter-spacing: var(--letter-spacing-normal);
+    color: var(--text-base);
+
+    /* 对齐 desktop SegmentedTabs：文字仅做 0.2s 颜色过渡，字重（data-selected）瞬间切换，
+     * 不对 font-weight 做动画，避免切换时文字「缓慢变粗」的拖沓感。滑块动效仍由 indicator 承担。 */
+    transition: color 0.2s ease;
+
+    &:hover:not(:disabled):not([data-selected]) {
+      background-color: var(--surface-segmented-hover);
+    }
+
+    &[data-selected] {
+      color: var(--text-strong);
+      font-weight: var(--font-weight-medium);
+    }
+
+    &:disabled {
+      cursor: not-allowed;
+      color: var(--text-weaker);
+    }
+
+    &:focus-visible {
+      outline: 2px solid var(--border-focus);
+      outline-offset: -2px;
+    }
+  }
+
+  [data-slot="segmented-control-content"] {
+    &:focus-visible {
+      outline: none;
+    }
+  }
+
+  /* Small size variant */
+  &[data-size="small"] {
+    [data-slot="segmented-control-list"] {
+      gap: 2px;
+      padding: 2px;
+      border-radius: 16px;
+    }
+
+    [data-slot="segmented-control-indicator"] {
+      top: 2px;
+      bottom: 2px;
+      border-radius: 14px;
+    }
+
+    [data-slot="segmented-control-item"] {
+      height: 26px;
+      padding: 0 12px;
+      border-radius: 14px;
+      font-size: var(--font-size-small);
+    }
+  }
+}
