@@ -3222,6 +3222,7 @@ export const dict = {
     "kcode.skillDev.batch.dialog.chk.N2": "ZIP 包大小（估算）",
     "kcode.skillDev.batch.dialog.chk.security": "安全与合规（静态扫描）",
     "kcode.skillDev.batch.dialog.chk.S1": "安全扫描（动态检查）",
+    "kcode.skillDev.batch.dialog.chk.N3": "引用资源存在性",
     "kcode.skillDev.batch.dialog.checkResultAllPass": "共 {{count}} 个技能：全部检查通过",
     "kcode.skillDev.batch.dialog.checkResultSummary": "共 {{total}} 个技能：{{pass}} 个通过，{{fail}} 个不通过",
     "kcode.skillDev.batch.dialog.resultGroupFail": "检查不通过",

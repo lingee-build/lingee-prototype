@@ -3345,6 +3345,7 @@ export const dict = {
   "kcode.skillDev.batch.dialog.chk.N2": "ZIP package size (estimated)",
   "kcode.skillDev.batch.dialog.chk.security": "Security & compliance (static scan)",
   "kcode.skillDev.batch.dialog.chk.S1": "Security scan (dynamic check)",
+  "kcode.skillDev.batch.dialog.chk.N3": "Referenced resource existence",
   "kcode.skillDev.batch.dialog.checkResultAllPass": "{{count}} skills: all passed the check",
   "kcode.skillDev.batch.dialog.checkResultSummary": "{{total}} skills: {{pass}} passed, {{fail}} failed",
   "kcode.skillDev.batch.dialog.resultGroupFail": "Check failed",

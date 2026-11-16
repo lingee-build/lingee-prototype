@@ -220,8 +220,8 @@ export function DeleteConfirmStep({ run }: StepProps) {
   )
 }
 
-/** 第 2 步：检查中。按技能分组、可折叠，三大类检查项逐条出结果 */
-export function CheckingStep({ run }: StepProps) {
+/** 第 2 步：检查中。按技能分组、可折叠，检查项逐条出结果——提交模式含资源存在性（Console 开放接口（Mcphub）实时），独立检查只跑规范/安全 */
+export function CheckingStep({ run, mode }: StepProps) {
   const t = useT()
   const label = run.running ? `${run.running.skill.displayName} · ${t("kcode.skillDev.batch.dialog.checkRunning")}` : t("kcode.skillDev.batch.dialog.checking")
   const summaryOf = (item: BatchItem) => {
@@ -255,7 +255,7 @@ export function CheckingStep({ run }: StepProps) {
               </div>
               {item.expanded && (
                 <div className="px-3.5 pb-2 pt-1">
-                  {CHECK_CATEGORIES.map((category) => (
+                  {(mode === "submit" ? SUBMIT_CATEGORIES : CHECK_CATEGORIES).map((category) => (
                     <div className="mb-1.5" key={category.key}>
                       <div className="text-[11px] font-semibold text-[#6366f1] tracking-wide py-0.5">{t(`kcode.skillDev.batch.dialog.cat.${category.key}`)}</div>
                       {category.items.map((key) => {
