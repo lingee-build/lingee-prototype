@@ -94,9 +94,9 @@ export function SkillDevPage() {
 
   const rawHandlers: SkillActionHandlers = {
     onExport: (skill) => void exportArtifactPackage("skill", skill.id),
-    // 安装为个人技能：弹确认窗；安装中弹窗不可关、不可重复点
+    // 安装为个人技能：与设置页「+ 安装技能」共用弹窗，只是来源已定；安装中不可关、不可重复点
     onInstallPersonal: (skill) =>
-      dialog.show(() => <InstallPersonalSkillDialog skill={skill} />, undefined, { closeOnOverlayClick: false }),
+      dialog.show(() => <InstallPersonalSkillDialog source={{ kind: "project", skill }} />, undefined, { closeOnOverlayClick: false }),
     onEdit: (skill) => {
       // 已提交 / 已发布的技能，编辑前需要二次确认
       if (skill.enterpriseStatus === "saved" || skill.enterpriseStatus === "rejected") return edit(skill)
