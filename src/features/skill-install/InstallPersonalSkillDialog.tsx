@@ -12,14 +12,11 @@ export type ProjectSkillSource = { kind: "project"; skill: Skill }
 export type LocalDirSource = { kind: "local" }
 export type InstallSource = ProjectSkillSource | LocalDirSource
 
-/** 线上同款安装状态机（settings-skills.tsx 的 InstallState） */
+/** 原型安装状态：同名预判提前到弹窗打开时（PRD 修订 2026-11-16；线上是提交后 409） */
 type InstallState =
   | { phase: "idle" }
-  | { phase: "checking" }
-  | { phase: "ready"; name: string; conflict: boolean }
   | { phase: "installing" }
   | { phase: "done" }
-  | { phase: "error"; message: string }
 
 /** local 模式演示选择：点「选择文件夹 / 选择文件」后填入的数据（模拟服务端读 SKILL.md） */
 const DEMO_PICK: InstallInput & { path: string } = {
@@ -45,8 +42,9 @@ const fileFormatLabel = (t: (key: string) => string, f: File) =>
   /\.tar\.gz$/i.test(f.name) ? t("settings.skills.install.fileCard.tarGzFormat") : t("settings.skills.install.fileCard.zipFormat")
 
 /**
- * 「安装个人技能」弹窗：按线上 settings-skills.tsx 的 DialogInstallSkill 移植，
- * 结构、样式、文案、状态机与线上一致（idle → checking → ready+conflict → installing → done）。
+ * 「安装个人技能」弹窗：按线上 settings-skills.tsx 的 DialogInstallSkill 移植结构与样式。
+ * 差异（PRD 修订 2026-11-16）：同名判定提前到弹窗打开时（线上是点「安装」后服务端 409），
+ * 有同名直接显示覆盖警告框、主按钮为「覆盖并安装」；无同名主按钮为「安装」。
  * 卡片菜单进来时只有来源不同：目录已填入该技能所在的工程 skills 子目录，不可改选、无移除按钮。
  */
 export function InstallPersonalSkillDialog(props: { source: InstallSource }) {
@@ -68,7 +66,7 @@ export function InstallPersonalSkillDialog(props: { source: InstallSource }) {
   const [state, setState] = useState<InstallState>({ phase: "idle" })
   const fileInput = useRef<HTMLInputElement>(null)
 
-  const isLoading = state.phase === "checking" || state.phase === "installing"
+  const isLoading = state.phase === "installing"
   const hasSource = !!file || !!sourceDir.trim()
 
   const handleFile = (f: File | undefined) => {
@@ -110,28 +108,23 @@ export function InstallPersonalSkillDialog(props: { source: InstallSource }) {
     return hasSource ? DEMO_PICK : null
   }
 
-  const installRequest = async (overwriteInstall: boolean) => {
+  /** 来源的技能名：project 来源即技能名；local 来源选完后固定为演示技能名 */
+  const sourceName = props.source.kind === "project" ? skill?.name : hasSource ? DEMO_PICK.name : undefined
+  /** 打开时预判：个人技能库已有同名技能 → 直接显示覆盖警告框 */
+  const showConflict = !!sourceName && items.some((x) => x.name === sourceName)
+
+  const installRequest = async () => {
     const input = installInput()
     if (!input) return
-    setState({ phase: overwriteInstall ? "installing" : "checking" })
+    setState({ phase: "installing" })
     // 原型用短延时模拟 POST /skill/install
-    await new Promise((resolve) => setTimeout(resolve, overwriteInstall ? 700 : 500))
-    if (!overwriteInstall) {
-      // 409 同名：进入 ready + conflict，弹窗不关，等用户勾选覆盖
-      if (items.some((x) => x.name === input.name)) {
-        setState({ phase: "ready", name: input.name, conflict: true })
-        return
-      }
-    }
+    await new Promise((resolve) => setTimeout(resolve, 700))
     // 200：写入个人技能库（覆盖沿用原启用状态），提示并关闭
     install(input)
     setState({ phase: "done" })
     showToast({ variant: "success", title: t("settings.skills.install.success") })
     close()
   }
-
-  const ready = state.phase === "ready" ? state : undefined
-  const showConflict = ready?.conflict === true
 
   return (
     <Dialog
@@ -284,13 +277,13 @@ export function InstallPersonalSkillDialog(props: { source: InstallSource }) {
           <li>{t("settings.skills.install.requirements.item3")}</li>
         </ul>
 
-        {/* Conflict UI（线上 409 后展示：警告框 + 覆盖勾选） */}
+        {/* Conflict UI（打开时预判：警告框 + 覆盖勾选） */}
         {showConflict && (
           <div className="flex items-start gap-2 rounded-[10px] border border-[var(--warning-300)] bg-[var(--warning-50)] px-3 py-2">
             <Icon name="warning-circle" size="small" className="mt-0.5 shrink-0 text-[var(--warning-600)]" />
             <div className="flex flex-col gap-1">
               <span className="text-13-medium text-[var(--warning-700)]">
-                {t("settings.skills.install.conflict").replace("{{name}}", ready!.name)}
+                {t("settings.skills.install.conflict").replace("{{name}}", sourceName!)}
               </span>
               <label className="flex cursor-pointer items-center gap-1.5 text-13-regular text-text-base">
                 <input
@@ -317,7 +310,7 @@ export function InstallPersonalSkillDialog(props: { source: InstallSource }) {
           {showConflict ? (
             <button
               type="button"
-              onClick={() => void installRequest(true)}
+              onClick={() => void installRequest()}
               disabled={isLoading || !overwrite}
               className="flex cursor-pointer items-center justify-center gap-1 shrink-0 rounded-lg border-none px-4 py-2 text-sm font-medium leading-5 !bg-[var(--button-primary-bg)] hover:!bg-[var(--button-primary-bg-hover)] active:!bg-[var(--button-primary-bg-active)] text-[var(--button-primary-text)] transition-colors disabled:cursor-default disabled:opacity-60"
             >
@@ -326,7 +319,7 @@ export function InstallPersonalSkillDialog(props: { source: InstallSource }) {
           ) : (
             <button
               type="button"
-              onClick={() => void installRequest(false)}
+              onClick={() => void installRequest()}
               disabled={isLoading || !hasSource}
               className="flex cursor-pointer items-center justify-center gap-1 shrink-0 rounded-lg border-none px-4 py-2 text-sm font-medium leading-5 !bg-[var(--button-primary-bg)] hover:!bg-[var(--button-primary-bg-hover)] active:!bg-[var(--button-primary-bg-active)] text-[var(--button-primary-text)] transition-colors disabled:cursor-default disabled:opacity-60"
             >
