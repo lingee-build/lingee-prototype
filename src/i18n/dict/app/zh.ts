@@ -1616,7 +1616,7 @@ export const dict = {
   "settings.skills.install.conflict": "已存在同名技能「{{name}}」，是否覆盖安装？",
   "settings.skills.install.overwriteConfirm": "确认覆盖已有技能",
   "settings.skills.install.overwriteBtn": "覆盖并安装",
-  "settings.skills.install.success": "技能安装成功",
+  "settings.skills.install.success": "技能成功安装到用户目录，可在新会话中「/」唤起使用",
   "settings.skills.install.error.noSkillMd": "指定目录中不含 SKILL.md 文件",
   "settings.skills.install.error.missingName": "SKILL.md frontmatter 中未找到 name 字段",
   "settings.skills.install.error.pathUnsafe": "路径无效或存在安全风险",

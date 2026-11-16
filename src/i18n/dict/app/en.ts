@@ -1805,7 +1805,7 @@ export const dict = {
   "settings.skills.install.conflict": 'A skill named "{{name}}" already exists. Overwrite?',
   "settings.skills.install.overwriteConfirm": "I confirm overwriting the existing skill",
   "settings.skills.install.overwriteBtn": "Overwrite & Install",
-  "settings.skills.install.success": "Skill installed successfully",
+  "settings.skills.install.success": "Skill installed to your user directory; type / in a new session to use it",
   "settings.skills.install.error.noSkillMd": "SKILL.md not found in the specified directory",
   "settings.skills.install.error.missingName": "Cannot find 'name' field in SKILL.md frontmatter",
   "settings.skills.install.error.pathUnsafe": "Invalid or unsafe path",
