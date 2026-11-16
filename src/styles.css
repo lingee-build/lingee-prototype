@@ -3,6 +3,7 @@
 @import "./vendor/kcode-ui/components/empty.css";
 @import "./vendor/kcode-ui/components/drawer-panel.css";
 @import "./vendor/kcode-ui/components/render-card.css";
+@import "./vendor/kcode-ui/components/search.css";
 @import "./vendor/kcode-web/src/components/dev-page-layout.css";
 @import "./vendor/kcode-web/src/components/skill-batch/batch-action-bar.css";
 @import "./vendor/kcode-web/src/components/prompt-input/prompt-input-bar.css";

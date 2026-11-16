@@ -64,6 +64,14 @@ src/
 
 剧本走到最后一步时把产物写进 `mock/dev-store.ts`，所以对应的开发页里能看到新卡片。抽屉在 `features/side-panel/drawer`，内容与开发页的详情弹窗共用同一批组件（`features/skill-detail`、`features/agent-config`、`features/mcp-app-detail`）。
 
+## 技能详情：关联工具页签与搜索（US-2026-101087）
+
+技能详情弹窗与技能预览抽屉共用 `features/skill-detail/RelatedToolsTab.tsx`，mock 直接写 manifest 条目（`mock/fixtures/skill-detail.ts` 的 `tool_access.tools`），分组与第二行徽标由 `features/skill-detail/tool-groups.ts` 推导——与线上 `utils/skill-tool-groups.ts` 同名同规则：按来源分组（租户工具 → 第三方工具 → 个人 MCP → 业务组件 → 内置工具），卡片三行（名称 + 编码 / 本工程业务组件「项目名称 · 供应商」、第三方工具与个人 MCP 只显示服务名称、内置工具不显示、租户工具「供应商 · 服务」 / 描述），无来源记录的旧技能不分组、不显示第二行。
+
+- 搜索框阈值：关联工具 6 条及以上才出现；只过滤已加载清单，匹配名称、编码、描述（忽略大小写与首尾空格），无匹配分组的标题整体隐藏，全部不匹配时显示「无匹配工具」。
+- 演示数据（`mock/fixtures/skill-detail.ts`）：「发货通知单查询」8 条 / 5 组（跨组过滤），「应收账龄分析」恰好 6 条（阈值下界），「办理请假申请」3 条（不显示搜索框），「掷骰子」0 条（无页签），「供应商准入核查」为无来源记录的旧技能（单组、无标题、徽标显示 type）。
+- 入口：`/dev/skill` 打开技能卡片详情；会话里的技能产物卡片打开右侧预览抽屉。
+
 ## 采购价格异常预警创建演示
 
 启动后进入 `/p/scm-skills/session?demo=procurement`。该链接仅在原有新任务输入框预填需求，点击发送后，进入产品现有的技能创建会话。

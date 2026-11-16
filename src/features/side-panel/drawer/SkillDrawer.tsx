@@ -8,6 +8,7 @@ import { useEffect, useMemo, useState, type CSSProperties } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { BrandButton, CapsuleTag, ConfirmDialog, DropdownMenu, Empty, Icon, IconButton, Markdown, SegmentedControl, Tag, Tooltip, showToast, useDialog } from "@/ui"
 import { useLocaleStore, useT } from "@/i18n"
+import { useSync } from "@/stores/sync"
 import type { Skill } from "@/mock/fixtures/dev"
 import { skillDetailOf } from "@/mock/fixtures/skill-detail"
 import { sleep } from "@/mock/latency"
@@ -19,9 +20,10 @@ import { useStartSession } from "@/features/dev-page/use-start-session"
 import { BatchDialog } from "@/features/skill-batch/BatchDialog"
 import { ValidationReport } from "@/features/skill-detail/CheckGroup"
 import { OverviewTab } from "@/features/skill-detail/OverviewTab"
+import { RelatedToolsTab } from "@/features/skill-detail/RelatedToolsTab"
 import { validationOf } from "@/features/skill-detail/validation"
 
-type Tab = "overview" | "preview" | "check" | "evaluation"
+type Tab = "overview" | "preview" | "tools" | "check" | "evaluation"
 
 const FADE = "linear-gradient(to bottom, transparent 0, black 24px, black 100%)"
 const Spinner = () => (
@@ -81,6 +83,7 @@ export function SkillDrawer(props: { id: string; working: boolean }) {
   const query = useQuery({ queryKey: ["skill", props.id, props.working], queryFn: () => skillService.get(props.id), staleTime: 0, placeholderData: (prev) => prev })
   const skill = query.data
   const detail = useMemo(() => (skill ? skillDetailOf(skill) : undefined), [skill])
+  const projectName = useSync((s) => s.projects.find((x) => x.id === skill?.projectId)?.name)
   const report = useMemo(() => (skill ? validationOf(skill, locale) : []), [skill, locale])
   if (!skill || !detail) return null
   const locked = props.working || !!busy
@@ -189,7 +192,13 @@ export function SkillDrawer(props: { id: string; working: boolean }) {
         <SegmentedControl
           value={tab}
           onChange={(value) => setTab(value as Tab)}
-          items={[...(["overview", "preview", "check"] as const).map((value) => ({ value, label: t(`kcode.skillPreview.tab.${value}`) })), { value: "evaluation", label: <EvaluationTabLabel /> }]}
+          items={[
+            { value: "overview", label: t("kcode.skillPreview.tab.overview") },
+            { value: "preview", label: t("kcode.skillPreview.tab.preview") },
+            ...(detail.tools.length > 0 ? [{ value: "tools", label: t("kcode.skillPreview.tab.tools") }] : []),
+            { value: "check", label: t("kcode.skillPreview.tab.check") },
+            { value: "evaluation", label: <EvaluationTabLabel /> },
+          ]}
         />
         <IconButton icon="refresh" variant="ghost" iconSize="small" className="ml-auto h-7 w-7" title={t("session.files.refresh")} onClick={() => void query.refetch()} />
       </div>
@@ -220,6 +229,7 @@ export function SkillDrawer(props: { id: string; working: boolean }) {
             <Markdown text={detail.content.replace(/^---\n[\s\S]*?\n---\n/, "")} className="skill-detail-markdown leading-relaxed" />
           </div>
         )}
+        {tab === "tools" && <RelatedToolsTab tools={detail.tools} projectName={projectName} />}
         {tab === "check" &&
           (report.length === 0 ? (
             <Empty description={t("kcode.skillPreview.check.empty")} />

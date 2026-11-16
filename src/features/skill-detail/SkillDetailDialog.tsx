@@ -5,6 +5,7 @@ import { useMemo, useState, type CSSProperties } from "react"
 import { BrandButton, CapsuleTag, Dialog, Icon, Markdown, SegmentedControl, Tag, Tooltip, useDialog } from "@/ui"
 import { cx } from "@/lib/cx"
 import { useLocaleStore, useT } from "@/i18n"
+import { useSync } from "@/stores/sync"
 import type { Skill } from "@/mock/fixtures/dev"
 import { skillDetailOf } from "@/mock/fixtures/skill-detail"
 import { DynamicSkillIcon } from "@/features/dev-page/DynamicSkillIcon"
@@ -12,8 +13,9 @@ import { channelStatusOf, localChangedOf } from "@/features/skill-publish-scope/
 import { CheckTab } from "./CheckTab"
 import { summarize, validationOf } from "./validation"
 import { OverviewTab } from "./OverviewTab"
+import { RelatedToolsTab } from "./RelatedToolsTab"
 
-type DetailTab = "overview" | "preview" | "check" | "evaluation"
+type DetailTab = "overview" | "preview" | "tools" | "check" | "evaluation"
 
 function MetaCell(props: { label: string; value: string; className?: string; icon?: boolean }) {
   return (
@@ -40,6 +42,7 @@ export function SkillDetailDialog(props: { skill: Skill; initialTab?: DetailTab;
   const navigate = useNavigate()
   const { skill } = props
   const detail = useMemo(() => skillDetailOf(skill), [skill])
+  const projectName = useSync((s) => s.projects.find((x) => x.id === skill.projectId)?.name)
   const [tab, setTab] = useState<DetailTab>(props.initialTab ?? "overview")
   // 检查过的技能带着上一次的报告，没检查过的显示「未检测」
   const locale = useLocaleStore((s) => s.locale)
@@ -157,7 +160,13 @@ export function SkillDetailDialog(props: { skill: Skill; initialTab?: DetailTab;
             <SegmentedControl
               value={tab}
               onChange={value => setTab(value as DetailTab)}
-              items={[...(["overview", "preview", "check"] as const).map((value) => ({ value, label: t(`kcode.skillPreview.tab.${value}`) })), {value:"evaluation", label: <EvaluationTabLabel />}]}
+              items={[
+                { value: "overview", label: t("kcode.skillPreview.tab.overview") },
+                { value: "preview", label: t("kcode.skillPreview.tab.preview") },
+                ...(detail.tools.length > 0 ? [{ value: "tools", label: t("kcode.skillPreview.tab.tools") }] : []),
+                { value: "check", label: t("kcode.skillPreview.tab.check") },
+                { value: "evaluation", label: <EvaluationTabLabel /> },
+              ]}
             />
           </div>
 
@@ -169,6 +178,7 @@ export function SkillDetailDialog(props: { skill: Skill; initialTab?: DetailTab;
                 <Markdown text={detail.content.replace(/^---\n[\s\S]*?\n---\n/, "")} className="skill-detail-markdown leading-relaxed" />
               </div>
             )}
+            {tab === "tools" && <RelatedToolsTab tools={detail.tools} projectName={projectName} />}
             {tab === "check" && (
               <CheckTab
                 groups={groups}
