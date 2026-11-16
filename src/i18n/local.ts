@@ -602,6 +602,28 @@ export const localZh: Record<string, string> = {
   "kcode.skillPreview.providerType.THIRD": "第三方",
   "proto.skillTools.search": "搜索工具名称、编码或描述",
   "proto.skillTools.empty": "无匹配工具",
+  // 线上 settings-worktree 的键（dict/app 尚未同步，值照线上 zh.ts / en.ts）
+  "settings.worktree.badge.task": "任务",
+  "settings.worktree.badge.taskHint": "由任务执行创建的工作区；删除前会先归档任务分支，不会被自动清理",
+  "settings.worktree.count.taskHint": "含 {{count}} 个任务工作区；任务工作区不计入数量上限，也不会被自动清理",
+  "settings.worktree.overLimit.raiseTo": "提高上限至 {{limit}}",
+  "settings.worktree.overLimit.raiseUnlimited": "取消限制",
+  "settings.worktree.delete.task": "任务工作区：删除前会先把任务分支归档，之后可通过重新执行任务还原。",
+  "settings.worktree.delete.taskDisabled": "协作开发的 worktree 暂不支持删除",
+  // 线上 settings-mcp 的键（dict/app 尚未同步，值照线上 zh.ts / en.ts）
+  "settings.mcp.tools.count": "工具({{count}})",
+  "settings.mcp.tools.updated": "刷新于 ",
+  "settings.mcp.tools.loading": "加载中…",
+  "settings.mcp.tools.refresh": "刷新工具",
+  "settings.mcp.tools.search": "搜索工具名称或描述",
+  "settings.mcp.tools.loadMore": "加载更多",
+  "settings.mcp.tools.noResults": "无匹配工具",
+  // 线上 settings-general 的键（dict/app 尚未同步，值照线上 zh.ts / en.ts）
+  "settings.general.row.userLocale.title": "地域",
+  "settings.general.row.userLocale.description": "独立于界面语言设置日期、数字等地域格式",
+  "settings.general.row.userLocale.auto": "使用账号默认值",
+  "settings.general.row.mcpApps.title": "启用 MCP Apps",
+  "settings.general.row.mcpApps.description": "允许在会话中展示和操作已接入应用的交互界面",
 }
 
 export const localEn: Record<string, string> = {
@@ -1204,4 +1226,24 @@ export const localEn: Record<string, string> = {
   "kcode.skillPreview.providerType.THIRD": "Third party",
   "proto.skillTools.search": "Search by tool name, code, or description",
   "proto.skillTools.empty": "No matching tools",
+  "settings.mcp.tools.count": "Tools({{count}})",
+  "settings.mcp.tools.updated": "Refreshed ",
+  "settings.mcp.tools.loading": "Loading…",
+  "settings.mcp.tools.refresh": "Refresh tools",
+  "settings.mcp.tools.search": "Search tool name or description",
+  "settings.mcp.tools.loadMore": "Load more",
+  "settings.mcp.tools.noResults": "No matching tools",
+  "settings.general.row.userLocale.title": "Region",
+  "settings.general.row.userLocale.description": "Set the regional format independently of the display language",
+  "settings.general.row.userLocale.auto": "Use account default",
+  "settings.general.row.mcpApps.title": "Enable MCP Apps",
+  "settings.general.row.mcpApps.description": "Show and interact with connected apps in conversations",
+  // 线上 settings-worktree 的键（dict/app 尚未同步，值照线上 zh.ts / en.ts）
+  "settings.worktree.badge.task": "Task",
+  "settings.worktree.badge.taskHint": "Created by task execution; its task branch is archived before any deletion and it is never cleaned up automatically",
+  "settings.worktree.count.taskHint": "Includes {{count}} task worktrees; task worktrees do not count toward the limit and are never cleaned up automatically",
+  "settings.worktree.overLimit.raiseTo": "Raise the limit to {{limit}}",
+  "settings.worktree.overLimit.raiseUnlimited": "Remove the limit",
+  "settings.worktree.delete.task": "Task workspace: the task branch is archived first and can be restored by re-running the task.",
+  "settings.worktree.delete.taskDisabled": "Worktrees from collaborative development cannot be deleted yet",
 }

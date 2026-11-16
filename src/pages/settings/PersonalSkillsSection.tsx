@@ -8,17 +8,24 @@ const LIST = "rounded-[16px] bg-[color-mix(in_srgb,white_82%,transparent)] px-2 
 const TOOL = "flex size-[28px] cursor-pointer items-center justify-center rounded-[8px] border-none bg-transparent text-text-weak transition-colors hover:bg-[var(--surface-base)] hover:text-text-base"
 
 /**
- * 设置 → 技能：我的技能 / 更多技能（照线上结构，文案取线上键）。
+ * 设置 → 技能：我的技能列表部分（照线上结构，文案取线上键）。
  * 「+ 安装技能」与技能开发页卡片菜单共用同一个「安装个人技能」弹窗，只差来源模式。
+ *
+ * 两种用法：
+ * - 不传 props（keyword === undefined）：独立渲染，自带二级页签 / 搜索 / 刷新 / 安装按钮（原行为不变）；
+ * - 传 keyword：嵌入 SettingsSkills 的外层结构，本组件退化为纯列表（过滤用外层搜索词，
+ *   页签与安装按钮由 SettingsSkills 提供，避免结构重复）。
  */
-export function PersonalSkillsSection() {
+export function PersonalSkillsSection(props: { keyword?: string }) {
   const t = useT()
   const dialog = useDialog()
   const items = usePersonalSkills((s) => s.items)
   const setEnabled = usePersonalSkills((s) => s.setEnabled)
   const uninstall = usePersonalSkills((s) => s.uninstall)
   const [tab, setTab] = useState<"mySkills" | "moreSkills">("mySkills")
-  const [keyword, setKeyword] = useState("")
+  const [ownKeyword, setOwnKeyword] = useState("")
+  const embedded = props.keyword !== undefined
+  const keyword = props.keyword ?? ownKeyword
 
   const visible = items.filter((x) => {
     const kw = keyword.trim().toLowerCase()
@@ -42,7 +49,8 @@ export function PersonalSkillsSection() {
 
   return (
     <div className="flex flex-col pt-4">
-      {/* 工具栏：二级 tab + 搜索 + 刷新 + 安装技能（线上同款布局） */}
+      {/* 工具栏：二级 tab + 搜索 + 刷新 + 安装技能（线上同款布局）；嵌入 SettingsSkills 时由外层提供，整块隐藏 */}
+      {!embedded && (
       <div className="mb-3 flex items-center gap-2">
         <div className="flex w-fit gap-1 rounded-full bg-[#F3F4F6] p-1">
           {(["mySkills", "moreSkills"] as const).map((key) => (
@@ -59,7 +67,7 @@ export function PersonalSkillsSection() {
           ))}
         </div>
         <div className="ml-auto flex items-center gap-2">
-          <Search value={keyword} onChange={setKeyword} placeholder={t("settings.skills.search.placeholder")} className="w-[200px]" />
+          <Search value={keyword} onChange={setOwnKeyword} placeholder={t("settings.skills.search.placeholder")} className="w-[200px]" />
           <button type="button" className={TOOL} aria-label="refresh" onClick={() => showToast(t("proto.personalSkills.refreshed"))}>
             <Icon name="refresh" size="small" className="size-4" />
           </button>
@@ -68,6 +76,7 @@ export function PersonalSkillsSection() {
           </BrandButton>
         </div>
       </div>
+      )}
 
       {tab === "moreSkills" ? (
         <div className={LIST}>
@@ -119,7 +128,8 @@ export function PersonalSkillsSection() {
         </div>
       )}
 
-      <p className="mt-2 px-1 text-[12px] leading-[18px] text-text-weak">{t("settings.skills.note")}</p>
+      {/* 底部说明：线上 SettingsSkills 页签结构无此块，嵌入时随工具栏一起隐藏 */}
+      {!embedded && <p className="mt-2 px-1 text-[12px] leading-[18px] text-text-weak">{t("settings.skills.note")}</p>}
     </div>
   )
 }
