@@ -3,7 +3,7 @@
  * 做新功能原型时把 key 加在这里，中英文都要写；功能合进线上后，换成线上的 key 并从这里删掉。
  */
 export const localZh: Record<string, string> = {
-  "proto.personalInstall.menu": "个人安装",
+  "proto.personalInstall.menu": "安装",
   "proto.personalInstall.unknownProject": "未知工程",
   "proto.personalSkills.refreshed": "已刷新",
   "proto.personalSkills.noMatch": "没有匹配的技能",
@@ -627,7 +627,7 @@ export const localZh: Record<string, string> = {
 }
 
 export const localEn: Record<string, string> = {
-  "proto.personalInstall.menu": "Personal install",
+  "proto.personalInstall.menu": "Install",
   "proto.personalInstall.unknownProject": "Unknown project",
   "proto.personalSkills.refreshed": "Refreshed",
   "proto.personalSkills.noMatch": "No matching skills",
