@@ -10,3 +10,6 @@ node_modules
 # Local Lingee runtime state
 /.lingeebuild/
 /src/mock/evaluation/sales-evaluation.local.json
+
+# 构建产物
+dist/
