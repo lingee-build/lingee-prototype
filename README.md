@@ -73,12 +73,12 @@ src/
 
 ## 项目技能安装为个人技能（US-2026-082714）
 
-入口与设置页「+ 安装技能」共用同一个「安装个人技能」弹窗（`features/skill-install/InstallPersonalSkillDialog.tsx`，布局与文案照线上 1:1 复刻，取线上字典 `settings.skills.install.*`）：设置页入口是选本地文件夹 / 压缩包（local 来源），卡片菜单入口来源已定为该技能（project 来源）——来源区显示技能名 + 工程目录路径（无移除按钮），其余与设置页完全一致。个人技能库在 `stores/personal-skills.ts`，设置页「技能」页签的「我的技能」列表在 `pages/settings/PersonalSkillsSection.tsx`。
+入口与设置页「+ 安装技能」共用同一个「安装个人技能」弹窗（`features/skill-install/InstallPersonalSkillDialog.tsx`，按线上 `settings-skills.tsx` 的 `DialogInstallSkill` 逐行移植：同样的 480px 宽、`gap-4 px-5 pt-5 pb-6`、标题 `text-16-medium`、h-[140px] 来源卡（`border-2 dotted + var(--primary-200)` + `var(--icon-bg-hover)` 底、folder-plus-24 图标、名称取路径最后一段）、`list-disc` 三条格式要求、取消 / 主按钮原版样式，文案全取线上字典 `settings.skills.install.*`）：设置页入口是拖放区 + 选文件夹 / 选文件（local 来源，原型无 Electron bridge，选文件夹直接填演示目录 mo-solution-design），卡片菜单入口来源已定为该技能（project 来源）——来源卡显示工程目录下该技能的路径（无移除按钮），其余与设置页完全一致。冲突流程也是线上同款状态机（idle → checking → ready → installing）：点「安装」先做同名检查，无同名直接装；有同名时弹窗不关，出现警告框（warning 色边框底色 + warning-circle 图标 + 冲突文案）+ 勾选「确认覆盖已有技能」，勾选后「覆盖并安装」才可点；检查与安装期间按钮全部禁用。个人技能库在 `stores/personal-skills.ts`（覆盖沿用原启用状态），设置页「技能」页签的「我的技能」列表在 `pages/settings/PersonalSkillsSection.tsx`。
 
-- 无同名：主按钮「安装」，点后变「安装中…」并禁用，弹窗此时不可关闭（Esc 与遮罩都失效）；成功后关闭并提示「技能安装成功」。
-- 有同名：显示线上同款冲突提示「已存在同名技能「X」，是否覆盖安装？」，主按钮改「覆盖并安装」；同名技能处于停用状态时追加一句「覆盖后仍保持停用」，覆盖后沿用原启用状态（只换内容）。
+- 无同名：点「安装」→ 检查 → 安装成功，弹窗关闭并 toast「技能安装成功」。
+- 有同名：点「安装」→ 警告框「已存在同名技能「X」，是否覆盖安装？」+ 勾选「确认覆盖已有技能」→「覆盖并安装」→ 成功（覆盖后沿用原启用状态）。
 - 设置 → 技能 → 我的技能：按线上结构搭——「我的技能 / 更多技能」二级页签、搜索、刷新、「+ 安装技能」入口；列表行是技能名 +「个人」标签 + 描述 + 启停开关 + 卸载（垃圾桶，走确认弹窗）。
-- 演示数据：预置「发货通知单查询」（与供应链技能包里的项目技能同名，用来演示覆盖警告）和「办理请假申请」（停用状态，来源 HR 智能助手）；「价格表批量调价」等其余技能无同名，用来演示首次安装；设置页「+ 安装技能」选中后填入演示目录 mo-solution-design。
+- 演示数据：预置「发货通知单查询」（与供应链技能包里的项目技能同名，用来演示覆盖警告）和「办理请假申请」（停用状态，来源 HR 智能助手）；「价格表批量调价」等其余技能无同名，用来演示首次安装。
 - 个人技能库持久化在 localStorage 的 `proto-personal-skills`，刷新不丢；要回到初始数据，清掉这个 key 即可。
 - 入口：`/dev/skill` 打开技能卡片详情；会话里的技能产物卡片打开右侧预览抽屉。
 

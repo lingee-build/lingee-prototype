@@ -4,8 +4,6 @@
  */
 export const localZh: Record<string, string> = {
   "proto.personalInstall.menu": "安装为个人技能",
-  "proto.personalInstall.conflictDisabled": "该个人技能当前为停用状态，覆盖后仍保持停用。",
-  "proto.personalInstall.installing": "安装中…",
   "proto.personalInstall.unknownProject": "未知工程",
   "proto.personalSkills.refreshed": "已刷新",
   "proto.personalSkills.noMatch": "没有匹配的技能",
@@ -608,8 +606,6 @@ export const localZh: Record<string, string> = {
 
 export const localEn: Record<string, string> = {
   "proto.personalInstall.menu": "Install as personal skill",
-  "proto.personalInstall.conflictDisabled": "That personal skill is disabled and stays disabled after overwriting.",
-  "proto.personalInstall.installing": "Installing…",
   "proto.personalInstall.unknownProject": "Unknown project",
   "proto.personalSkills.refreshed": "Refreshed",
   "proto.personalSkills.noMatch": "No matching skills",
