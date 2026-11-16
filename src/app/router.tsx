@@ -2,6 +2,7 @@ import { ConfigPreparationHost } from "@/features/artifact-config/ConfigPreparat
 import { UpgradeHost } from "@/features/artifact-upgrade/UpgradeGate"
 import { createBrowserRouter, Navigate, Outlet, useLocation } from "react-router"
 import { AppShell } from "./AppShell"
+import { ScenarioDock } from "@/features/env-source/ScenarioDock"
 import { Providers } from "./providers"
 import { useAuth } from "@/stores/auth"
 import { useSync } from "@/stores/sync"
@@ -10,6 +11,7 @@ function Root() {
   return (
     <Providers>
       <Outlet />
+      <ScenarioDock />
       <UpgradeHost />
       <ConfigPreparationHost />
     </Providers>
@@ -22,6 +24,14 @@ function RequireAuth() {
   const location = useLocation()
   if (!account) return <Navigate to="/login" replace state={{ from: location.pathname + location.search }} />
   return <AppShell />
+}
+
+/** 全屏页（设置页）的鉴权壳：不套 AppShell——线上设置页以 webview 全屏挂载、盖掉应用侧栏 */
+function RequireAuthBare() {
+  const account = useAuth((s) => s.account)
+  const location = useLocation()
+  if (!account) return <Navigate to="/login" replace state={{ from: location.pathname + location.search }} />
+  return <Outlet />
 }
 
 /** 首页：线上没有项目时才停留在 "/"，有项目则直接进入第一个项目的新任务页 */
@@ -47,9 +57,13 @@ export const router = createBrowserRouter([
           { path: "dev/:mode", lazy: () => import("@/pages/dev/DevPage") },
           // 工作流设计页：/dev/workflow/:itemId（其他开发入口带二级路径时回到对应列表）
           { path: "dev/:mode/:itemId", lazy: () => import("@/pages/dev/workflow/WorkflowDesignerPage") },
-          { path: "settings/:section?", lazy: () => import("@/pages/settings/SettingsPage") },
           { path: "*", element: <Navigate to="/" replace /> },
         ],
+      },
+      // 设置页：全屏路由（不嵌应用侧栏，左导航为设置专属菜单）
+      {
+        Component: RequireAuthBare,
+        children: [{ path: "settings/:section?", lazy: () => import("@/pages/settings/SettingsPage") }],
       },
     ],
   },

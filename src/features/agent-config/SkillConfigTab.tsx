@@ -24,7 +24,7 @@ export function SkillTags(props: { source?: AgentSkill["source"]; status?: Agent
       <>
         <span className="shrink-0 text-[12px] leading-[18px]" style={{ color: "var(--text-base)" }}>{t("kcode.agentConfig.skills.sourceCloud")}</span>
         {props.localState && divider}
-        {props.localState === "changed" && <span className="shrink-0 text-[12px] leading-[18px] text-[var(--text-base)]" title="技能发布后本地有修改，需先提交技能审核">已保存</span>}
+        {props.localState === "changed" && <span className="shrink-0 text-[12px] leading-[18px] text-[var(--text-base)]" title="技能发布后有修改，需先提交技能审核">已保存</span>}
         {props.localState === "reviewing" && <span className="shrink-0 text-[12px] leading-[18px]" style={{ color: "rgba(41,112,255,1)" }}>审核中</span>}
       </>
     )
@@ -49,7 +49,7 @@ export function SkillConfigTab(props: TabProps & { projectId: string }) {
   const t = useT()
   const dialog = useDialog()
   const { form, set, readonly } = props
-  // 商城技能需校验本地是否有改动，用实时技能数据计算状态
+  // 商城技能需校验是否有改动，用实时技能数据计算状态
   const all = useQuery({ queryKey: ["skills"], queryFn: skillService.list, staleTime: 0 })
   const localOf = (name: string) => all.data?.find((x) => x.name === name)
   const editSession = useEditSession()

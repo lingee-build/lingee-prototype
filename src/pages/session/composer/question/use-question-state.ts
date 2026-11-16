@@ -3,12 +3,14 @@ import type { QuestionInfo } from "@/mock/types"
 
 /**
  * 提问 dock 的答题状态：当前题、每题答案、自定义答案、已跳过的题。
- * 单选题选中即切换，多选题逐项勾选；自定义答案和预设选项走同一套答案数组。
+ * 单选题选中即切换，多选题逐项勾选；自定义答案和预设选项走同一套答案数组；
+ * 选项带 followUp 时选中展开补充输入（如新工具名），提交时拼在该题答案末尾。
  */
 export function useQuestionState(questions: QuestionInfo[]) {
   const [tab, setTab] = useState(0)
   const [answers, setAnswers] = useState<string[][]>(() => questions.map(() => []))
   const [custom, setCustom] = useState<string[]>(() => questions.map(() => ""))
+  const [followUp, setFollowUp] = useState<string[]>(() => questions.map(() => ""))
   const [skipped, setSkipped] = useState<boolean[]>(() => questions.map(() => false))
   const [editing, setEditing] = useState<number | null>(null)
 
@@ -23,6 +25,10 @@ export function useQuestionState(questions: QuestionInfo[]) {
     setTab,
     answers,
     custom,
+    followUp,
+    setFollowUpValue(index: number, value: string) {
+      setFollowUp((all) => all.map((x, i) => (i === index ? value : x)))
+    },
     editing,
     setEditing,
     unanswered,

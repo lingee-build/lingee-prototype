@@ -153,6 +153,7 @@ export function Component() {
 
 
   const evaluationObject = (sessionId && evaluationSessions[sessionId]?.objectId) || search.get("evaluation")
+
   if (evaluationObject && deletedObjects?.[evaluationObject]) return <p role="status" className="p-8">被测对象及其评测数据已删除。</p>
   if (evaluationObject) return <EvaluationSession key={sessionId || evaluationObject} projectId={projectId} sessionId={sessionId} objectId={evaluationObject} />
 

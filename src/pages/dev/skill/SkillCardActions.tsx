@@ -20,7 +20,7 @@ export interface SkillActionHandlers {
 const ITEM = "flex items-center cursor-pointer gap-1"
 
 /** 技能卡片右上角的「…」菜单：编辑 / 本地测试 / 云端测试 / 评测 / 检查 / 提交 /（审核中才有）撤回 / 删除 */
-export function SkillCardActions(props: { skill: Skill; handlers: SkillActionHandlers; lockTip?: string }) {
+export function SkillCardActions(props: { skill: Skill; handlers: SkillActionHandlers }) {
   const t = useT()
   const navigate = useNavigate()
   const [open, setOpen] = useState(false)
@@ -58,12 +58,12 @@ export function SkillCardActions(props: { skill: Skill; handlers: SkillActionHan
                 <Icon name="shield-check" size="small" />
                 <span>{t("kcode.skillDev.action.check")}</span>
               </DropdownMenu.Item>
-              <DropdownMenu.Item onSelect={() => handlers.onSubmit(skill)} disabled={!!props.lockTip} title={props.lockTip} className={ITEM}>
+              <DropdownMenu.Item onSelect={() => handlers.onSubmit(skill)} className={ITEM}>
                 <Icon name="submit-upload" size="small" />
                 <span>{t("kcode.skillPreview.action.submit")}</span>
               </DropdownMenu.Item>
               {skill.enterpriseStatus === "submitted" && (
-                <DropdownMenu.Item onSelect={() => handlers.onWithdraw(skill)} disabled={!!props.lockTip} title={props.lockTip} className={ITEM}>
+                <DropdownMenu.Item onSelect={() => handlers.onWithdraw(skill)} className={ITEM}>
                   <Icon name="undo" size="small" />
                   <span>{t("kcode.skillDev.action.withdraw")}</span>
                 </DropdownMenu.Item>

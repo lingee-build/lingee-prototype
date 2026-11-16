@@ -6,6 +6,8 @@ import { useT } from "@/i18n"
 import type { KnowledgeBinding } from "@/mock/fixtures/dev"
 import type { KnowledgeCategory, KnowledgeEntry } from "@/mock/fixtures/knowledge"
 import { knowledgeService } from "@/services"
+import { sourceEnvOf, useEnvScenario } from "@/features/env-source/env-scenario"
+import { PROD_KNOWLEDGE_TREE } from "@/mock/fixtures/env"
 import { DocCard, DocDetail, FolderCheckbox, KnowledgeFolderIcon, useKnowledgeDate } from "./shared"
 import { folderState, indexTree, isCovered } from "./tree"
 
@@ -23,7 +25,10 @@ export function AddKnowledgeDialog(props: { selected: string[]; onConfirm: (ids:
   const [current, setCurrent] = useState<string>()
   const [detail, setDetail] = useState<KnowledgeEntry>()
 
-  const tree = useQuery({ queryKey: ["knowledge-tree"], queryFn: knowledgeService.tree })
+  /** 企业知识文件夹树按「资源来源」拉取（US-2026-043955 功能点 8）：测试环境沿用现状目录；来源为生产时换生产环境目录（演示数据） */
+  const scenario = useEnvScenario()
+  const sourceEnv = sourceEnvOf(scenario)
+  const tree = useQuery({ queryKey: ["knowledge-tree", sourceEnv], queryFn: () => (sourceEnv === "pro" ? Promise.resolve(PROD_KNOWLEDGE_TREE) : knowledgeService.tree()) })
   const index = useMemo(() => indexTree(tree.data ?? []), [tree.data])
   const keyword = query.trim().toLowerCase()
   const folder = current ?? tree.data?.[0]?.id
@@ -133,6 +138,7 @@ export function AddKnowledgeDialog(props: { selected: string[]; onConfirm: (ids:
                 <Icon name="info-fill" size="small" className="size-5 shrink-0 text-[var(--primary-600)]" />
                 <span className="text-[14px] leading-[20px] text-[var(--gray-800)]">{t("kcode.agentKnowledge.addTip")}</span>
               </div>
+              <p className="mb-3 text-[12px] leading-[18px] text-text-weak shrink-0">企业知识清单来自资源来源环境：{sourceEnv === "pro" ? "金蝶软件（中国）有限公司 · 生产" : "金蝶软件（中国）有限公司 · 测试"}</p>
               <div className="flex items-center gap-2 rounded-[9px] border border-[var(--border-weak-base)] text-text-weak shrink-0" style={{ height: 38, padding: "0 13px", marginBottom: 12 }}>
                 <Icon name="search-16" size="small" className="shrink-0 text-text-weak" />
                 <input

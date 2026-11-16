@@ -1,5 +1,5 @@
 import { SmartIdentifierIcon } from "@/source-runtime/SmartIdentifierIcon"
-import { useEffect, useRef, useState } from "react"
+import { Fragment, useEffect, useRef, useState } from "react"
 import { Button, DockPrompt, Icon } from "@/ui"
 import { cx } from "@/lib/cx"
 import { useT } from "@/i18n"
@@ -38,7 +38,14 @@ export function QuestionDock(props: { request: QuestionRequest; onSubmit: (answe
 
   const confirm = () => {
     if (!state.allAnswered) return
-    props.onSubmit(state.answers)
+    // 选项带 followUp（如「更换工具」填新工具名）时，把补充输入拼在该题答案末尾
+    props.onSubmit(
+      state.answers.map((answers, qi) => {
+        const picked = questions[qi].options.find((o) => answers.includes(o.label))
+        const extra = picked?.followUp ? state.followUp[qi].trim() : ""
+        return answers.length > 0 && extra ? [...answers, extra] : answers
+      }),
+    )
   }
   // 跳过当前题；跳过的是最后一道未答题时直接提交
   const skip = () => {
@@ -154,19 +161,37 @@ export function QuestionDock(props: { request: QuestionRequest; onSubmit: (answe
               </div>
             </div>
             {q.options.map((option, oi) => (
-              <QuestionOption
-                key={option.label}
-                multi={!!q.multiple}
-                picked={state.answers[qi].includes(option.label)}
-                index={oi + 1}
-                label={option.label}
-                description={option.description}
-                tag={option.recommended ? t("dialog.provider.tag.recommended") : undefined}
-                onClick={() => {
-                  state.setTab(qi)
-                  state.pick(qi, option.label)
-                }}
-              />
+              <Fragment key={option.label}>
+                <QuestionOption
+                  multi={!!q.multiple}
+                  picked={state.answers[qi].includes(option.label)}
+                  index={oi + 1}
+                  label={option.label}
+                  description={option.description}
+                  tag={option.recommended ? t("dialog.provider.tag.recommended") : undefined}
+                  onClick={() => {
+                    state.setTab(qi)
+                    state.pick(qi, option.label)
+                  }}
+                />
+                {option.followUp && state.answers[qi].includes(option.label) && (
+                  <div data-slot="question-follow-up">
+                    <textarea
+                      data-slot="question-custom-input"
+                      placeholder={option.followUp}
+                      value={state.followUp[qi]}
+                      rows={1}
+                      wrap="soft"
+                      aria-label={option.followUp}
+                      onChange={(e) => {
+                        state.setFollowUpValue(qi, e.currentTarget.value)
+                        e.currentTarget.style.height = "auto"
+                        e.currentTarget.style.height = `${e.currentTarget.scrollHeight}px`
+                      }}
+                    />
+                  </div>
+                )}
+              </Fragment>
             ))}
             {q.custom !== false &&
               (state.editing === qi ? (

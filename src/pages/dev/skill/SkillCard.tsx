@@ -5,6 +5,7 @@ import { cx } from "@/lib/cx"
 import { useT } from "@/i18n"
 import type { Skill } from "@/mock/fixtures/dev"
 import { DynamicSkillIcon } from "@/features/dev-page/DynamicSkillIcon"
+import { channelStatusOf, entCloudOf, perCloudOf } from "@/features/skill-publish-scope/channel-status"
 
 const MUTED = "text-text-base"
 const ENTERPRISE_COLOR: Record<Skill["enterpriseStatus"], string> = {
@@ -43,8 +44,6 @@ function ChannelRow(props: { icon: IconName; label: string; status: string; stat
 
 export function SkillCard(props: {
   skill: Skill
-  /** 随哪个智能体审核中（审核锁） */
-  auditAgentName?: string
   selected: boolean
   action: ReactNode
   onClick: () => void
@@ -70,15 +69,15 @@ export function SkillCard(props: {
               label={t("kcode.skillDev.channel.personal")}
               status={t(`kcode.skillDev.channelStatus.personal.${skill.personalInstalled ? "installed" : "notInstalled"}`)}
               statusClass={skill.personalInstalled ? "text-[var(--success-600)]" : MUTED}
-              cloudTip={skill.personalInstalled && skill.changed ? t("kcode.skillDev.cloud.installTip") : undefined}
+              cloudTip={perCloudOf(skill) ? channelStatusOf(skill, "personal").text + t("kcode.skillDev.cloud.installSuffix") : undefined}
               onCloud={() => props.onContinueSubmit("personal")}
             />
             <ChannelRow
               icon="building"
               label={t("kcode.skillDev.channel.enterprise")}
-              status={`${t(`kcode.skillDev.channelStatus.enterprise.${enterpriseKey}`)}${props.auditAgentName ? ` · 随「${props.auditAgentName}」` : ""}`}
+              status={t(`kcode.skillDev.channelStatus.enterprise.${enterpriseKey}`)}
               statusClass={ENTERPRISE_COLOR[skill.enterpriseStatus]}
-              cloudTip={skill.enterpriseStatus !== "saved" && skill.changed ? t("kcode.skillDev.cloud.submitTip") : undefined}
+              cloudTip={entCloudOf(skill) ? channelStatusOf(skill, "enterprise").text + t("kcode.skillDev.cloud.submitSuffix") : undefined}
               onCloud={() => props.onContinueSubmit("enterprise")}
             />
           </div>

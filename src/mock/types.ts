@@ -74,6 +74,8 @@ export interface QuestionOption {
   label: string
   description?: string
   recommended?: boolean
+  /** 点选该选项后在其下展开的补充输入框 placeholder（如「更换工具」填新工具名）；提交时拼在该题答案末尾 */
+  followUp?: string
 }
 
 export interface QuestionInfo {

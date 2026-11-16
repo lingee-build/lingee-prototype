@@ -2,16 +2,16 @@ import { exportArtifactPackage } from "@/features/artifact-config/package-export
 import { guardArtifactConfig } from "@/features/artifact-config/config-state"
 import { guardUpgrade } from "@/features/artifact-upgrade/UpgradeGate"
 import { useState } from "react"
-import { useQuery } from "@tanstack/react-query"
 import { BrandButton, ConfirmDialog, Empty, showToast, useDialog } from "@/ui"
 import { cx } from "@/lib/cx"
 import { useT } from "@/i18n"
-import { SkillSubmitPathDialog, auditLockTip, isFirstSubmission } from "@/features/skill-publish-scope/SkillPublishScopeDialog"
+import { SkillSubmitPathDialog, isFirstSubmission } from "@/features/skill-publish-scope/SkillPublishScopeDialog"
 import type { Skill } from "@/mock/fixtures/dev"
-import { agentService, consoleScopeService, skillService } from "@/services"
+import { consoleScopeService, skillService } from "@/services"
 import { DEV_GRID, DevPageLayout } from "@/features/dev-page/DevPageLayout"
 import { useDevList } from "@/features/dev-page/use-dev-list"
 import { useEditSession } from "@/features/dev-page/use-edit-session"
+import { useStartFixSessions } from "@/features/dev-page/use-fix-sessions"
 import { useStartSession } from "@/features/dev-page/use-start-session"
 import { BatchActionBar } from "./BatchActionBar"
 import { SkillCard } from "./SkillCard"
@@ -35,6 +35,7 @@ export function SkillDevPage() {
   const dialog = useDialog()
   const startSession = useStartSession()
   const editSession = useEditSession()
+  const startFixSessions = useStartFixSessions()
   const [batchMode, setBatchMode] = useState(false)
   const [selected, setSelected] = useState<string[]>([])
   const data = useDevList<Skill>({
@@ -44,9 +45,6 @@ export function SkillDevPage() {
     searchText: (skill) => `${skill.displayName} ${skill.name} ${skill.desc}`,
   })
 
-  // 审核锁：随智能体审核中的技能，卡片上显示随哪个智能体，不能单独提交或撤回
-  const agents = useQuery({ queryKey: ["agents"], queryFn: agentService.list, staleTime: 0 })
-  const auditAgentName = (skill: Skill) => (skill.auditAgentId ? agents.data?.find((x) => x.id === skill.auditAgentId)?.name ?? "智能体" : undefined)
   const patch = (id: string, change: Partial<Skill>) => {
     data.update((items) => items.map((x) => (x.id === id ? { ...x, ...change } : x)))
     void skillService.patch(id, change)
@@ -59,7 +57,7 @@ export function SkillDevPage() {
           {...config}
           onSubmitted={(skills, route, scopes) => {
             skills.forEach((skill) => {
-              patch(skill.id, route === "personal" ? { personalInstalled: true, changed: false } : { enterpriseStatus: "submitted", changed: false, reason: undefined })
+              patch(skill.id, route === "personal" ? { personalInstalled: true, perChanged: false } : { enterpriseStatus: "submitted", entChanged: false, reason: undefined })
               // 只有首次发布才把发布范围带给 Console；Build 本地不存
               const scope = scopes?.[skill.name]
               if (route === "enterprise" && scope && isFirstSubmission(skill)) void consoleScopeService.submitFirst(skill.name, scope)
@@ -72,9 +70,10 @@ export function SkillDevPage() {
             data.update((items) => items.filter((x) => !ids.includes(x.id)))
             exitBatch()
           }}
-          onGoFix={(skills) =>
-            startSession(`/kingdee-skill-creator 修复技能检查未通过的问题：${skills.map((x) => x.displayName).join("、")}`, skills[0]?.projectId)
-          }
+          onGoFix={async (entries) => {
+            // 单会话承载全部修复指令并进入（原型简化；产品侧按项目分组的逻辑见 PRD）
+            await startFixSessions(entries)
+          }}
         />
       ),
       undefined,
@@ -111,13 +110,9 @@ export function SkillDevPage() {
     onCloudTest: (skill) => showToast({ variant: "success", title: `${skill.displayName}：${t("kcode.skillPreview.action.test")}` }),
     onCheck: (skill) => openBatch({ mode: "check", skills: [skill], skipSelect: true }),
     onSubmit: (skill) => {
-      const lockedBy = auditAgentName(skill)
-      if (lockedBy) return void showToast({ variant: "warning", description: auditLockTip(lockedBy) })
-      dialog.show(() => <SkillSubmitPathDialog onConfirm={(route) => openBatch({ mode: "submit", route, skills: [skill], skipSelect: true })} />)
+      dialog.show(() => <SkillSubmitPathDialog skill={skill} onConfirm={(route) => openBatch({ mode: "submit", route, skills: [skill], skipSelect: true })} />)
     },
     onWithdraw: (skill) => {
-      const lockedBy = auditAgentName(skill)
-      if (lockedBy) return void showToast({ variant: "warning", description: auditLockTip(lockedBy) })
       dialog.show(() => (
         <ConfirmDialog
           title={t("kcode.skillPreview.withdraw.confirmTitle")}
@@ -126,15 +121,13 @@ export function SkillDevPage() {
           confirmText={t("kcode.skillPreview.withdraw.confirmBtn")}
           onConfirm={() => {
             // 发布后的修改撤回：线上仍是已发布版本，本地修改保留
-            patch(skill.id, skill.everPublished ? { enterpriseStatus: "published", changed: true } : { enterpriseStatus: "saved" })
+            patch(skill.id, skill.everPublished ? { enterpriseStatus: "published", entChanged: true } : { enterpriseStatus: "saved", entChanged: false })
             showToast({ variant: "success", description: t("kcode.skillDev.withdraw.success") })
           }}
         />
       ))
     },
     onDelete: (skill) => {
-      const lockedBy = auditAgentName(skill)
-      if (lockedBy) return void showToast({ variant: "warning", description: auditLockTip(lockedBy) })
       openBatch({ mode: "delete", skills: [skill] })
     },
   }
@@ -152,7 +145,8 @@ export function SkillDevPage() {
   const toggle = (id: string) => setSelected((current) => (current.includes(id) ? current.filter((x) => x !== id) : [...current, id]))
   const selectedSkills = data.list.filter((x) => selected.includes(x.id))
   const openDetail = (skill: Skill) => {
-    const open = () => dialog.show(() => <SkillDetailDialog skill={skill} onEdit={() => handlers.onEdit(skill)} onFix={(prompt) => edit(skill, prompt)} />)
+    // 详情「检查」页签单规则去修复：与向导的去修复同机制，进修复会话（不再带 prompt 进编辑会话）
+    const open = () => dialog.show(() => <SkillDetailDialog skill={skill} onEdit={() => handlers.onEdit(skill)} onFix={(ruleId, message) => void startFixSessions([{ skill, items: [{ checkId: ruleId, reason: message }] }])} />)
     if (!guardUpgrade([skill.id], open)) open()
   }
 
@@ -233,11 +227,13 @@ export function SkillDevPage() {
             <SkillCard
               key={skill.id}
               skill={skill}
-              auditAgentName={auditAgentName(skill)}
               selected={batchMode && selected.includes(skill.id)}
               // 批量模式下卡片点击是勾选，不打开详情
               onClick={() => (batchMode ? toggle(skill.id) : openDetail(skill))}
-              onContinueSubmit={(route) => route === "enterprise" ? rawHandlers.onSubmit(skill) : openBatch({ mode: "submit", route, skills: [skill], skipSelect: true })}
+              // 云＝该通道快捷提交入口（AC-7：点击云直接进对应通道的检查→确认→上传，不再弹路径选择）
+              onContinueSubmit={(route) => {
+                openBatch({ mode: "submit", route, skills: [skill], skipSelect: true })
+              }}
               action={
                 batchMode ? (
                   <button
@@ -257,7 +253,7 @@ export function SkillDevPage() {
                     )}
                   </button>
                 ) : (
-                  <SkillCardActions skill={skill} handlers={handlers} lockTip={auditAgentName(skill) ? auditLockTip(auditAgentName(skill)!) : undefined} />
+                  <SkillCardActions skill={skill} handlers={handlers} />
                 )
               }
             />

@@ -4,8 +4,9 @@ import { BrandButton, Dialog, DropdownMenu, Icon, useDialog } from "@/ui"
 import { useT } from "@/i18n"
 import { cx } from "@/lib/cx"
 import type { Agent, Skill, SkillScope } from "@/mock/fixtures/dev"
-import { agentService, consoleScopeService } from "@/services"
+import { consoleScopeService } from "@/services"
 import { DynamicSkillIcon } from "@/features/dev-page/DynamicSkillIcon"
+import { channelStatusOf, entCloudOf } from "./channel-status"
 
 /**
  * 技能发布范围：「上架商城」「下发 Build」两个独立开关。
@@ -26,28 +27,10 @@ export const isFirstSubmission = (skill: Pick<Skill, "everPublished">) => !skill
 /** 首次发布的默认值：智能体可见 + 市场可见 */
 export const defaultScopeOf = (): SkillScope => ({ mall: true, build: false })
 
-/** 技能的本地状态：已保存（发布后本地有修改未提交）/ 审核中 / 正常 */
+/** 技能的本地状态：已保存（发布后有修改未提交）/ 审核中 / 正常 */
 export type MarketLocalState = "changed" | "reviewing" | undefined
-export const marketLocalState = (skill?: Pick<Skill, "changed" | "enterpriseStatus">): MarketLocalState => !skill ? undefined : skill.changed ? "changed" : skill.enterpriseStatus === "submitted" ? "reviewing" : undefined
+export const marketLocalState = (skill?: Pick<Skill, "entChanged" | "enterpriseStatus">): MarketLocalState => !skill ? undefined : skill.entChanged ? "changed" : skill.enterpriseStatus === "submitted" ? "reviewing" : undefined
 
-/** 本项目里引用了这个技能的智能体（按技能 name） */
-export const referencingAgents = (agents: Agent[] | undefined, skill: Pick<Skill, "name" | "projectId">, exceptId?: string) =>
-  (agents ?? []).filter((agent) => agent.id !== exceptId && agent.projectId === skill.projectId && agent.skills.some((x) => x.skillName === skill.name))
-
-/** 审核锁的说明：随哪个智能体审核中 */
-export function useAuditAgentName(skill?: Pick<Skill, "auditAgentId">) {
-  const agents = useQuery({ queryKey: ["agents"], queryFn: agentService.list, staleTime: 0, enabled: !!skill?.auditAgentId })
-  if (!skill?.auditAgentId) return undefined
-  return agents.data?.find((agent) => agent.id === skill.auditAgentId)?.name ?? "智能体"
-}
-export const auditLockTip = (agentName: string) => `随「${agentName}」审核中`
-
-const InfoNote = (props: { children: React.ReactNode; tone?: "info" | "warn" }) => (
-  <div className={cx("flex items-start gap-2 rounded-lg px-3 py-2 text-[12px] leading-[18px]", props.tone === "warn" ? "bg-[var(--orange-50)] text-[var(--orange-600)]" : "bg-[rgba(73,93,255,0.06)] text-text-base")}>
-    <Icon name="info-fill" size="small" className={cx("mt-[1px] size-4 shrink-0", props.tone === "warn" ? "" : "text-[#495DFF]")} />
-    <span>{props.children}</span>
-  </div>
-)
 
 /** 发布范围的三个取值；「智能体可见」固定勾选 */
 export const SCOPE_OPTIONS: Array<{ key: "agent" | keyof SkillScope; label: string; desc: string }> = [
@@ -101,35 +84,44 @@ export function ScopeChecks(props: { value: SkillScope; onChange: (value: SkillS
   )
 }
 
-/** 提交技能第 1 步：选择路径（企业分发 / 个人自用） */
-export function SkillSubmitPathDialog(props: { onConfirm: (route: "enterprise" | "personal") => void }) {
+/** 提交技能第 1 步：选择路径（企业分发 / 个人自用）。卡内不带状态行；弹窗底部提示条展示当前选中通道的状态（版本状态 + 以该通道上次提交 / 安装为基准的比对），点选另一通道切换内容，打开时默认显示企业通道 */
+export function SkillSubmitPathDialog(props: { skill: Skill; onConfirm: (route: "enterprise" | "personal") => void }) {
   const t = useT()
   const dialog = useDialog()
   const [route, setRoute] = useState<"enterprise" | "personal">("enterprise")
-  const option = (value: "enterprise" | "personal", icon: "building" | "user", iconClass: string) => (
-    <button
-      type="button"
-      onClick={() => setRoute(value)}
-      className={cx(
-        "w-full cursor-pointer rounded-[16px] border-2 bg-transparent px-5 py-5 text-left",
-        route === value ? "border-[#495DFF]" : "border-[var(--border-weak-base)]",
-      )}
-    >
-      <div className="flex items-center gap-2">
-        <span className={cx("flex size-7 items-center justify-center rounded-[8px]", iconClass)}>
-          <Icon name={icon} size="small" className="size-4" />
-        </span>
-        <span className="text-[16px] font-medium text-text-strong">{t(`kcode.skillSubmit.pathSelect.${value}`)}</span>
-      </div>
-      <div className="mt-2 text-[13px] leading-[20px] text-text-weak">{t(`kcode.skillSubmit.pathSelect.${value}Desc`)}</div>
-    </button>
-  )
+  const { skill } = props
+  const channel = channelStatusOf(skill, route)
+  const option = (value: "enterprise" | "personal", icon: "building" | "user", iconClass: string) => {
+    return (
+      <button
+        type="button"
+        onClick={() => setRoute(value)}
+        className={cx(
+          "w-full cursor-pointer rounded-[16px] border-2 bg-transparent px-5 py-5 text-left",
+          route === value ? "border-[#495DFF]" : "border-[var(--border-weak-base)]",
+        )}
+      >
+        <div className="flex items-center gap-2">
+          <span className={cx("flex size-7 items-center justify-center rounded-[8px]", iconClass)}>
+            <Icon name={icon} size="small" className="size-4" />
+          </span>
+          <span className="text-[16px] font-medium text-text-strong">{t(`kcode.skillSubmit.pathSelect.${value}`)}</span>
+        </div>
+        <div className="mt-2 text-[13px] leading-[20px] text-text-weak">{t(`kcode.skillSubmit.pathSelect.${value}Desc`)}</div>
+      </button>
+    )
+  }
   return (
     <Dialog title={t("kcode.skillSubmit.pathSelect.title")} fit className="w-[520px] !rounded-[24px] overflow-hidden">
       <div className="space-y-3 px-5 pb-5">
         {option("enterprise", "building", "bg-[rgba(73,93,255,0.08)] text-[#495DFF]")}
         {option("personal", "user", "bg-[var(--orange-50)] text-[var(--orange-600)]")}
-        <InfoNote>{t(route === "enterprise" ? "kcode.skillSubmit.pathSelect.enterpriseHint" : "kcode.skillSubmit.pathSelect.personalHint")}</InfoNote>
+        {/* 通道状态提示条（PRD 需求项 3）：承接原卡内状态行，跟随选中通道切换；统一信息条样式（淡蓝底 + info 图标），不按内容分色 */}
+        {/* 驳回原因不进提示条（v1.31 决策）：走卡片云 hover 与技能详情弹窗 */}
+        <div className="flex items-start gap-2 rounded-[12px] bg-[rgba(73,93,255,0.06)] px-3 py-2.5">
+          <Icon name="info-fill" size="small" className="size-4 shrink-0 text-[var(--primary-600)]" />
+          <span className="text-[13px] leading-[20px] text-text-base">{channel.text}</span>
+        </div>
         <div className="flex justify-end gap-3 pt-6">
           <BrandButton variant="auxiliary" size="normal" onClick={dialog.close}>{t("kcode.skillSubmit.pathSelect.cancel")}</BrandButton>
           <BrandButton variant="primary" size="normal" onClick={() => { dialog.close(); props.onConfirm(route) }}>{t("kcode.skillSubmit.pathSelect.submit")}</BrandButton>
@@ -222,7 +214,7 @@ export const skillReadiness = (skill: Skill): SkillReadiness =>
   skill.enterpriseStatus === "submitted" ? "reviewing"
     : skill.enterpriseStatus === "rejected" ? "rejected"
       : !skill.everPublished ? "unpublished"
-        : skill.changed ? "changed" : "ready"
+        : entCloudOf(skill) ? "changed" : "ready"
 
 const READINESS_TEXT: Record<Exclude<SkillReadiness, "ready">, { sub: string; action?: string }> = {
   unpublished: { sub: "未提交", action: "去提交" },

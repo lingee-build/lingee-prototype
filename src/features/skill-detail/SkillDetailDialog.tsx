@@ -5,11 +5,10 @@ import { useMemo, useState, type CSSProperties } from "react"
 import { BrandButton, CapsuleTag, Dialog, Icon, Markdown, SegmentedControl, Tag, Tooltip, useDialog } from "@/ui"
 import { cx } from "@/lib/cx"
 import { useLocaleStore, useT } from "@/i18n"
-import { buildFixPrompt } from "@/vendor/kcode-web/src/utils/skill-fix-prompts"
 import type { Skill } from "@/mock/fixtures/dev"
 import { skillDetailOf } from "@/mock/fixtures/skill-detail"
 import { DynamicSkillIcon } from "@/features/dev-page/DynamicSkillIcon"
-import { auditLockTip, useAuditAgentName } from "@/features/skill-publish-scope/SkillPublishScopeDialog"
+import { channelStatusOf, localChangedOf } from "@/features/skill-publish-scope/channel-status"
 import { CheckTab } from "./CheckTab"
 import { summarize, validationOf } from "./validation"
 import { OverviewTab } from "./OverviewTab"
@@ -32,10 +31,10 @@ const Divider = () => <div className="w-[0.5px] h-[50px] bg-[var(--neutral-100)]
 
 /**
  * 技能详情弹窗：顶部状态提示 + 标题栏 + 四格元数据 + 三个页签（概述 / 预览 / 检查）。
- * 检查页签里点某条规则的「去修复」，会关掉弹窗并带着修复提示词进入编辑会话。
+ * 检查页签里点某条规则的「去修复」，会关掉弹窗并进修复会话（与提交向导的去修复同机制，见 SkillDevPage）。
  * 结构对齐原工程 pages/host-modal/skill-detail.tsx。
  */
-export function SkillDetailDialog(props: { skill: Skill; initialTab?: DetailTab; onEdit: () => void; onFix: (prompt: string) => void }) {
+export function SkillDetailDialog(props: { skill: Skill; initialTab?: DetailTab; onEdit: () => void; onFix: (ruleId: string, message: string) => void }) {
   const t = useT()
   const dialog = useDialog()
   const navigate = useNavigate()
@@ -53,13 +52,12 @@ export function SkillDetailDialog(props: { skill: Skill; initialTab?: DetailTab;
       ? { text: t("kcode.skillDev.meta.securityCheck.noRisk"), color: "text-[var(--success-600)]" }
       : { text: t("kcode.skillDev.meta.securityCheck.hasRisk"), color: "text-[var(--warning-600)]" }
   const rejectionReason = skill.reason ? t("ui.tile.rejectionReason", { reason: skill.reason }) : ""
-  const auditAgentName = useAuditAgentName(skill)
 
   return (
     <Dialog title={t("kcode.skillDev.detail.title")} fit className="w-[640px] !max-w-[94vw] !rounded-[24px] overflow-hidden shadow-[0px_6px_12px_rgba(0,0,0,0.08)]">
       <div className="relative flex flex-col max-h-[80vh] min-h-0">
         <div className="flex flex-col h-full min-h-0 overflow-hidden">
-          {skill.changed && submitted && (
+          {skill.entChanged && submitted && (
             <div
               className={cx(
                 "mx-auto mb-4 w-[600px] min-h-[42px] rounded-[24px] pt-[4px] pb-[4px] pl-[12px] pr-[12px] flex items-center gap-[8px] border shrink-0",
@@ -91,13 +89,7 @@ export function SkillDetailDialog(props: { skill: Skill; initialTab?: DetailTab;
                   <CapsuleTag className="shrink-0">{skill.category}</CapsuleTag>
                   {/* 企业分发状态；发布范围不放在标签里，放在下方「发布范围」区块。个人分发放到副标题 */}
                   {submitted &&
-                    (auditAgentName ? (
-                      <Tooltip value={auditLockTip(auditAgentName)} placement="top" gutter={4}>
-                        <Tag type="normal" className="whitespace-nowrap shrink-0 cursor-pointer">
-                          {t("kcode.skillDev.enterpriseStatus.submitted")} · 随「{auditAgentName}」
-                        </Tag>
-                      </Tooltip>
-                    ) : skill.enterpriseStatus === "rejected" && rejectionReason ? (
+                    (skill.enterpriseStatus === "rejected" && rejectionReason ? (
                       <Tooltip value={rejectionReason} placement="top" gutter={4}>
                         <Tag type="error" className="whitespace-nowrap shrink-0 cursor-pointer">
                           {t(`kcode.skillDev.enterpriseStatus.${skill.enterpriseStatus}`)}
@@ -108,11 +100,24 @@ export function SkillDetailDialog(props: { skill: Skill; initialTab?: DetailTab;
                         {t(`kcode.skillDev.enterpriseStatus.${skill.enterpriseStatus}`)}
                       </Tag>
                     ))}
-                  {skill.changed && (submitted || skill.personalInstalled) && (
-                    <Tooltip value={t("kcode.skillDev.changedTip.local")} placement="top" gutter={4}>
-                      <Tag type="normal" className="whitespace-nowrap shrink-0 cursor-pointer">
-                        {t("kcode.skillDev.status.localChanged")}
-                      </Tag>
+                  {localChangedOf(skill) && (
+                    /* 云标记 hover：两通道状态行（描述性措辞，见需求项 3）——本地与云端有差异才亮云，差异细节 hover 看 */
+                    <Tooltip
+                      value={
+                        <div className="flex flex-col">
+                          {(["enterprise", "personal"] as const).map((route) => (
+                            <span key={route}>
+                              {channelStatusOf(skill, route).text}
+                            </span>
+                          ))}
+                        </div>
+                      }
+                      placement="top"
+                      gutter={4}
+                    >
+                      <span className="flex items-center gap-1 whitespace-nowrap shrink-0">
+                        <Icon name="cloud" size="small" className="size-4 text-[var(--primary-600)]" />
+                      </span>
                     </Tooltip>
                   )}
                 </div>
@@ -171,7 +176,7 @@ export function SkillDetailDialog(props: { skill: Skill; initialTab?: DetailTab;
                 onChecked={() => setChecked(true)}
                 onFixPrompt={(ruleId, message) => {
                   dialog.close()
-                  props.onFix(buildFixPrompt(ruleId, message, { skillName: skill.name, skillDir: `skills/${skill.name}` }))
+                  props.onFix(ruleId, message)
                 }}
               />
             )}

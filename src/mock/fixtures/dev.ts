@@ -24,13 +24,15 @@ export interface Skill {
   enterpriseStatus: ReviewStatus
   /** 是否发布过：从未发布过的技能（含首次提交被驳回、撤回）再次提交仍算首次发布，可以选发布范围 */
   everPublished?: boolean
-  /** 随哪个智能体一起审核中（审核锁）：有值时技能不能单独提交或撤回，只能撤回整个智能体 */
-  auditAgentId?: string
-  /** 提交后本地又有修改，卡片上出现「云朵」提示继续提交 */
-  changed?: boolean
+  /** 企业分发通道有未同步的本地修改（按内容比对：本地内容与该通道远端记录不一致；远端无记录按空基准） */
+  entChanged?: boolean
+  /** 个人自用通道有未同步的本地修改（同上口径） */
+  perChanged?: boolean
   reason?: string
   /** 上次检查结论；没检查过则为空 */
   inspect?: "pass" | "fail"
+  /** 引用工具不存在（N3）已在修复会话里确认过处理方式（移除 / 保留），再次检查不再算不通过 */
+  n3Resolved?: boolean
 }
 
 export type ModelLevel = "auto" | "fast" | "expert" | "ultra"
@@ -140,16 +142,18 @@ export interface McpApp {
 const rawSkills: Skill[] = [
   { id: "sale-order-management-eval-demo", name: "sale-order-management-eval-demo", displayName: "销售订单管理（评测演示）", desc: "查询销售订单及其商品明细。", category: "供应链", projectId: "workspace", personalInstalled: false, enterpriseStatus: "saved" },
   { id: "sk_roll_dice", name: "roll-dice", displayName: "掷骰子", desc: "掷一颗六面骰；遇到含糊要求时先询问，确认后再掷。", category: "通用", projectId: "workspace", personalInstalled: false, enterpriseStatus: "saved" },
-  { id: "sk_delivery", name: "delivery-notice-query", displayName: "发货通知单查询", desc: "按单据编号、状态和通知日期组合筛选发货通知单，返回分页列表或物料行明细，查询为空时提示调整条件。", category: "供应链", projectId: "scm-skills", personalInstalled: true, enterpriseStatus: "published", inspect: "pass", changed: true },
+  { id: "sk_delivery", name: "delivery-notice-query", displayName: "发货通知单查询", desc: "按单据编号、状态和通知日期组合筛选发货通知单，返回分页列表或物料行明细，查询为空时提示调整条件。", category: "供应链", projectId: "scm-skills", personalInstalled: true, enterpriseStatus: "published", inspect: "pass", entChanged: true, perChanged: false },
   { id: "sk_stock", name: "realtime-stock-query", displayName: "即时库存查询", desc: "按物料、仓库、仓位查询即时库存与可用量，支持批号与辅助属性维度展开。", category: "供应链", projectId: "scm-skills", personalInstalled: true, enterpriseStatus: "submitted", everPublished: true },
   { id: "sk_purchase", name: "purchase-order-push", displayName: "采购订单下推入库", desc: "校验采购订单可入库数量后下推生成采购入库单，超收时给出明确提示并阻止提交。", category: "供应链", projectId: "scm-skills", personalInstalled: false, enterpriseStatus: "rejected", reason: "缺少超收场景的处理说明，请补充后重新提交。", inspect: "fail" },
-  { id: "sk_leave", name: "leave-request", displayName: "办理请假申请", desc: "通过对话收集假期类型、起止日期、事由与代理人，自动校验剩余假期天数，生成请假单草稿并在确认后提交。", category: "人力资源", projectId: "hr-assistant", personalInstalled: true, enterpriseStatus: "submitted", inspect: "pass" },
-  { id: "sk_expense", name: "expense-claim-submit", displayName: "费用报销提交", desc: "分步收集费用类型、金额、发生日期和票据附件，超过限额时提醒走额外审批流程。", category: "财务", projectId: "workspace", personalInstalled: false, enterpriseStatus: "saved" },
+  { id: "sk_leave", name: "leave-request", displayName: "办理请假申请", desc: "通过对话收集假期类型、起止日期、事由与代理人，自动校验剩余假期天数，生成请假单草稿并在确认后提交。", category: "人力资源", projectId: "hr-assistant", personalInstalled: true, enterpriseStatus: "submitted", inspect: "fail", entChanged: false, perChanged: true },
+  { id: "sk_expense", name: "expense-claim-submit", displayName: "费用报销提交", desc: "分步收集费用类型、金额、发生日期和票据附件，超过限额时提醒走额外审批流程。", category: "财务", projectId: "workspace", personalInstalled: false, enterpriseStatus: "saved", inspect: "fail" },
   { id: "sk_salary", name: "payslip-explain", displayName: "薪资条查询与解释", desc: "查询指定月份薪资条，并用通俗语言解释各项扣款与补贴的计算依据。", category: "人力资源", projectId: "hr-assistant", personalInstalled: true, enterpriseStatus: "submitted", everPublished: true },
   { id: "sk_supplier", name: "supplier-onboarding-check", displayName: "供应商准入核查", desc: "汇总供应商资质、历史交付与质量评分，输出准入建议和风险点清单。", category: "供应链", projectId: "scm-skills", personalInstalled: false, enterpriseStatus: "submitted" },
   { id: "sk_price", name: "price-batch-adjust", displayName: "价格表批量调价", desc: "按物料分组或供应商批量调整采购价格表，支持按百分比或固定金额调价，调价前先给出影响范围预览。", category: "供应链", projectId: "scm-skills", personalInstalled: false, enterpriseStatus: "published" },
   { id: "sk_ar", name: "ar-aging-analysis", displayName: "应收账龄分析", desc: "按客户与账期区间统计应收余额，标记逾期重点客户并给出催收优先级。", category: "财务", projectId: "workspace", personalInstalled: false, enterpriseStatus: "saved" },
-  { id: "sk_credit", name: "customer-credit-check", displayName: "客户信用评估", desc: "结合历史回款、逾期次数与授信额度评估客户信用等级，给出是否放单的建议。", category: "财务", projectId: "workspace", personalInstalled: false, enterpriseStatus: "published", changed: true, inspect: "pass" },
+  { id: "sk_credit", name: "customer-credit-check", displayName: "客户信用评估", desc: "结合历史回款、逾期次数与授信额度评估客户信用等级，给出是否放单的建议。", category: "财务", projectId: "workspace", personalInstalled: false, enterpriseStatus: "published", entChanged: true, inspect: "pass" },
+  { id: "sk_invoice", name: "invoice-auto-recognize", displayName: "发票自动识别", desc: "识别增值税发票的关键字段并结构化输出，自动校验发票代码与号码一致性。", category: "财务", projectId: "workspace", personalInstalled: false, enterpriseStatus: "saved", inspect: "fail" },
+  { id: "sk_contract", name: "contract-smart-review", displayName: "合同智能审查", desc: "解析合同文本，识别风险条款与不利条款，逐条给出修改建议。", category: "财务", projectId: "workspace", personalInstalled: false, enterpriseStatus: "saved", inspect: "fail" },
 ]
 /** 发布过 = 已发布，或者显式标记（发布后的修改正在审核） */
 export const skills: Skill[] = rawSkills.map((skill) => ({ ...skill, everPublished: skill.everPublished ?? skill.enterpriseStatus === "published" }))

@@ -70,7 +70,7 @@ ${QUERY_PY}
         // 提示词里点了已有技能（「编辑【xxx】技能」）就是在它上面修改：标成本地有改动，不新建
         const target = devStore.skills.find((x) => prompt.includes(`【${x.name}】`) || prompt.includes(`【${x.displayName}】`))
         if (target) {
-          devStore.skills = devStore.skills.map((x) => (x.id === target.id ? { ...x, changed: x.enterpriseStatus !== "saved" || x.personalInstalled } : x))
+          devStore.skills = devStore.skills.map((x) => (x.id === target.id ? { ...x, entChanged: x.enterpriseStatus !== "saved", perChanged: x.personalInstalled } : x))
           return { kind: "kdskill", config: { id: target.name, title: target.displayName, directory: `skills/${target.name}` } }
         }
         const displayName = entityName(prompt, "技能")

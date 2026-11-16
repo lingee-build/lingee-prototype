@@ -13,7 +13,7 @@ export function OverviewTab(props: { skill: Skill; detail: SkillDetail }) {
   const { skill, detail } = props
   const published = !!skill.everPublished || skill.personalInstalled
   const changelog: Agent["changelog"] = {
-    pending: skill.changed || (!published && skill.enterpriseStatus === "saved")
+    pending: skill.entChanged || skill.perChanged || (!published && skill.enterpriseStatus === "saved")
       ? [{ createdAt: dateOf(detail.updateTime), operator: detail.developer, summary: published ? "技能内容已修改，待提交发布" : "创建技能，待提交发布" }]
       : [],
     versions: published ? [...detail.changelog].reverse().map(entry => ({

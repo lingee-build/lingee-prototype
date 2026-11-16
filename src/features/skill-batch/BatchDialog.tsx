@@ -1,12 +1,12 @@
 import { useState } from "react"
-import { useQuery } from "@tanstack/react-query"
-import { agentService } from "@/services"
 import { BrandButton, Dialog, Icon, useDialog } from "@/ui"
-import { MarketScopeStep, defaultScopeOf, isFirstSubmission, referencingAgents } from "@/features/skill-publish-scope/SkillPublishScopeDialog"
+import { defaultScopeOf, isFirstSubmission } from "@/features/skill-publish-scope/SkillPublishScopeDialog"
 import { cx } from "@/lib/cx"
 import { useT } from "@/i18n"
 import type { Skill, SkillScope } from "@/mock/fixtures/dev"
-import { CheckingStep, DecisionStep, DeleteConfirmStep, ResourceStep, SelectStep, SummaryStep, UploadingStep } from "./steps"
+import { SUBMIT_ORDER } from "@/mock/fixtures/skill-check"
+import { type SkillFixEntry } from "./fix-prompt"
+import { CheckingStep, DecisionStep, DeleteConfirmStep, SelectStep, SummaryStep, UploadingStep } from "./steps"
 import { BATCH_MAX, useBatchRun, type BatchMode, type BatchRoute, type Phase } from "./use-batch-run"
 
 export interface BatchDialogProps {
@@ -19,11 +19,11 @@ export interface BatchDialogProps {
   /** 提交 / 安装成功的技能；scopes 为首次发布技能的发布范围（按技能 name），只有企业分发才有 */
   onSubmitted?: (skills: Skill[], route: BatchRoute, scopes?: Record<string, SkillScope>) => void
   onDeleted?: (skills: Skill[]) => void | Promise<void>
-  /** 检查不通过时点「去修复」 */
-  onGoFix?: (skills: Skill[]) => void
+  /** 检查不通过时点「去修复」：带上每个技能的失败明细（checkId / 原因 / 修复指引），供分项目建修复会话拼分层指令 */
+  onGoFix?: (entries: SkillFixEntry[]) => void
 }
 
-const PHASE_STEP: Record<Phase, number> = { select: 1, deleteConfirm: 1, checking: 2, resource: 3, decision: 4, uploading: 4, summary: 4 }
+const PHASE_STEP: Record<Phase, number> = { select: 1, deleteConfirm: 1, checking: 2, decision: 3, uploading: 3, summary: 3 }
 
 /**
  * 技能批量操作向导：检查 / 企业分发 / 个人安装 / 删除共用一个弹窗。
@@ -36,20 +36,15 @@ export function BatchDialog(props: BatchDialogProps) {
   const single = !!props.skipSelect
   const run = useBatchRun({ mode: props.mode, route, skills: props.skills, skipSelect: single })
   const stepProps = { run, mode: props.mode, route }
-  // 单个技能的企业分发：第 1 步先确认发布范围
-  const scopeStep = props.mode === "submit" && route === "enterprise" && single
-  const [scopePhase, setScopePhase] = useState(scopeStep)
-  // 首次发布的发布范围：默认上架商城、不下发 Build；已被本项目智能体引用的技能默认不上架商城。
-  // Build 不存范围，首次发布被驳回后再提交也回到默认值。开发者改过的值记在 overrides 里
+  // 首次发布的发布范围：默认上架商城、不下发 Build；Build 不存范围，首次发布被驳回后再提交也回到默认值。开发者改过的值记在 overrides 里
   const enterprise = props.mode === "submit" && route === "enterprise"
-  const agents = useQuery({ queryKey: ["agents"], queryFn: agentService.list, staleTime: 0, enabled: enterprise })
-  const referencedBy = (skill: Skill) => referencingAgents(agents.data, skill)[0]?.name
   const [overrides, setOverrides] = useState<Record<string, SkillScope>>({})
   const scopeOf = (skill: Skill) => overrides[skill.name] ?? defaultScopeOf()
   const setScopeOf = (skill: Skill, value: SkillScope) => setOverrides((cur) => ({ ...cur, [skill.name]: value }))
   const firstScopes = () => Object.fromEntries(props.skills.filter(isFirstSubmission).map((skill) => [skill.name, scopeOf(skill)]))
-  const batchScope = enterprise && !single
-  const busy = run.phase === "checking" || run.phase === "resource" || run.phase === "uploading"
+  // 范围选择并入第 1 步列表行内：单技能与批量同一形态（需求项 3；首提技能显示范围，已发布的只读展示 Console 当前值）
+  const scopePicker = enterprise ? { scopeOf, onChange: setScopeOf } : undefined
+  const busy = run.phase === "checking" || run.phase === "uploading"
 
   const title =
     props.mode === "submit"
@@ -61,12 +56,11 @@ export function BatchDialog(props: BatchDialogProps) {
   const allSteps = [
     t("kcode.skillDev.batch.step.select"),
     t("kcode.skillDev.batch.step.check"),
-    t("kcode.skillDev.batch.step.resource"),
     t(props.mode === "submit" ? "kcode.skillDev.batch.step.submit" : "kcode.skillDev.batch.step.result"),
   ]
-  const steps = props.mode === "delete" ? [] : scopeStep ? ["发布范围", ...allSteps.slice(1)] : single ? allSteps.slice(1) : allSteps
-  // 单技能入口没有「选择技能」这一步：选择确认屏不高亮任何步骤，其余步骤前移一位
-  const current = scopeStep ? (scopePhase ? 1 : PHASE_STEP[run.phase]) : single ? (run.phase === "select" ? 0 : PHASE_STEP[run.phase] - 1) : PHASE_STEP[run.phase]
+  const steps = props.mode === "delete" ? [] : single ? allSteps.slice(1) : allSteps
+  // 单技能入口没有「选择技能」这一步：第 1 屏不高亮任何步骤，其余步骤前移一位
+  const current = single ? (run.phase === "select" ? 0 : PHASE_STEP[run.phase] - 1) : PHASE_STEP[run.phase]
 
   const upload = () => void run.runUpload((skills) => props.onSubmitted?.(skills, route, enterprise ? firstScopes() : undefined))
   const cancelButton = (
@@ -75,7 +69,12 @@ export function BatchDialog(props: BatchDialogProps) {
     </BrandButton>
   )
   const goFix = () => {
-    props.onGoFix?.(run.failItems.map((x) => x.skill))
+    // 带上失败明细（含修复指引）供修复会话拼分层指令；资源缺失（N3）由会话里的澄清卡处理
+    const entries: SkillFixEntry[] = run.failItems.map((item) => ({
+      skill: item.skill,
+      items: SUBMIT_ORDER.filter((key) => item.checkItems[key].status === "fail").map((key) => ({ checkId: key, ...item.checkItems[key] })),
+    }))
+    props.onGoFix?.(entries)
     dialog.close()
   }
 
@@ -117,26 +116,16 @@ export function BatchDialog(props: BatchDialogProps) {
         )}
 
         <div className="flex-1 min-h-0 overflow-y-auto flex flex-col">
-          {scopePhase && <MarketScopeStep skill={props.skills[0]} scope={scopeOf(props.skills[0])} onChange={(value) => setScopeOf(props.skills[0], value)} referencedBy={referencedBy(props.skills[0])} />}
-          {!scopePhase && run.phase === "select" && <SelectStep {...stepProps} scopePicker={batchScope ? { scopeOf, onChange: setScopeOf } : undefined} />}
+          {run.phase === "select" && <SelectStep {...stepProps} scopePicker={scopePicker} />}
           {run.phase === "deleteConfirm" && <DeleteConfirmStep {...stepProps} />}
           {run.phase === "checking" && <CheckingStep {...stepProps} />}
-          {run.phase === "resource" && <ResourceStep {...stepProps} />}
           {run.phase === "decision" && <DecisionStep {...stepProps} />}
           {run.phase === "uploading" && <UploadingStep {...stepProps} />}
           {run.phase === "summary" && <SummaryStep {...stepProps} />}
         </div>
 
         <div className="flex items-center justify-end gap-3 mt-auto pt-5 shrink-0">
-          {scopePhase && (
-            <>
-              {cancelButton}
-              <BrandButton variant="primary" size="normal" onClick={() => { setScopePhase(false); void run.runCheck() }}>
-                {t("kcode.skillDev.batch.dialog.next")}
-              </BrandButton>
-            </>
-          )}
-          {!scopePhase && run.phase === "select" && (
+          {run.phase === "select" && (
             <>
               {cancelButton}
               <BrandButton variant="primary" size="normal" onClick={() => void run.runCheck()} disabled={run.selectedCount === 0 || run.selectedCount > BATCH_MAX}>
@@ -165,13 +154,7 @@ export function BatchDialog(props: BatchDialogProps) {
               </BrandButton>
               {props.mode !== "delete" && (
                 <BrandButton variant="primary" size="normal" disabled>
-                  {t(
-                    run.phase === "uploading"
-                      ? "kcode.skillDev.batch.dialog.uploading"
-                      : run.phase === "resource"
-                        ? "kcode.skillDev.batch.dialog.resourceUpdating"
-                        : "kcode.skillDev.batch.dialog.checking",
-                  )}
+                  {t(run.phase === "uploading" ? "kcode.skillDev.batch.dialog.uploading" : "kcode.skillDev.batch.dialog.checking")}
                 </BrandButton>
               )}
             </>
@@ -181,7 +164,7 @@ export function BatchDialog(props: BatchDialogProps) {
               {run.failItems.length > 0 ? (
                 <>
                   {cancelButton}
-                  <BrandButton variant="primary" size="normal" onClick={goFix}>
+                  <BrandButton variant="auxiliary" size="normal" onClick={goFix} className="!border-[#fca5a5] !text-[#dc2626]">
                     {t("kcode.skillDev.batch.dialog.goFix")}
                   </BrandButton>
                 </>
@@ -200,16 +183,9 @@ export function BatchDialog(props: BatchDialogProps) {
                   {t("kcode.skillDev.batch.dialog.goFix")}
                 </BrandButton>
               )}
-              {run.failItems.length === 0 && (
-                <BrandButton variant="primary" size="normal" onClick={upload}>
-                  {t(route === "personal" ? "kcode.skillDev.batch.dialog.confirmInstall" : "kcode.skillDev.batch.dialog.confirmSubmit")}
-                </BrandButton>
-              )}
-              {run.failItems.length > 0 && run.passItems.length > 0 && (
-                <BrandButton variant="primary" size="normal" onClick={upload}>
-                  {t("kcode.skillDev.batch.dialog.continueSubmitPass", { count: run.passItems.length })}
-                </BrandButton>
-              )}
+              <BrandButton variant="primary" size="normal" onClick={upload} disabled={run.confirmCount === 0}>
+                {t(route === "personal" ? "kcode.skillDev.batch.dialog.confirmInstallCount" : "kcode.skillDev.batch.dialog.confirmSubmitCount", { count: run.confirmCount })}
+              </BrandButton>
             </>
           )}
           {run.phase === "summary" && (
