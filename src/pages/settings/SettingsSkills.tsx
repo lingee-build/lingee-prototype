@@ -91,9 +91,9 @@ function formatDate(value: number) {
 
 /**
  * 设置 → 技能：照线上 settings-skills.tsx 的 SettingsSkills 移植整体结构——
- * 「我的技能 / 更多技能」二级页签、搜索、刷新、「+ 安装技能」、个人技能列表、
+ * 「我的技能 / 更多技能」二级页签、搜索、刷新、「+ 个人安装」、个人技能列表、
  * 「更多技能」build 技能列表区块。个人技能列表复用 PersonalSkillsSection（纯列表模式），
- * 「+ 安装技能」打开 InstallPersonalSkillDialog（原型已有的 DialogInstallSkill 等价实现）。
+ * 「+ 个人安装」打开 InstallPersonalSkillDialog（原型已有的 DialogInstallSkill 等价实现）。
  * 线上的技能详情视图（点击行进入）与远端 fetch 不在本次原型范围。
  */
 export function SettingsSkills(props: { hideHeader?: boolean }) {

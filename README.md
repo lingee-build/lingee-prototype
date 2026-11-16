@@ -77,7 +77,7 @@ src/
 
 - 无同名：弹窗打开无警告框，点「安装」→ 安装成功，弹窗关闭并 toast「技能安装成功」。
 - 有同名：弹窗打开即显示警告框「已存在同名技能「X」，是否覆盖安装？」+ 勾选「确认覆盖已有技能」→「覆盖并安装」→ 成功（覆盖后沿用原启用状态）。
-- 设置 → 技能 → 我的技能：按线上结构搭——「我的技能 / 更多技能」二级页签、搜索、刷新、「+ 安装技能」入口；列表行是技能名 +「个人」标签 + 描述 + 启停开关 + 卸载（垃圾桶，走确认弹窗）。
+- 设置 → 技能 → 我的技能：按线上结构搭——「我的技能 / 更多技能」二级页签、搜索、刷新、「+ 个人安装」入口；列表行是技能名 +「个人」标签 + 描述 + 启停开关 + 卸载（垃圾桶，走确认弹窗）。
 - 演示数据：预置「发货通知单查询」（与供应链技能包里的项目技能同名，用来演示覆盖警告）和「办理请假申请」（停用状态，来源 HR 智能助手）；「价格表批量调价」等其余技能无同名，用来演示首次安装。
 - 个人技能库持久化在 localStorage 的 `proto-personal-skills`，刷新不丢；要回到初始数据，清掉这个 key 即可。
 - 入口：`/dev/skill` 打开技能卡片详情；会话里的技能产物卡片打开右侧预览抽屉。
@@ -89,7 +89,7 @@ src/
 - 通用 `pages/settings/SettingsGeneral.tsx`（线上 settings-general.tsx）：基本配置（语言 / 地域 / 自动接受权限等 14 行）、目标模式（轮次 / Token / 分钟）、外观（颜色方案 / 字体）、系统通知、音效；配置动作本地 state + toast 模拟。
 - 工作树 `pages/settings/SettingsWorktree.tsx`（线上 settings-worktree.tsx）：创建（存储位置 / 分支前缀）、自动清理、工作树列表（手风琴展开、当前项目徽标、N/max 计数、超限提示、删除确认）。
 - 环境 `pages/settings/SettingsEnvironments.tsx`（线上 settings-environments.tsx）：「苍穹应用开发 测试环境」板块照录 ErpRow（默认 / 云端 / 本地 / OAuth 失效 tag 体系、重新授权、dot-grid 下拉动作、从云端刷新确认弹窗），mock 三条环境；「灵基环境」板块为 US-2026-043955 需求落地形态，替换线上「Lingee 测试环境」板块。
-- 技能 `pages/settings/SettingsSkills.tsx`（线上 settings-skills.tsx 的 SettingsSkills）：「我的技能 / 更多技能」二级页签、搜索、刷新、「+ 安装技能」（打开 `features/skill-install/InstallPersonalSkillDialog.tsx`）；「我的技能」复用 `pages/settings/PersonalSkillsSection.tsx`（keyword 嵌入模式），「更多技能」为 mock 的社区技能列表（含安装状态切换）。
+- 技能 `pages/settings/SettingsSkills.tsx`（线上 settings-skills.tsx 的 SettingsSkills）：「我的技能 / 更多技能」二级页签、搜索、刷新、「+ 个人安装」（打开 `features/skill-install/InstallPersonalSkillDialog.tsx`）；「我的技能」复用 `pages/settings/PersonalSkillsSection.tsx`（keyword 嵌入模式），「更多技能」为 mock 的社区技能列表（含安装状态切换）。
 - MCP `pages/settings/SettingsMcp.tsx`（线上 settings-mcp.tsx）：Computer Use 板块（完整状态判定链）+ MCP 服务器列表（状态徽标、工具展开、授权 / 刷新 / JSON 预览 / 编辑），mock 四个服务。
 - 线上依赖 bridge / fetch 的数据与动作全部 mock 化（组件内演示数据 + setTimeout 模拟 loading）；文案全用线上字典键，dict 未同步的键在 `src/i18n/local.ts` 按线上值补齐（zh / en 两段）。
 

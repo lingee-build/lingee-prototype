@@ -9,7 +9,7 @@ const TOOL = "flex size-[28px] cursor-pointer items-center justify-center rounde
 
 /**
  * 设置 → 技能：我的技能列表部分（照线上结构，文案取线上键）。
- * 「+ 安装技能」与技能开发页卡片菜单共用同一个「安装个人技能」弹窗，只差来源模式。
+ * 「+ 个人安装」与技能开发页卡片菜单共用同一个「个人安装」弹窗，只差来源模式。
  *
  * 两种用法：
  * - 不传 props（keyword === undefined）：独立渲染，自带二级页签 / 搜索 / 刷新 / 安装按钮（原行为不变）；

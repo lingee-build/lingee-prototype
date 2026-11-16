@@ -94,7 +94,7 @@ export function SkillDevPage() {
 
   const rawHandlers: SkillActionHandlers = {
     onExport: (skill) => void exportArtifactPackage("skill", skill.id),
-    // 安装为个人技能：与设置页「+ 安装技能」共用弹窗，只是来源已定（关闭行为与线上一致，不做拦截）
+    // 安装：与设置页「+ 个人安装」共用弹窗，只是来源已定（关闭行为与线上一致，不做拦截）
     onInstallPersonal: (skill) => dialog.show(() => <InstallPersonalSkillDialog source={{ kind: "project", skill }} />),
     onEdit: (skill) => {
       // 已提交 / 已发布的技能，编辑前需要二次确认

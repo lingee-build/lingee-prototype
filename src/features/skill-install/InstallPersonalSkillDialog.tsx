@@ -8,7 +8,7 @@ import { usePersonalSkills, type InstallInput } from "@/stores/personal-skills"
 
 /** 来源已定：技能开发页卡片菜单进入（US-2026-082714） */
 export type ProjectSkillSource = { kind: "project"; skill: Skill }
-/** 来源待选：设置页「+ 安装技能」进入（现状入口），原型用固定演示目录模拟选择 */
+/** 来源待选：设置页「+ 个人安装」进入（现状入口），原型用固定演示目录模拟选择 */
 export type LocalDirSource = { kind: "local" }
 export type InstallSource = ProjectSkillSource | LocalDirSource
 
@@ -42,7 +42,7 @@ const fileFormatLabel = (t: (key: string) => string, f: File) =>
   /\.tar\.gz$/i.test(f.name) ? t("settings.skills.install.fileCard.tarGzFormat") : t("settings.skills.install.fileCard.zipFormat")
 
 /**
- * 「安装个人技能」弹窗：按线上 settings-skills.tsx 的 DialogInstallSkill 移植结构与样式。
+ * 「个人安装」弹窗：按线上 settings-skills.tsx 的 DialogInstallSkill 移植结构与样式。
  * 差异（PRD 修订 2026-11-16）：同名判定提前到弹窗打开时（线上是点「安装」后服务端 409），
  * 有同名直接显示覆盖警告框、主按钮为「覆盖并安装」；无同名主按钮为「安装」。
  * 卡片菜单进来时只有来源不同：目录已填入该技能所在的工程 skills 子目录，不可改选、无移除按钮。

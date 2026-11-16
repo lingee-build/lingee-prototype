@@ -16,7 +16,7 @@ export interface BatchDialogProps {
   skills: Skill[]
   /** 单个技能从卡片菜单进来时跳过「选择技能」这一步 */
   skipSelect?: boolean
-  /** 提交 / 安装成功的技能；scopes 为首次发布技能的发布范围（按技能 name），只有企业分发才有 */
+  /** 提交成功的技能；scopes 为首次发布技能的发布范围（按技能 name），只有企业分发才有 */
   onSubmitted?: (skills: Skill[], route: BatchRoute, scopes?: Record<string, SkillScope>) => void
   onDeleted?: (skills: Skill[]) => void | Promise<void>
   /** 检查不通过时点「去修复」：带上每个技能的失败明细（checkId / 原因 / 修复指引），供分项目建修复会话拼分层指令 */
