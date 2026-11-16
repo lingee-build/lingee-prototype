@@ -11,7 +11,7 @@ import { BATCH_MAX, useBatchRun, type BatchMode, type BatchRoute, type Phase } f
 
 export interface BatchDialogProps {
   mode: BatchMode
-  /** 提交通道：企业分发 / 个人安装（仅 submit 模式用到） */
+  /** 提交通道：企业分发 / 个人提交（仅 submit 模式用到） */
   route?: BatchRoute
   skills: Skill[]
   /** 单个技能从卡片菜单进来时跳过「选择技能」这一步 */
@@ -26,7 +26,7 @@ export interface BatchDialogProps {
 const PHASE_STEP: Record<Phase, number> = { select: 1, deleteConfirm: 1, checking: 2, decision: 3, uploading: 3, summary: 3 }
 
 /**
- * 技能批量操作向导：检查 / 企业分发 / 个人安装 / 删除共用一个弹窗。
+ * 技能批量操作向导：检查 / 企业分发 / 个人提交 / 删除共用一个弹窗。
  * 这里只负责外壳（标题、步骤条、底部按钮），各步内容在 steps.tsx，流程推进在 use-batch-run.ts。
  */
 export function BatchDialog(props: BatchDialogProps) {

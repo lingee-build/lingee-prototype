@@ -45,15 +45,15 @@ export type ChannelStatus = { text: string }
 
 /**
  * 通道状态行（需求项 3）：该通道的版本状态 + 以该通道上次提交 / 安装为基准的比对结论，统一一套词条——
- * 「企业审核中，较上次提交无变化」/「个人已安装，较已安装版本无变化」；
+ * 「企业审核中，较上次提交无变化」/「个人已提交，较已提交版本无变化」；
  * 单技能提交弹窗、批量第 1 步、技能详情云 hover 各处直接复用（通道前缀随词条自带）。
  */
 export function channelStatusOf(skill: Skill, route: "enterprise" | "personal"): ChannelStatus {
   if (route === "personal") {
-    if (!skill.personalInstalled) return { text: "个人未安装" }
+    if (!skill.personalInstalled) return { text: "个人待提交" }
     return skill.perChanged
-      ? { text: "个人已安装，较已安装版本有变化" }
-      : { text: "个人已安装，较已安装版本无变化" }
+      ? { text: "个人已提交，较已提交版本有变化" }
+      : { text: "个人已提交，较已提交版本无变化" }
   }
   if (skill.enterpriseStatus === "saved") return { text: "企业未提交" }
   const desc = ENT_DESC[skill.enterpriseStatus]

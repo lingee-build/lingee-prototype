@@ -50,7 +50,7 @@ export function SkillDevPage() {
     data.update((items) => items.map((x) => (x.id === id ? { ...x, ...change } : x)))
     void skillService.patch(id, change)
   }
-  /** 打开批量向导。检查 / 企业分发 / 个人安装 / 删除、单个或多个，都走同一个弹窗 */
+  /** 打开批量向导。检查 / 企业分发 / 个人提交 / 删除、单个或多个，都走同一个弹窗 */
   const showBatch = (config: Pick<BatchDialogProps, "mode" | "route" | "skills" | "skipSelect">) =>
     dialog.show(
       () => (
