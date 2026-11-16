@@ -73,7 +73,7 @@ src/
 
 ## 项目技能安装为个人技能（US-2026-082714）
 
-入口与设置页「+ 安装技能」共用同一个「安装个人技能」弹窗（`features/skill-install/InstallPersonalSkillDialog.tsx`，文案直接用线上字典 `settings.skills.install.*`）：设置页入口是选本地文件夹 / 压缩包（local 来源），卡片菜单入口来源已定为该技能（project 来源）——来源区显示技能名 + 工程目录路径 +「项目技能」标签，说明区的三条格式要求换成快照两条。个人技能库在 `stores/personal-skills.ts`，设置页「技能」页签的「我的技能」列表在 `pages/settings/PersonalSkillsSection.tsx`。
+入口与设置页「+ 安装技能」共用同一个「安装个人技能」弹窗（`features/skill-install/InstallPersonalSkillDialog.tsx`，布局与文案照线上 1:1 复刻，取线上字典 `settings.skills.install.*`）：设置页入口是选本地文件夹 / 压缩包（local 来源），卡片菜单入口来源已定为该技能（project 来源）——来源区显示技能名 + 工程目录路径（无移除按钮），其余与设置页完全一致。个人技能库在 `stores/personal-skills.ts`，设置页「技能」页签的「我的技能」列表在 `pages/settings/PersonalSkillsSection.tsx`。
 
 - 无同名：主按钮「安装」，点后变「安装中…」并禁用，弹窗此时不可关闭（Esc 与遮罩都失效）；成功后关闭并提示「技能安装成功」。
 - 有同名：显示线上同款冲突提示「已存在同名技能「X」，是否覆盖安装？」，主按钮改「覆盖并安装」；同名技能处于停用状态时追加一句「覆盖后仍保持停用」，覆盖后沿用原启用状态（只换内容）。

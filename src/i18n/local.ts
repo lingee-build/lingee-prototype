@@ -4,9 +4,6 @@
  */
 export const localZh: Record<string, string> = {
   "proto.personalInstall.menu": "安装为个人技能",
-  "proto.personalInstall.note1": "安装的是当前版本的完整快照，含脚本与子目录",
-  "proto.personalInstall.note2": "安装后独立保存在个人技能库，项目技能再修改不会自动同步",
-  "proto.personalInstall.sourceTag": "项目技能",
   "proto.personalInstall.conflictDisabled": "该个人技能当前为停用状态，覆盖后仍保持停用。",
   "proto.personalInstall.installing": "安装中…",
   "proto.personalInstall.unknownProject": "未知工程",
@@ -611,9 +608,6 @@ export const localZh: Record<string, string> = {
 
 export const localEn: Record<string, string> = {
   "proto.personalInstall.menu": "Install as personal skill",
-  "proto.personalInstall.note1": "A full snapshot of the current version, including scripts and subfolders",
-  "proto.personalInstall.note2": "The copy is stored independently; later changes to the project skill are not synced",
-  "proto.personalInstall.sourceTag": "Project skill",
   "proto.personalInstall.conflictDisabled": "That personal skill is disabled and stays disabled after overwriting.",
   "proto.personalInstall.installing": "Installing…",
   "proto.personalInstall.unknownProject": "Unknown project",
