@@ -20,6 +20,11 @@ function InfoRow({ label, children }: { label: string; children: ReactNode }) {
   )
 }
 
+/** 长文本最多两行，超出显示「…」，悬停查看全文 */
+function Clamp({ text, empty }: { text: string; empty: ReactNode }) {
+  return text ? <p className="agent-clamp-2" title={text}>{text}</p> : <>{empty}</>
+}
+
 /** 适用人群标签：详情与编辑共用，填写时看到的就是展示效果 */
 function AudienceTag({ label, removeLabel, onRemove }: { label: string; removeLabel?: string; onRemove?: () => void }) {
   return (
@@ -76,7 +81,7 @@ function ScenarioTabs({ titles, value, onChange, invalid, onAdd, onRemove }: {
             <div key={index} data-slot="tabs-trigger-wrapper">
               <button type="button" role="tab" aria-selected={selected} data-slot="tabs-trigger" data-selected={selected ? "" : undefined} title={label}
                 onClick={() => onChange(index)}>
-                {label}
+                <span className="agent-scenario-tab-label">{label}</span>
                 {invalid?.(index) && <i className="agent-tab-dot" aria-hidden="true" />}
               </button>
               {onRemove && selected && (
@@ -126,14 +131,14 @@ export function AgentDisplayOverview({ info, description }: { info: AgentDisplay
       <section className="agent-display-group">
         <h3 className="agent-config-section-title">{t(key("introScenarios"))}</h3>
         <div className="agent-config-surface agent-info-list">
-          {introFields.map(field => <InfoRow key={field} label={t(key(field))}>{info.detailedIntroduction[field] || empty}</InfoRow>)}
+          {introFields.map(field => <InfoRow key={field} label={t(key(field))}><Clamp text={info.detailedIntroduction[field]} empty={empty} /></InfoRow>)}
           <InfoRow label={t(key("scenarios"))}>
             {scenario ? (
               <div className="agent-scenario-panel">
                 <ScenarioTabs titles={scenarios.map(item => item.title)} value={current} onChange={setActive} />
                 <div className="agent-scenario-body">
-                  <p><span className="text-text-weak">{t(key("problem"))}：</span>{scenario.problem || empty}</p>
-                  <p><span className="text-text-weak">{t(key("solution"))}：</span>{scenario.solution || empty}</p>
+                  <div><div className="agent-scenario-label">{t(key("problem"))}</div><Clamp text={scenario.problem} empty={empty} /></div>
+                  <div><div className="agent-scenario-label">{t(key("solution"))}</div><Clamp text={scenario.solution} empty={empty} /></div>
                 </div>
               </div>
             ) : empty}
@@ -182,7 +187,6 @@ function AudienceField({ value, onChange, error }: { value: string[]; onChange: 
     <div data-component="form-input" className="agent-audience-field">
       <div data-slot="form-input-label-row">
         <label data-slot="form-input-label" htmlFor={id}>{t(key("audience"))}</label>
-        <span data-slot="form-input-required">*</span>
         <span className="agent-field-count" aria-hidden="true">{value.length}/{AUDIENCE_LIMIT}</span>
       </div>
       <div data-slot="form-input-wrapper" className="agent-tag-input"
@@ -211,7 +215,7 @@ function QuestionInput({ value, onChange, error }: { value: string; onChange: (v
   const over = size > QUESTION_LIMIT
   return (
     <div className="agent-counted-field">
-      <Input label={t(key("question"))} required value={value} error={over ? t(key("questionLimit")) : error}
+      <Input label={t(key("question"))} value={value} error={over ? t(key("questionLimit")) : error}
         placeholder={t(key("questionPlaceholder"))} onChange={onChange} />
       <span className="agent-field-count" data-over={over || undefined} aria-hidden="true">{size}/{QUESTION_LIMIT}</span>
     </div>
@@ -247,13 +251,11 @@ export function AgentDisplayEditor({ info, onChange, attempt }: {
   const errors = displayInfoErrors(info)
   const patch = (value: Partial<AgentDisplayInfo>) => onChange({ ...info, ...value })
   const error = (name: string) => (attempt > 0 && errors[name] ? t(key(errors[name])) : undefined)
-  // 历史智能体没有场景时，先给一个空白的「场景 1」直接填写；未输入前不算新增，也不产生修改
-  const placeholder = info.businessScenarios.length === 0
-  const scenarios = placeholder ? [emptyScenario] : info.businessScenarios
+  // 没有场景时只显示「+ 添加」和提示，点击后才出现表单
+  const scenarios = info.businessScenarios
   const current = Math.min(active, scenarios.length - 1)
   const scenario = scenarios[current]
-  const fieldError = (index: number, field: ScenarioField) =>
-    errors[`scenario-${index}-${field}`] ?? (placeholder && errors.scenarios ? "required" : undefined)
+  const fieldError = (index: number, field: ScenarioField) => errors[`scenario-${index}-${field}`]
   const scenarioInvalid = (index: number) => attempt > 0 && scenarioFields.some(field => fieldError(index, field))
   const scenariosError = error("scenarios")
 
@@ -280,29 +282,28 @@ export function AgentDisplayEditor({ info, onChange, attempt }: {
       <h3 className="agent-config-section-title">{t(key("introScenarios"))}</h3>
       <div className="agent-config-surface agent-config-fields">
         {introFields.map(field => (
-          <Input key={field} label={t(key(field))} required multiline className="min-h-[56px] max-h-[160px] overflow-y-auto"
+          <Input key={field} label={t(key(field))} multiline className="min-h-[56px] max-h-[160px] overflow-y-auto"
             value={info.detailedIntroduction[field]} error={error(field)} placeholder={t(key(`${field}Placeholder`))}
             onChange={value => patch({ detailedIntroduction: { ...info.detailedIntroduction, [field]: value } })} />
         ))}
         <div data-component="form-input">
           <div data-slot="form-input-label-row">
             <span data-slot="form-input-label">{t(key("scenarios"))}</span>
-            <span data-slot="form-input-required">*</span>
           </div>
           <div className="agent-scenario-panel agent-scenario-editor" data-display-invalid={scenariosError ? "" : undefined}>
             <ScenarioTabs titles={scenarios.map(item => item.title)} value={current} onChange={setActive} invalid={scenarioInvalid}
-              onAdd={addScenario} onRemove={scenarios.length > 1 ? removeScenario : undefined} />
+              onAdd={addScenario} onRemove={removeScenario} />
             {scenario ? (
               <div id={`${id}-scenario`} className="agent-config-fields agent-scenario-form" role="tabpanel" aria-label={t(key("scenarioItem"), { index: current + 1 })}>
                 {scenarioFields.map(field => (
-                  <Input key={`${current}-${field}`} label={t(key(field))} required multiline={field !== "title"} value={scenario[field]}
+                  <Input key={`${current}-${field}`} label={t(key(field))} multiline={field !== "title"} value={scenario[field]}
                     className={field === "title" ? undefined : "min-h-[56px] max-h-[160px] overflow-y-auto"}
                     placeholder={t(key(`${field}Placeholder`))} error={attempt > 0 && fieldError(current, field) ? t(key(fieldError(current, field)!)) : undefined}
                     onChange={value => updateScenario(field, value)} />
                 ))}
               </div>
             ) : (
-              <p className={`agent-scenario-form ${scenariosError ? "agent-display-error" : "agent-display-hint"}`}>{scenariosError ?? t(key("scenarioEmpty"))}</p>
+              <p className="agent-scenario-form agent-display-hint">{t(key("scenarioEmpty"))}</p>
             )}
           </div>
         </div>

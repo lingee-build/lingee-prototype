@@ -13,26 +13,17 @@ export function normalizeDisplayInfo(info?: AgentDisplayInfo): AgentDisplayInfo 
     },
     businessScenarios: info?.businessScenarios.map(({ title, problem, solution }) => ({
       title: title.trim(), problem: problem.trim(), solution: solution.trim(),
-    })) ?? [],
+    })).filter(({ title, problem, solution }) => title || problem || solution) ?? [],
     exampleQuestion: info?.exampleQuestion.trim() ?? "",
   }
 }
 
+/** 展示信息均为选填，只校验格式：人群最多 5 项且不重复、示例问法不超过 30 字 */
 export function displayInfoErrors(info?: AgentDisplayInfo): Record<string, string> {
-  const { targetAudience, detailedIntroduction, businessScenarios, exampleQuestion } = normalizeDisplayInfo(info)
+  const { targetAudience, exampleQuestion } = normalizeDisplayInfo(info)
   const errors: Record<string, string> = {}
-  if (!targetAudience.length) errors.audience = "audienceMissing"
-  else if (targetAudience.length > AUDIENCE_LIMIT) errors.audience = "audienceLimit"
+  if (targetAudience.length > AUDIENCE_LIMIT) errors.audience = "audienceLimit"
   else if (new Set(targetAudience).size !== targetAudience.length) errors.audience = "audienceDuplicate"
-  if (!detailedIntroduction.coreValue) errors.coreValue = "required"
-  if (!detailedIntroduction.coreAdvantage) errors.coreAdvantage = "required"
-  if (!businessScenarios.length) errors.scenarios = "scenarioMissing"
-  businessScenarios.forEach((scenario, index) => {
-    for (const key of ["title", "problem", "solution"] as const) {
-      if (!scenario[key]) errors[`scenario-${index}-${key}`] = "required"
-    }
-  })
-  if (!exampleQuestion) errors.question = "required"
-  else if (questionLength(exampleQuestion) > QUESTION_LIMIT) errors.question = "questionLimit"
+  if (questionLength(exampleQuestion) > QUESTION_LIMIT) errors.question = "questionLimit"
   return errors
 }

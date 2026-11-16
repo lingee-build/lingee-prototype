@@ -124,7 +124,8 @@
 [data-component="tabs"].agent-scenario-tabs { height: auto; background: transparent; overflow: visible; }
 [data-component="tabs"][data-variant="alt"].agent-scenario-tabs [data-slot="tabs-list"] { height: 36px; padding-inline: 0; gap: 20px; border-bottom-color: var(--border-weak-base); }
 .agent-scenario-tabs [data-slot="tabs-trigger-wrapper"] { display: flex; align-items: center; height: 100%; }
-.agent-scenario-tabs [data-slot="tabs-trigger"] { display: inline-flex; align-items: center; gap: 4px; padding-inline: 0 !important; font-size: 14px; line-height: 22px; white-space: nowrap; max-width: 160px; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
+.agent-scenario-tabs [data-slot="tabs-trigger"] { display: inline-flex; align-items: center; gap: 4px; padding-inline: 0 !important; font-size: 14px; line-height: 22px; white-space: nowrap; cursor: pointer; }
+.agent-scenario-tab-label { display: block; max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .agent-scenario-add { color: var(--text-weak); }
 .agent-scenario-add:hover { color: var(--text-strong); }
 /* 编辑：场景区用浅边框框起，和上方介绍字段区分，页签行与表单同在框内 */
@@ -133,6 +134,9 @@
 .agent-scenario-form { padding: 16px; }
 .agent-scenario-editor [data-slot="tabs-trigger-close-button"] { margin-left: 2px; }
 .agent-tab-dot { flex-shrink: 0; width: 6px; height: 6px; border-radius: 50%; background: var(--text-on-error-base, #ff293b); }
-.agent-scenario-body { display: flex; flex-direction: column; gap: 6px; font-size: 14px; line-height: 22px; color: var(--text-strong); overflow-wrap: anywhere; }
+.agent-scenario-body { display: flex; flex-direction: column; gap: 12px; font-size: 14px; line-height: 22px; color: var(--text-strong); overflow-wrap: anywhere; }
 
 .agent-config-drawer .agent-config-tab-scroll [data-slot="segmented-control-item"] { padding-inline: 10px; }
+.agent-scenario-label { margin-bottom: 2px; color: var(--text-weak); font-size: 12px; line-height: 18px; }
+.agent-scenario-body p { white-space: pre-wrap; }
+.agent-clamp-2 { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; white-space: normal !important; }
