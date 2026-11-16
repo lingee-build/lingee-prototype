@@ -1793,11 +1793,11 @@ export const dict = {
   "settings.skills.title": "Skills",
   "settings.skills.description": "Manage skills you installed for personal use; the skill dev page only lists project skills.",
   "settings.skills.section.list": "Personal skills",
-  "settings.skills.add": "Install Skill",
+  "settings.skills.add": "Personal install",
   "settings.skills.empty": "No personal skills installed",
   "settings.skills.note":
     "This page shows skills installed into the Lingee user directory. The skill development page stays focused on project skill authoring and submission.",
-  "settings.skills.install.title": "Install Skill",
+  "settings.skills.install.title": "Personal install",
   "settings.skills.install.sourceDir": "Skill Local Directory",
   "settings.skills.install.selectTitle": "Select Skill Directory",
   "settings.skills.install.selectPlaceholder": "Click to select a skill directory",

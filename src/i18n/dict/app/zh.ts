@@ -1604,11 +1604,11 @@ export const dict = {
   "settings.skills.title": "技能",
   "settings.skills.description": "管理个人安装的技能，仅自己可用；技能开发页只展示项目开发技能。",
   "settings.skills.section.list": "个人技能",
-  "settings.skills.add": "安装技能",
+  "settings.skills.add": "个人安装",
   "settings.skills.empty": "暂无已安装的个人技能",
   "settings.skills.note":
     "这里展示的是通过安装入口写入 Lingee 用户目录的技能；技能开发页只保留项目技能的开发与提交流程。",
-  "settings.skills.install.title": "安装技能",
+  "settings.skills.install.title": "个人安装",
   "settings.skills.install.sourceDir": "技能本地目录",
   "settings.skills.install.selectTitle": "选择技能目录",
   "settings.skills.install.selectPlaceholder": "点击选择技能所在文件夹",
