@@ -64,7 +64,7 @@ export function SkillCardActions(props: { skill: Skill; handlers: SkillActionHan
                 <span>{t("kcode.skillPreview.action.submit")}</span>
               </DropdownMenu.Item>
               <DropdownMenu.Item onSelect={() => handlers.onInstallPersonal(skill)} className={ITEM}>
-                <Icon name="download" size="small" />
+                <Icon name="folder-plus-24" size="small" />
                 <span>{t("proto.personalInstall.menu")}</span>
               </DropdownMenu.Item>
               {skill.enterpriseStatus === "submitted" && (
