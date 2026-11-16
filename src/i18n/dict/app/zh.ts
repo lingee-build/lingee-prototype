@@ -3528,7 +3528,7 @@ export const dict = {
   "kcode.skillSubmit.pathSelect.enterprise": "企业分发",
   "kcode.skillSubmit.pathSelect.enterpriseDesc": "适合团队协作与知识沉淀，可共享给他人或发布至技能商城，需管理员审核后发布",
   "kcode.skillSubmit.pathSelect.personal": "个人提交",
-  "kcode.skillSubmit.pathSelect.personalDesc": "适合本人独立使用，提交后仅自己可用，无需审核",
+  "kcode.skillSubmit.pathSelect.personalDesc": "适合本人独立使用，安全检测通过后即时提交到 Work，无需审核",
   "kcode.skillSubmit.pathSelect.cancel": "取消",
   "kcode.skillSubmit.pathSelect.submit": "提交",
 

@@ -3664,7 +3664,7 @@ export const dict = {
     "Suitable for team collaboration and knowledge sharing; skills can be shared or published to the enterprise marketplace, and require admin approval to be published",
   "kcode.skillSubmit.pathSelect.personal": "Personal Submit",
   "kcode.skillSubmit.pathSelect.personalDesc":
-    "Suitable for individual use; available to you only after submitting, no review required",
+    "Suitable for individual use; submitted to Work instantly after security checks, no review required",
   "kcode.skillSubmit.pathSelect.cancel": "Cancel",
   "kcode.skillSubmit.pathSelect.submit": "Submit",
 
