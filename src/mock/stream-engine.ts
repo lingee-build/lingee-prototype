@@ -17,6 +17,17 @@ interface Run {
 
 const runs = new Map<string, Run>()
 
+/** 挂起的剧本（会话 → 一次性覆盖）：去修复同项目场景预填指令，用户手动发送后由这里取走接管回放 */
+const pendingScenarios = new Map<string, Scenario>()
+export function setPendingScenario(sessionId: string, scenario: Scenario) {
+  pendingScenarios.set(sessionId, scenario)
+}
+function takePendingScenario(sessionId: string) {
+  const scenario = pendingScenarios.get(sessionId)
+  pendingScenarios.delete(sessionId)
+  return scenario
+}
+
 /** 中止某个会话正在进行的回放（对应「停止生成」） */
 export function abortStream(sessionId: string) {
   const run = runs.get(sessionId)
@@ -39,7 +50,7 @@ export async function runAssistantStream(sessionId: string, prompt: string, emit
   const aborted = () => run.controller.signal.aborted
   const session = db.sessions.find(x => x.id === sessionId)
   const bound = evaluationRepairTarget(sessionId)
-  const scenario = override ?? (session && !bound && /评测|报告/.test(prompt) && /修复|修改|改进/.test(prompt)
+  const scenario = takePendingScenario(sessionId) ?? override ?? (session && !bound && /评测|报告/.test(prompt) && /修复|修改|改进/.test(prompt)
     ? conversationRepairScenario(session, prompt)
     : pickScenario({ prompt, sessionId, repairTarget: bound, projectId: session?.projectId ?? "" }))
 

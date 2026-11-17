@@ -77,7 +77,14 @@ export function SkillCard(props: {
               label={t("kcode.skillDev.channel.enterprise")}
               status={t(`kcode.skillDev.channelStatus.enterprise.${enterpriseKey}`)}
               statusClass={ENTERPRISE_COLOR[skill.enterpriseStatus]}
-              cloudTip={entCloudOf(skill) ? channelStatusOf(skill, "enterprise").text + t("kcode.skillDev.cloud.submitSuffix") : undefined}
+              cloudTip={
+                entCloudOf(skill)
+                  ? channelStatusOf(skill, "enterprise").text +
+                    t("kcode.skillDev.cloud.submitSuffix") +
+                    // 驳回原因不进路径弹窗提示条（v1.31 决策）：企业云 hover 与技能详情弹窗展示（AC-8② / AC-12）
+                    (skill.enterpriseStatus === "rejected" && skill.reason ? `\n${t("ui.tile.rejectionReason", { reason: skill.reason })}` : "")
+                  : undefined
+              }
               onCloud={() => props.onContinueSubmit("enterprise")}
             />
           </div>
