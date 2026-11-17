@@ -1,5 +1,5 @@
 import { create } from "zustand"
-import { TENANT, type EnvKey } from "@/mock/fixtures/env"
+import { ENV_SOURCE_SAMPLE_REPLY, TENANT, type EnvKey } from "@/mock/fixtures/env"
 
 /**
  * 开发时灵基环境与 AI 资源管理（US-2026-043955）演示场景开关与来源判定。
@@ -82,13 +82,15 @@ export const testBlockOf = (f: ScenarioFlags): string | undefined => {
   return undefined
 }
 
-/** 会话内 agent 拉取开发资源时的来源告知样例（功能点 1 顺带告知） */
+/** 会话内 agent 拉取开发资源时的来源告知样例（功能点 1 顺带告知）：默认 / 无测试环境 / 无可用 SaaS 连接器 / 登录测试环境各给对应口径 */
 export const sourceReplyOf = (f: ScenarioFlags & { lastSource: EnvKey }): string => {
   const source = sourceEnvOf(f)
   const env = source === "pro" ? "金蝶软件（中国）有限公司 · 生产，https://app.lingee.com" : "金蝶软件（中国）有限公司 · 测试，https://test.lingee.com"
   if (f.loginTest) return `用户登录测试环境，生产环境资源不可用于开发；开发时可用的企业 AI 资源来自测试环境（${env}）。订单查询相关的工具找到 12 个，……`
   if (f.srcOverride) return `来源覆盖文件生效：开发时可用的企业 AI 资源来源按文件配置（${env}）。订单查询相关的工具找到 12 个，……`
-  return `当前资源来源环境（${env}）。订单查询相关的工具找到 12 个，……`
+  if (f.noSaasConn) return `测试环境无可用 SaaS 连接器，开发时可用的企业 AI 资源从生产环境拉取（${env}）。订单查询相关的工具找到 12 个，……`
+  if (f.noSandbox) return `没有测试环境或测试环境被禁用，开发时可用的企业 AI 资源从生产环境拉取（${env}）。订单查询相关的工具找到 12 个，……`
+  return ENV_SOURCE_SAMPLE_REPLY
 }
 
 /** hook 形态：组件里读当前场景（登录环境、来源、警示与测试拦截口径一次拿全） */

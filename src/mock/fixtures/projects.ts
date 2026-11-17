@@ -33,6 +33,7 @@ export const sessions: Session[] = [
   ...salesTests.map((test, index) =>
     session(test.id, "workspace", test.title, (index + 2) * MIN, { localTest: { objectId: salesTestObject } }),
   ),
+  session("ses_envsource", "scm-skills", "订单查询工具清单核对", 9 * MIN),
   session("ses_delivery", "scm-skills", "创建发货通知单查询技能", 12 * MIN),
   session("ses_stock", "scm-skills", "即时库存查询技能增加仓位维度", 3 * HOUR, { unread: true }),
   session("ses_purchase", "scm-skills", "采购订单下推入库单校验", DAY + 2 * HOUR),

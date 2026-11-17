@@ -29,6 +29,12 @@ export const LINGEE_ENVS: LingeeEnv[] = [
   { id: "sbx-02", kind: "测试", name: "金蝶软件（中国）有限公司 · 深圳测试", clusterName: "深圳测试集群", clusterCode: "SH-02", url: "https://sbx02-lingee.kingdee.com", status: "off", sandbox: true, tenantCode: "2490585124371805250" },
 ]
 
+/**
+ * 会话内来源告知样例（功能点 1 顺带告知）的默认回复：
+ * 消费方 conversations.ts（预置样例会话）与 SessionPage（按场景实时替换），见 env-scenario.ts 的 sourceReplyOf。
+ */
+export const ENV_SOURCE_SAMPLE_REPLY = "当前资源来源环境（金蝶软件（中国）有限公司 · 测试，https://test.lingee.com）。订单查询相关的工具找到 12 个，……"
+
 /** 现状保留区块（照录，本需求不改）：苍穹应用开发测试环境 */
 export const LEGACY_COSMIC = {
   title: "苍穹应用开发 测试环境",

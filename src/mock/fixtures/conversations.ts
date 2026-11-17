@@ -1,4 +1,5 @@
 import type { Message, Part, ToolPart } from "../types"
+import { ENV_SOURCE_SAMPLE_REPLY } from "./env"
 
 const MIN = 60_000
 
@@ -358,6 +359,14 @@ export const conversations: Record<string, Message[]> = {
 
 点卡片上的 **详情** 可以查看基本信息与 info.json 完整性检查。`,
       card: { kind: "kdapp-artifact", config: { appCode: "kdcloud_fin_expense_claim_card", title: "费用报销卡片", phase: "preview", jobId: "job_expense_card", url: "http://localhost:5173" } },
+    },
+  ]),
+
+  // 会话内来源告知样例（US-2026-043955 功能点 1 顺带告知）：回复文本由 SessionPage 按当前演示场景实时替换（env-scenario.ts 的 sourceReplyOf）
+  ses_envsource: conversation("ses_envsource", 9 * MIN, [
+    {
+      ask: "把订单查询要用的工具列一下，看引用齐不齐",
+      reply: ENV_SOURCE_SAMPLE_REPLY,
     },
   ]),
 }

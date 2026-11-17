@@ -8,7 +8,7 @@ import { EvaluationSession } from "@/features/evaluation/EvaluationSession"
 import { saveEvaluationConversation, useEvaluationConversations } from "@/services/evaluation-conversations"
 import { procurementPrompt } from "@/services/procurement"
 import { guardUpgrade, legacySessions, useUpgradeStore } from "@/features/artifact-upgrade/UpgradeGate"
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { Navigate, useParams, useSearchParams } from "react-router"
 import { cx } from "@/lib/cx"
 import { useT } from "@/i18n"
@@ -23,12 +23,15 @@ import { devStore } from "@/mock/dev-store"
 import { workflowService } from "@/services/workflow"
 import { openWorkflowCanvas } from "@/features/workflow/open-canvas"
 import { useSync } from "@/stores/sync"
+import type { Message } from "@/mock/types"
 import { Composer } from "./composer/Composer"
 import { NewSessionView } from "./NewSessionView"
 import { RecommendationCards } from "./RecommendationCards"
 import { SkillTabs } from "./SkillTabs"
 import { MessageTimeline } from "./timeline/MessageTimeline"
 import { useSessionController } from "./use-session-controller"
+import { sourceReplyOf, useEnvScenario } from "@/features/env-source/env-scenario"
+import { ENV_SOURCE_SAMPLE_REPLY } from "@/mock/fixtures/env"
 
 /** 右侧预览面板打开时，会话区收窄到这个宽度（对应原工程的 DEFAULT_SESSION_WIDTH） */
 const SESSION_WIDTH = 600
@@ -86,6 +89,19 @@ export function Component() {
     if (item) useEvaluationRepairs.setState(s => ({ items: { ...s.items, [sessionId]: { ...item, session, messages: messages[sessionId] } } }))
   }, [sessionId, session, messages])
   const loaded = sessionId ? messages[sessionId] : undefined
+  // 会话内来源告知样例（US-2026-043955 功能点 1 顺带告知）：预置样例回复按当前演示场景实时替换（?env-scenario= 直达切换，见 env-scenario.ts）
+  const scenario = useEnvScenario()
+  const timeline = useMemo(() => {
+    if (!loaded) return loaded
+    const hasSample = (m: Message) => m.parts.some((p) => p.type === "text" && p.text === ENV_SOURCE_SAMPLE_REPLY)
+    if (!loaded.some(hasSample)) return loaded
+    const reply = sourceReplyOf(scenario)
+    return loaded.map((m) =>
+      hasSample(m)
+        ? { ...m, parts: m.parts.map((p) => (p.type === "text" && p.text === ENV_SOURCE_SAMPLE_REPLY ? { ...p, text: reply } : p)) }
+        : m,
+    )
+  }, [loaded, scenario])
   const anchor = search.get("message")
   useEffect(() => {
     if (!anchor || !loaded?.some(message => message.id === anchor)) return
@@ -176,7 +192,7 @@ export function Component() {
           <div className={cx("min-h-0 relative", sessionId ? "flex-1 overflow-hidden" : "w-full shrink-0 overflow-visible")}>
             {session ? (
               loaded ? (
-                <MessageTimeline session={session} messages={loaded}
+                <MessageTimeline session={session} messages={timeline ?? loaded}
                   onEvaluate={session.localTest ? id => void openEvaluationFromTest(id) : undefined}
                   titleActions={repairTarget ? <div className={previewOpen ? "" : "pr-28"}><Button variant="ghost" className="eval-session-action" icon="arrow-left" onClick={() => returnUrl && navigate(returnUrl)}>返回评测</Button></div> : undefined}
                   titleDescription={repairTarget ? <div className="eval-repair-reference">
