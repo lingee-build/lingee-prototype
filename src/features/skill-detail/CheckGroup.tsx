@@ -3,7 +3,7 @@ import { Icon } from "@/ui"
 import { cx } from "@/lib/cx"
 import { useT } from "@/i18n"
 import { CHECK_ICONS } from "./check-icons.gen"
-import { summarize, type ValidationGroup } from "./validation"
+import { summarize, type ValidationGroup, type ValidationRule } from "./validation"
 
 /** 检查页签里的彩色小图标（同步自线上的 SVG） */
 export function CheckIcon(props: { name: keyof typeof CHECK_ICONS; className?: string }) {
@@ -26,7 +26,7 @@ function WarningCircle(props: { className?: string }) {
  * 一组检查项：标题行（组名 + 通过数 n/m）可折叠，有未通过项时默认展开。
  * 每条规则显示名称、级别（必检项 / 提示项）、说明；未通过的可以「查看原因」，传了 onFixPrompt 时还有「去修复」。结构对齐线上的 CheckGroup。
  */
-export function CheckGroup(props: { group: ValidationGroup; onFixPrompt?: (ruleId: string, message: string) => void }) {
+export function CheckGroup(props: { group: ValidationGroup; onFixPrompt?: (ruleId: string, message: string, severity?: ValidationRule["severity"]) => void }) {
   const t = useT()
   const { rules } = props.group
   const failed = rules.filter((x) => x.status !== "ok")
@@ -105,7 +105,7 @@ export function CheckGroup(props: { group: ValidationGroup; onFixPrompt?: (ruleI
                     <button
                       type="button"
                       className="flex shrink-0 items-center gap-1 rounded-[8px] px-2 py-0.5 cursor-pointer border border-[var(--primary-200)] bg-[var(--primary-50)] text-[var(--primary-600)] hover:bg-[var(--primary-100)] transition-colors"
-                      onClick={() => props.onFixPrompt?.(rule.id, rule.msg ?? rule.desc)}
+                      onClick={() => props.onFixPrompt?.(rule.id, rule.msg ?? rule.desc, rule.severity)}
                     >
                       <Icon name="edit" size="small" className="size-3.5 shrink-0" />
                       <span className="text-[13px] font-medium leading-[20px]">{t("kcode.skillPreview.check.fixPrompt")}</span>
@@ -137,7 +137,7 @@ export function CheckGroup(props: { group: ValidationGroup; onFixPrompt?: (ruleI
 }
 
 /** 「规范检查」这一大类的手风琴容器（详情弹窗里用）；线上还有安全、资源两类，只在提交流水线跑过之后才有数据 */
-export function CheckCategorySection(props: { groups: ValidationGroup[]; onFixPrompt?: (ruleId: string, message: string) => void }) {
+export function CheckCategorySection(props: { groups: ValidationGroup[]; onFixPrompt?: (ruleId: string, message: string, severity?: ValidationRule["severity"]) => void }) {
   const t = useT()
   const [expanded, setExpanded] = useState(true)
   const hasFail = props.groups.some((group) => group.rules.some((rule) => rule.status !== "ok"))

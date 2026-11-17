@@ -3,7 +3,7 @@ import { BrandButton, Empty, Icon, Tag, showToast } from "@/ui"
 import { useT } from "@/i18n"
 import { sleep } from "@/mock/latency"
 import { CheckCategorySection, ValidationSummary } from "./CheckGroup"
-import { summarize, type ValidationGroup } from "./validation"
+import { summarize, type ValidationGroup, type ValidationRule } from "./validation"
 
 const stamp = (date: Date) =>
   `${date.getFullYear()}.${String(date.getMonth() + 1).padStart(2, "0")}.${String(date.getDate()).padStart(2, "0")} ${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`
@@ -18,7 +18,7 @@ export function CheckTab(props: {
   /** 是否已经检查过；没检查过时先不展示报告 */
   checked: boolean
   onChecked: () => void
-  onFixPrompt: (ruleId: string, message: string) => void
+  onFixPrompt: (ruleId: string, message: string, severity?: ValidationRule["severity"]) => void
 }) {
   const t = useT()
   const [checking, setChecking] = useState(false)

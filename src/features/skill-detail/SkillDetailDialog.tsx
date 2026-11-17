@@ -11,7 +11,7 @@ import { skillDetailOf } from "@/mock/fixtures/skill-detail"
 import { DynamicSkillIcon } from "@/features/dev-page/DynamicSkillIcon"
 import { channelStatusOf, localChangedOf } from "@/features/skill-publish-scope/channel-status"
 import { CheckTab } from "./CheckTab"
-import { summarize, validationOf } from "./validation"
+import { summarize, validationOf, type ValidationRule } from "./validation"
 import { OverviewTab } from "./OverviewTab"
 import { RelatedToolsTab } from "./RelatedToolsTab"
 
@@ -36,7 +36,7 @@ const Divider = () => <div className="w-[0.5px] h-[50px] bg-[var(--neutral-100)]
  * 检查页签里点某条规则的「去修复」，会关掉弹窗并进修复会话（与提交向导的去修复同机制，见 SkillDevPage）。
  * 结构对齐原工程 pages/host-modal/skill-detail.tsx。
  */
-export function SkillDetailDialog(props: { skill: Skill; initialTab?: DetailTab; onEdit: () => void; onFix: (ruleId: string, message: string) => void }) {
+export function SkillDetailDialog(props: { skill: Skill; initialTab?: DetailTab; onEdit: () => void; onFix: (ruleId: string, message: string, severity?: ValidationRule["severity"]) => void }) {
   const t = useT()
   const dialog = useDialog()
   const navigate = useNavigate()
@@ -184,9 +184,9 @@ export function SkillDetailDialog(props: { skill: Skill; initialTab?: DetailTab;
                 groups={groups}
                 checked={checked}
                 onChecked={() => setChecked(true)}
-                onFixPrompt={(ruleId, message) => {
+                onFixPrompt={(ruleId, message, severity) => {
                   dialog.close()
-                  props.onFix(ruleId, message)
+                  props.onFix(ruleId, message, severity)
                 }}
               />
             )}

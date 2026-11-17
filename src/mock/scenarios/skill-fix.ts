@@ -94,7 +94,14 @@ export function skillFixScenario(entries: SkillFixEntry[]): Scenario {
     steps.push({
       todo: 0,
       tools: [
-        { tool: "bash", title: "补齐合规声明与 Frontmatter 字段", detail: "skills/*/SKILL.md", output: "已按规范补齐缺失段落", stageGroup: true },
+        // 纯提示项场景的修复动作是精简/拆分正文，不是补齐合规声明
+        {
+          tool: "bash",
+          title: fixGroups.length > 0 ? "补齐合规声明与 Frontmatter 字段" : "精简 SKILL.md 正文（拆分内容到 references/）",
+          detail: "skills/*/SKILL.md",
+          output: fixGroups.length > 0 ? "已按规范补齐缺失段落" : "已精简正文并拆出参考文件",
+          stageGroup: true,
+        },
       ],
       text:
         fixGroups.length > 0
