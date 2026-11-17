@@ -411,20 +411,33 @@ export function DecisionStep({ run, mode, route }: StepProps) {
 
   const isPer = route === "personal"
   const titles = GROUP_TITLES(route)
-  /** 通过项：勾选框 + 图标 + 名称（勾选联动底部按钮数量）；不通过项：不可勾 + 失败原因按类别分行 + 修复指引 */
+  /** 通过项：勾选框 + 图标 + 名称（勾选联动底部按钮数量）；有提示项（warn，不阻断提交）时行下橙字展开原因，样式与检查结果页警告行一致；不通过项：不可勾 + 失败原因按类别分行 + 修复指引 */
   const passRow = (item: BatchItem) => (
-    <label className="flex items-center gap-2.5 px-3.5 py-2.5 cursor-pointer select-none hover:bg-[color-mix(in_srgb,var(--primary-600)_10%,transparent)]">
-      <input
-        type="checkbox"
-        className="size-4 accent-[#495DFF] shrink-0"
-        checked={run.confirmSet.has(item.skill.id)}
-        onChange={() => run.toggleConfirm(item.skill.id)}
-      />
-      <DynamicSkillIcon name={item.skill.displayName} size={30} />
-      <span className="text-[13px] font-medium text-text-strong truncate flex-1" title={item.skill.displayName}>
-        {item.skill.displayName}
-      </span>
-    </label>
+    <div>
+      <label className="flex items-center gap-2.5 px-3.5 py-2.5 cursor-pointer select-none hover:bg-[color-mix(in_srgb,var(--primary-600)_10%,transparent)]">
+        <input
+          type="checkbox"
+          className="size-4 accent-[#495DFF] shrink-0"
+          checked={run.confirmSet.has(item.skill.id)}
+          onChange={() => run.toggleConfirm(item.skill.id)}
+        />
+        <DynamicSkillIcon name={item.skill.displayName} size={30} />
+        <span className="text-[13px] font-medium text-text-strong truncate flex-1" title={item.skill.displayName}>
+          {item.skill.displayName}
+        </span>
+      </label>
+      {item.checkItems && Object.values(item.checkItems).some((x) => x.status === "warn" && x.reason) && (
+        <div className="pl-[54px] pr-3.5 pb-2.5 flex flex-col gap-0.5">
+          {Object.values(item.checkItems)
+            .filter((x) => x.status === "warn" && x.reason)
+            .map((x, i) => (
+              <span key={`${i}-${x.reason}`} className="text-[11px] text-[#a16207] leading-snug" title={x.reason}>
+                {x.reason}
+              </span>
+            ))}
+        </div>
+      )}
+    </div>
   )
 
   const groups = (["same", "cover", "first"] as const)

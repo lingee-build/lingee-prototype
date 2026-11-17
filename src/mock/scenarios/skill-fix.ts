@@ -12,13 +12,20 @@ import { n3KindOf, n3NameOf, type SkillFixEntry } from "@/features/skill-batch/f
  */
 export function skillFixScenario(entries: SkillFixEntry[]): Scenario {
   const fixGroups = entries
-    .map((entry) => ({ name: entry.skill.displayName, items: entry.items.filter((x) => x.checkId !== "N3" && x.reason) }))
+    .map((entry) => ({ name: entry.skill.displayName, items: entry.items.filter((x) => x.checkId !== "N3" && x.reason && x.status !== "warn") }))
+    .filter((g) => g.items.length > 0)
+  const warnGroups = entries
+    .map((entry) => ({ name: entry.skill.displayName, items: entry.items.filter((x) => x.checkId !== "N3" && x.reason && x.status === "warn") }))
     .filter((g) => g.items.length > 0)
   const n3Items = entries.flatMap((entry) =>
     entry.items.filter((x) => x.checkId === "N3").map((item) => ({ skill: entry.skill, item })),
   )
   const fixN = fixGroups.reduce((n, g) => n + g.items.length, 0)
   const list = fixGroups.map((g) => `${g.name}\n${g.items.map((item) => `• [${item.checkId}] ${item.reason}`).join("\n")}`).join("\n")
+  // 提示项（warn）不阻断提交：回复里单独归为「已一并优化 / 提交不受影响」，不与必修混排
+  const warnDone = warnGroups
+    .map((g) => `${g.name}\n${g.items.map((item) => `• [${item.checkId}] ${item.reason} → 已一并优化，提交不受影响`).join("\n")}`)
+    .join("\n")
 
   const resolveResource = (answers: string[][]) => {
     n3Items.forEach((entry, index) => {
@@ -73,18 +80,26 @@ export function skillFixScenario(entries: SkillFixEntry[]): Scenario {
     resolveResource(answers)
     writeTail(answers)
   }
-  if (fixGroups.length > 0) {
+  if (fixGroups.length > 0 || warnGroups.length > 0) {
+    const warnN = warnGroups.reduce((n, g) => n + g.items.length, 0)
+    const warnList = warnGroups.map((g) => `${g.name}\n${g.items.map((item) => `• [${item.checkId}] ${item.reason}`).join("\n")}`).join("\n")
     steps.push({
       todo: 0,
       reasoning: "逐项核对检查报告，定位每个失败项对应的 SKILL.md 段落与脚本",
-      text: `收到，开始修复 ${fixN} 个规范/安全问题：\n${list}`,
+      text:
+        fixGroups.length > 0
+          ? `收到，开始修复 ${fixN} 个规范/安全问题：\n${list}`
+          : `收到，开始处理 ${warnN} 个提示项（不阻断提交，可提交后再改）：\n${warnList}`,
     })
     steps.push({
       todo: 0,
       tools: [
         { tool: "bash", title: "补齐合规声明与 Frontmatter 字段", detail: "skills/*/SKILL.md", output: "已按规范补齐缺失段落", stageGroup: true },
       ],
-      text: `已修复：\n${fixGroups.map((g) => `${g.name}\n${g.items.map((item) => `• [${item.checkId}] ${item.reason} → 已按规范补齐/修正`).join("\n")}`).join("\n")}`,
+      text:
+        fixGroups.length > 0
+          ? `已修复：\n${fixGroups.map((g) => `${g.name}\n${g.items.map((item) => `• [${item.checkId}] ${item.reason} → 已按规范补齐/修正`).join("\n")}`).join("\n")}${warnDone ? `\n\n提示项（不阻断提交）已一并处理：\n${warnDone}` : ""}`
+          : `提示项已一并优化（提交不受影响）：\n${warnDone}`,
     })
   }
   if (n3Items.length > 0) {
@@ -128,7 +143,7 @@ export function skillFixScenario(entries: SkillFixEntry[]): Scenario {
 
   return {
     todos: [
-      ...(fixGroups.length > 0 ? ["修复规范/安全检查问题"] : []),
+      ...(fixGroups.length > 0 ? ["修复规范/安全检查问题"] : warnGroups.length > 0 ? ["处理提示项（不阻断提交）"] : []),
       ...(n3Items.length > 0 ? ["确认资源处理方式"] : []),
       "引导重新提交",
     ],

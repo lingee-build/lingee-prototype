@@ -69,10 +69,14 @@ export function BatchDialog(props: BatchDialogProps) {
     </BrandButton>
   )
   const goFix = () => {
-    // 带上失败明细（含修复指引）供修复会话拼分层指令；资源缺失（N3）由会话里的澄清卡处理
+    // 带上失败明细与提示项（warn 不阻断提交但一并带给修复会话，指令里单独标注）供拼分层指令；资源缺失（N3）由会话里的澄清卡处理
     const entries: SkillFixEntry[] = run.failItems.map((item) => ({
       skill: item.skill,
-      items: SUBMIT_ORDER.filter((key) => item.checkItems[key].status === "fail").map((key) => ({ checkId: key, ...item.checkItems[key] })),
+      items: SUBMIT_ORDER.filter((key) => item.checkItems[key].status === "fail" || item.checkItems[key].status === "warn").map((key) => ({
+        checkId: key,
+        ...item.checkItems[key],
+        status: item.checkItems[key].status === "warn" ? ("warn" as const) : ("fail" as const),
+      })),
     }))
     props.onGoFix?.(entries)
     dialog.close()
