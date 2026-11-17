@@ -2,7 +2,7 @@ import { useNavigate, useParams } from "react-router"
 import { Icon, type IconName } from "@/ui"
 import { cx } from "@/lib/cx"
 import { useT } from "@/i18n"
-import { NAV_ITEMS, TOP_TABS, type TopTab } from "./nav-config"
+import { NAV_ITEMS, PLUGIN_NAV, TOP_TABS, isArtifactMode, loadArtifactOrder, type TopTab } from "./nav-config"
 
 function NavButton(props: { icon: IconName; label: string; active: boolean; onClick: () => void }) {
   return (
@@ -30,7 +30,7 @@ function NavButton(props: { icon: IconName; label: string; active: boolean; onCl
   )
 }
 
-/** 侧边栏上半部分：对话/工作/开发 页签 + 新任务 + 各开发入口 */
+/** 侧边栏上半部分：对话/工作/开发 页签 + 新任务 / 协作 / 产物 / 插件中心 */
 export function NavSection(props: { onNewTask: () => void }) {
   const t = useT()
   const navigate = useNavigate()
@@ -71,10 +71,18 @@ export function NavSection(props: { onNewTask: () => void }) {
             key={item.id}
             icon={item.icon}
             label={t(item.labelKey)}
-            active={params.mode === item.id}
-            onClick={() => navigate(`/dev/${item.id}`)}
+            active={item.id === "artifacts" ? isArtifactMode(params.mode) : params.mode === item.id}
+            // 产物：进入用户排在第一位的类型页签
+            onClick={() => navigate(`/dev/${item.id === "artifacts" ? loadArtifactOrder()[0] : item.id}`)}
           />
         ))}
+        <div className="mx-2.5 my-2 h-px bg-border-weak-base" role="separator" />
+        <NavButton
+          icon={PLUGIN_NAV.icon}
+          label={t(PLUGIN_NAV.labelKey)}
+          active={params.mode === PLUGIN_NAV.id}
+          onClick={() => navigate(`/dev/${PLUGIN_NAV.id}`)}
+        />
       </div>
     </div>
   )

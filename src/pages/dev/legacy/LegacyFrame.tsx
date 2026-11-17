@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useEffect, useState } from "react"
 
 /**
  * 旧版 Lingee 原型（应用开发原型/lingee）的静态嵌入页。
@@ -23,23 +23,50 @@ export function LegacyFrame(props: { view: "apps" | "collab"; title: string }) {
     }
     return `${import.meta.env.BASE_URL}legacy/index.html?view=${props.view}`
   })
+  // 旧原型在 load 前会先画一帧半成品（只有页签、没有工具栏），load 后再补样式补丁，
+  // 直接显示会闪一下。先隐藏，补丁打完后的下一帧再显示；3 秒兜底防止一直白屏
+  const [ready, setReady] = useState(false)
+  useEffect(() => {
+    const timer = setTimeout(() => setReady(true), 3000)
+    return () => clearTimeout(timer)
+  }, [])
   return (
     <iframe
       src={src}
       title={props.title}
       className="block size-full border-0 bg-background-page"
+      style={{ visibility: ready ? "visible" : "hidden" }}
       onLoad={(e) => {
         // 原型内层侧栏收起后会在左上角浮出「展开侧边栏」按钮，与本工程侧栏的开关重叠，直接隐藏
         try {
           const doc = e.currentTarget.contentDocument
-          if (!doc || doc.getElementById("legacy-frame-patch")) return
+          if (doc && !doc.getElementById("legacy-frame-patch")) {
           const style = doc.createElement("style")
           style.id = "legacy-frame-patch"
-          style.textContent = ".expand-sidebar{display:none!important}"
+          style.textContent =
+            ".expand-sidebar{display:none!important}" +
+            // 应用开发放进「产物」页签后：去掉原型自带的「应用开发」标题，内容区宽度和左右边距对齐其它产物页（1200 / 24px / 40px）
+            "#view-apps .apps-head{display:none!important}" +
+            "#view-apps{max-width:1200px;margin:0 auto;padding:0 40px 56px 24px!important}" +
+            "#view-apps .apps-toolbar{margin-bottom:16px}"
           doc.head.appendChild(style)
+          }
         } catch {
           /* 文档未就绪时忽略 */
         }
+        // load 之后原型还会异步渲染一轮列表（约 100ms），等内容连续 150ms 不再变化再显示，最多等 1.5 秒
+        const doc = e.currentTarget.contentDocument
+        let last = -1
+        let stable = 0
+        const started = Date.now()
+        const check = () => {
+          const len = doc?.body?.innerText.length ?? 0
+          stable = len === last ? stable + 1 : 0
+          last = len
+          if (stable >= 3 || Date.now() - started > 1500) setReady(true)
+          else setTimeout(check, 50)
+        }
+        check()
       }}
     />
   )

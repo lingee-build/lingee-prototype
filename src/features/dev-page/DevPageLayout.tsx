@@ -1,6 +1,7 @@
 import { useState, type CSSProperties, type ReactNode } from "react"
 import { BrandButton, Icon, Search, SegmentedControl, Tooltip, showToast } from "@/ui"
 import { useT } from "@/i18n"
+import { useInArtifactTabs } from "./ArtifactTabs"
 
 export interface DevPageLayoutProps {
   title: string
@@ -31,6 +32,8 @@ export function DevPageLayout(props: DevPageLayoutProps) {
   const t = useT()
   const [spinning, setSpinning] = useState(false)
   const refreshLabel = t("session.files.refresh")
+  // 在「产物」页签下时，标题由上方的类型页签代替
+  const hideTitle = useInArtifactTabs()
 
   // 刷新：约 600ms 的旋转动画，结束后 Toast 反馈；动画期间禁用，避免重复触发
   const refresh = async () => {
@@ -48,11 +51,11 @@ export function DevPageLayout(props: DevPageLayoutProps) {
       <div className="shrink-0 w-full">
         <div className="mx-auto flex w-full flex-col" style={{ maxWidth: 1200, padding: "0 40px 0 24px" }}>
           <div className="flex flex-col gap-2 pb-4">
-            <div className="flex items-center" style={{ height: 52 }}>
+            {!hideTitle && <div className="flex items-center" style={{ height: 52 }}>
               <h2 className="dev-page-title text-[20px] leading-9 text-text-strong" style={{ fontSize: 18, fontWeight: 500 }}>
                 {props.title}
               </h2>
-            </div>
+            </div>}
 
             <div className="flex items-center justify-between">
               <SegmentedControl className="dev-page-tabs" value={props.tab} onChange={props.onTabChange} items={props.tabs} />
