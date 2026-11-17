@@ -138,7 +138,7 @@ details[open] > .changelog-version-heading .changelog-chevron { transform: rotat
 /* 产物类型页签（菜单整合）：文字样式见 ArtifactTabs，这里只放拖动排序相关 */
 .artifact-tab { position: relative; display: inline-flex; align-items: center; padding: 0; border: 0; background: transparent; cursor: pointer; white-space: nowrap; }
 .artifact-tab__grip { position: absolute; left: -12px; width: 8px; height: 14px; opacity: 0; transition: opacity .15s; color: var(--text-weak); pointer-events: none; }
-.artifact-tab:hover .artifact-tab__grip { opacity: .6; transition-delay: 1s; }
+.artifact-tab:hover .artifact-tab__grip { opacity: .6 !important; transition-delay: 1s; }
 .artifact-tab.is-dragging { opacity: .4; cursor: grabbing; }
 .artifact-tab.is-before::before, .artifact-tab.is-after::after { content: ""; position: absolute; top: 6px; bottom: 6px; width: 2px; border-radius: 1px; background: var(--brand-button-secondary-text); }
 .artifact-tab.is-before::before { left: -13px; }

@@ -48,7 +48,9 @@ export function LegacyFrame(props: { view: "apps" | "collab"; title: string }) {
             // 应用开发放进「产物」页签后：去掉原型自带的「应用开发」标题，内容区宽度和左右边距对齐其它产物页（1200 / 24px / 40px）
             "#view-apps .apps-head{display:none!important}" +
             "#view-apps{max-width:1200px;margin:0 auto;padding:0 40px 56px 24px!important}" +
-            "#view-apps .apps-toolbar{margin-bottom:16px}"
+            "#view-apps .apps-toolbar{margin-bottom:16px}" +
+            // 应用页背景透明，透出 iframe 的 bg-background-page，和其它产物页签同色（协作页不动）
+            (props.view === "apps" ? "html,body,.main,#view-apps{background:transparent!important}" : "")
           doc.head.appendChild(style)
           }
         } catch {

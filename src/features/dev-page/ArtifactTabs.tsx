@@ -10,7 +10,16 @@ export const InArtifactTabsContext = createContext(false)
 export const useInArtifactTabs = () => useContext(InArtifactTabsContext)
 
 const GRIP = (
-  <svg className="artifact-tab__grip" viewBox="0 0 10 16" fill="currentColor" aria-hidden="true">
+  // 尺寸、定位、默认隐藏直接写在元素上：样式表没加载到时也不会撑成大图标
+  <svg
+    className="artifact-tab__grip"
+    width="8"
+    height="14"
+    viewBox="0 0 10 16"
+    fill="currentColor"
+    aria-hidden="true"
+    style={{ position: "absolute", left: -12, top: "50%", marginTop: -7, width: 8, height: 14, opacity: 0, pointerEvents: "none" }}
+  >
     <circle cx="3" cy="4" r="1.2" /><circle cx="7" cy="4" r="1.2" />
     <circle cx="3" cy="8" r="1.2" /><circle cx="7" cy="8" r="1.2" />
     <circle cx="3" cy="12" r="1.2" /><circle cx="7" cy="12" r="1.2" />
