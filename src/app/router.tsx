@@ -2,7 +2,6 @@ import { ConfigPreparationHost } from "@/features/artifact-config/ConfigPreparat
 import { UpgradeHost } from "@/features/artifact-upgrade/UpgradeGate"
 import { createBrowserRouter, Navigate, Outlet, useLocation } from "react-router"
 import { AppShell } from "./AppShell"
-import { ScenarioDock } from "@/features/env-source/ScenarioDock"
 import { Providers } from "./providers"
 import { useAuth } from "@/stores/auth"
 import { useSync } from "@/stores/sync"
@@ -11,7 +10,6 @@ function Root() {
   return (
     <Providers>
       <Outlet />
-      <ScenarioDock />
       <UpgradeHost />
       <ConfigPreparationHost />
     </Providers>
