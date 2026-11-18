@@ -3256,7 +3256,7 @@ export const dict = {
   "kcode.skillDev.batch.selected": "{{count}} selected",
   "kcode.skillDev.batch.check": "Skill check",
   "kcode.skillDev.batch.enterprise": "Enterprise distribution",
-  "kcode.skillDev.batch.personal": "Personal submit",
+  "kcode.skillDev.batch.personal": "Personal use",
   "kcode.skillDev.batch.delete": "Batch delete",
   "kcode.skillDev.batch.dialog.submitTitle": "Batch submit skills",
   "kcode.skillDev.batch.dialog.installTitle": "Batch submit skills",
@@ -3392,7 +3392,7 @@ export const dict = {
   "kcode.skillDev.enterpriseStatus.submitted": "Enterprise Under Review",
   "kcode.skillDev.enterpriseStatus.published": "Enterprise Published",
   "kcode.skillDev.enterpriseStatus.rejected": "Enterprise Rejected",
-  "kcode.skillDev.personalStatus.published": "Personal Published",
+  "kcode.skillDev.personalStatus.published": "Personal Submitted",
   "kcode.skillDev.status.notPublished": "Not Published",
   "kcode.skillDev.status.saved": "Saved",
   "kcode.skillDev.changedTip.local": "Local changes not submitted, click to submit",
@@ -3660,7 +3660,7 @@ export const dict = {
   "kcode.skillSubmit.pathSelect.enterprise": "Enterprise Distribution",
   "kcode.skillSubmit.pathSelect.enterpriseDesc":
     "Suitable for team collaboration and knowledge sharing; skills can be shared or published to the enterprise marketplace, and require admin approval to be published",
-  "kcode.skillSubmit.pathSelect.personal": "Personal Submit",
+  "kcode.skillSubmit.pathSelect.personal": "Personal Use",
   "kcode.skillSubmit.pathSelect.personalDesc":
     "Suitable for individual use; submitted to Work instantly after security checks, no review required",
   "kcode.skillSubmit.pathSelect.cancel": "Cancel",
@@ -3680,7 +3680,7 @@ export const dict = {
   "kcode.skillSubmit.success.gotIt": "Got it",
 
   // ── Skill Submit: Personal Inspection ──
-  "kcode.skillSubmit.inspection.title": "Submit Skill · Personal Submit",
+  "kcode.skillSubmit.inspection.title": "Submit Skill · Personal Use",
   "kcode.skillSubmit.inspection.result": "Inspection Results",
   "kcode.skillSubmit.inspection.install": "Submit",
   "kcode.skillSubmit.inspection.scanning": "Inspecting, please wait...",

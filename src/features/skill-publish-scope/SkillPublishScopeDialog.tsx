@@ -84,7 +84,7 @@ export function ScopeChecks(props: { value: SkillScope; onChange: (value: SkillS
   )
 }
 
-/** 提交技能第 1 步：选择路径（企业分发 / 个人提交）。卡内不带状态行；弹窗底部提示条展示当前选中通道的状态（版本状态 + 以该通道上次提交为基准的比对），点选另一通道切换内容，打开时默认显示企业通道 */
+/** 提交技能第 1 步：选择路径（企业分发 / 个人自用）。卡内不带状态行；弹窗底部提示条展示当前选中通道的状态（版本状态 + 以该通道上次提交为基准的比对），点选另一通道切换内容，打开时默认显示企业通道 */
 export function SkillSubmitPathDialog(props: { skill: Skill; onConfirm: (route: "enterprise" | "personal") => void }) {
   const t = useT()
   const dialog = useDialog()

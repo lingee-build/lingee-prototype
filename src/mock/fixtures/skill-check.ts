@@ -1,4 +1,4 @@
-/** 技能检查的 mock：独立检查只跑规范/安全（US-2026-043955 R8，资源存在性收敛到提交时点）；个别技能预置了不通过 / 警告的结果 */
+/** 技能检查的 mock：独立检查只跑规范/安全（分工见 US-2026-060940，资源存在性收敛到提交时点）；个别技能预置了不通过 / 警告的结果 */
 
 export type CheckItemKey = "dir" | "yaml" | "body" | "script" | "kingdee" | "N1" | "N2" | "security" | "S1" | "N3"
 export type CheckStatus = "pending" | "running" | "pass" | "fail" | "warn"

@@ -25,7 +25,7 @@ export const BATCH_MAX = 20
 /**
  * 批量操作向导的状态机：选择 → 检查 → 决策 → 提交 → 汇总（删除走 确认 → 汇总）。
  * 检查和提交都是 mock：按预置结果逐项推进，用定时器模拟耗时。
- * 独立检查不含资源存在性（US-2026-043955 R8）；提交模式进入确认页时模拟 Console 实时检查，缺失项拦下列入不通过组。
+ * 独立检查不含资源存在性（分工见 US-2026-060940）；提交模式进入确认页时模拟 Console 实时检查，缺失项拦下列入不通过组。
  * 提交不再按「无变化」置灰（重复提交的责任交还用户，一致性由确认页一致组与通道状态行提示）。
  */
 export function useBatchRun(options: { mode: BatchMode; route: BatchRoute; skills: Skill[]; skipSelect: boolean }) {
@@ -79,7 +79,7 @@ export function useBatchRun(options: { mode: BatchMode; route: BatchRoute; skill
         const result = skill.n3Resolved
           ? { status: "pass" as const }
           : (presetCheckResults[skill.id]?.N3 ?? { status: "pass" as const })
-        // 个人安装的目标环境含个人源（PRD 需求项 5）：个人源工具直接可用，不报不通过
+        // 个人自用通道的目标环境含个人源（PRD 需求项 5）：个人源工具直接可用，不报不通过
         if (route === "personal" && result.status === "fail" && n3KindOf(result) === "personal") continue
         if (result.status === "fail") {
           patch(skill.id, (x) => ({
