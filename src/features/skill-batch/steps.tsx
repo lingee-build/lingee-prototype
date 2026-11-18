@@ -10,7 +10,7 @@ import { CHECK_CATEGORIES, SUBMIT_CATEGORIES } from "@/mock/fixtures/skill-check
 import { DynamicSkillIcon } from "@/features/dev-page/DynamicSkillIcon"
 import { BATCH_MAX, type BatchItem, type BatchMode, type BatchRoute, type BatchRun } from "./use-batch-run"
 
-const LIST_BOX = "max-h-[220px] min-h-0 overflow-y-auto rounded-[10px] border border-[var(--border-weak-base)]"
+export const LIST_BOX = "max-h-[220px] min-h-0 overflow-y-auto rounded-[10px] border border-[var(--border-weak-base)]"
 const hasWarn = (item: BatchItem) => Object.values(item.checkItems).some((x) => x.status === "warn")
 
 interface StepProps {
@@ -20,7 +20,7 @@ interface StepProps {
 }
 
 /** 进度条头部：左边是当前在做什么，右边是百分比 */
-function ProgressHeader(props: { label: string; value: number }) {
+export function ProgressHeader(props: { label: string; value: number }) {
   return (
     <div className="mb-3 shrink-0">
       <div className="flex items-center justify-between text-[13px] mb-1">
@@ -37,7 +37,7 @@ function ProgressHeader(props: { label: string; value: number }) {
 /** 第 1 步：勾选技能。行内只显示所选通道一行状态；提交模式按提交成分分三组（一致 / 覆盖 / 首提），组头可收起且恒显示「勾选数/总数」 */
 
 /** 分组列表（第 1 步与确认页共用词汇）：组头 = 箭头 + 组名 + 勾选数/总数，可点击收起 / 展开 */
-function GroupBlock(props: {
+export function GroupBlock(props: {
   title: string
   tone: "warn" | "neutral" | "fail"
   count: string

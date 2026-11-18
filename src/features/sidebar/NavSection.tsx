@@ -1,4 +1,4 @@
-import { useNavigate, useParams } from "react-router"
+import { useLocation, useNavigate, useParams } from "react-router"
 import { Icon, type IconName } from "@/ui"
 import { cx } from "@/lib/cx"
 import { useT } from "@/i18n"
@@ -35,7 +35,13 @@ export function NavSection(props: { onNewTask: () => void }) {
   const t = useT()
   const navigate = useNavigate()
   const params = useParams()
-  const activeTab: TopTab = "dev"
+  const location = useLocation()
+  // 工作页签（原型）：只开放 Work 智能体页，承接 Build 智能体「个人自用」；对话页签仍未开放
+  const activeTab: TopTab = location.pathname.startsWith("/work") ? "work" : "dev"
+  const goTab = (id: TopTab) => {
+    if (id === "work") navigate("/work/agent")
+    else if (id === "dev" && activeTab !== "dev") navigate("/")
+  }
   const newTaskActive = !params.mode && !params.sessionId
 
   return (
@@ -47,7 +53,8 @@ export function NavSection(props: { onNewTask: () => void }) {
               key={item.id}
               type="button"
               aria-pressed={activeTab === item.id}
-              // 对话与工作页签暂未开放，和线上一样点击无反应
+              onClick={() => goTab(item.id)}
+              // 对话页签暂未开放，和线上一样点击无反应
               className={cx(
                 "flex flex-1 h-8 items-center justify-center gap-1 rounded-[16px] border-none px-[10px] py-[6px] transition-colors cursor-pointer",
                 activeTab === item.id
@@ -64,6 +71,11 @@ export function NavSection(props: { onNewTask: () => void }) {
         </div>
       </div>
 
+      {activeTab === "work" ? (
+        <div className="flex flex-col gap-0.5">
+          <NavButton icon="ai-partner" label={t("proto.work.nav.agent")} active={location.pathname.startsWith("/work/agent")} onClick={() => navigate("/work/agent")} />
+        </div>
+      ) : (
       <div className="flex flex-col gap-0.5">
         <NavButton icon="play-circle" label={t("kcode.nav.newTask")} active={newTaskActive} onClick={props.onNewTask} />
         {NAV_ITEMS.map((item) => (
@@ -84,6 +96,7 @@ export function NavSection(props: { onNewTask: () => void }) {
           onClick={() => navigate(`/dev/${PLUGIN_NAV.id}`)}
         />
       </div>
+      )}
     </div>
   )
 }

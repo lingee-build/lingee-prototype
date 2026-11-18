@@ -4,6 +4,7 @@
  */
 export const localZh: Record<string, string> = {
   "proto.personalInstall.menu": "安装",
+  "proto.work.nav.agent": "智能体",
   "proto.personalInstall.unknownProject": "未知工程",
   "proto.personalSkills.refreshed": "已刷新",
   "proto.personalSkills.noMatch": "没有匹配的技能",
@@ -638,6 +639,7 @@ export const localZh: Record<string, string> = {
 
 export const localEn: Record<string, string> = {
   "proto.personalInstall.menu": "Install",
+  "proto.work.nav.agent": "Agents",
   "proto.personalInstall.unknownProject": "Unknown project",
   "proto.personalSkills.refreshed": "Refreshed",
   "proto.personalSkills.noMatch": "No matching skills",

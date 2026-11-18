@@ -12,6 +12,8 @@ import { sleep } from "@/mock/latency"
 import { agentService, sessionService, skillService } from "@/services"
 import { useSync } from "@/stores/sync"
 import { useEditSession } from "@/features/dev-page/use-edit-session"
+import { AgentSubmitPathDialog } from "@/features/agent-install/AgentSubmitPathDialog"
+import { InstallAgentToWorkDialog } from "@/features/agent-install/InstallAgentToWorkDialog"
 
 export type AgentBusy = "localTest" | "test" | "submit" | "withdraw"
 
@@ -89,7 +91,18 @@ export function useAgentActions(onChanged: () => void) {
       ))
     },
 
+    /** 提交：先选路径（参考技能提交）。企业分发走原 Console 审核流程；个人自用检测通过后直接进个人 Work */
     submit(agent: Agent) {
+      const reason = canSubmit(agent) ? undefined : agent.backendStatus === "submitted" ? "智能体正在审核中，暂不能再次提交企业分发" : "智能体已发布且没有新的修改，无需再次提交企业分发"
+      dialog.show(() => (
+        <AgentSubmitPathDialog
+          agent={agent}
+          enterpriseDisabledReason={reason}
+          onConfirm={(route) => (route === "personal" ? dialog.show(() => <InstallAgentToWorkDialog agent={agent} />, undefined, { closeOnOverlayClick: false }) : actions.submitEnterprise(agent))}
+        />
+      ))
+    },
+    submitEnterprise(agent: Agent) {
       // 只提交智能体本身；引用的技能须全部已发布且无未提交修改
       const submitAgent = () => void run("submit", async () => {
         await agentService.submit(agent.id)

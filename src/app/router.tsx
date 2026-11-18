@@ -55,6 +55,9 @@ export const router = createBrowserRouter([
           { path: "dev/:mode", lazy: () => import("@/pages/dev/DevPage") },
           // 工作流设计页：/dev/workflow/:itemId（其他开发入口带二级路径时回到对应列表）
           { path: "dev/:mode/:itemId", lazy: () => import("@/pages/dev/workflow/WorkflowDesignerPage") },
+          // Work 侧（原型）：智能体管理与使用
+          { path: "work/agent", lazy: () => import("@/pages/work/WorkAgentPage") },
+          { path: "work/agent/chat", lazy: () => import("@/pages/work/WorkAgentChatPage") },
           { path: "*", element: <Navigate to="/" replace /> },
         ],
       },

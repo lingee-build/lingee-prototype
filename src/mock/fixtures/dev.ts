@@ -153,6 +153,10 @@ const rawSkills: Skill[] = [
   { id: "sk_ar", name: "ar-aging-analysis", displayName: "应收账龄分析", desc: "按客户与账期区间统计应收余额，标记逾期重点客户并给出催收优先级。", category: "财务", projectId: "workspace", personalInstalled: false, enterpriseStatus: "saved" },
   { id: "sk_credit", name: "customer-credit-check", displayName: "客户信用评估", desc: "结合历史回款、逾期次数与授信额度评估客户信用等级，给出是否放单的建议。", category: "财务", projectId: "workspace", personalInstalled: false, enterpriseStatus: "published", entChanged: true, inspect: "pass" },
   { id: "sk_invoice", name: "invoice-auto-recognize", displayName: "发票自动识别", desc: "识别增值税发票的关键字段并结构化输出，自动校验发票代码与号码一致性。", category: "财务", projectId: "workspace", personalInstalled: false, enterpriseStatus: "saved", inspect: "fail" },
+  // 智能体个人安装演示：「销售周报专家」关联的三个技能
+  { id: "sk_sales_order_query", name: "sales-order-query", displayName: "销售订单查询", desc: "按客户、销售员和日期区间查询销售订单及执行进度，返回订单明细。", category: "供应链", projectId: "workspace", personalInstalled: false, enterpriseStatus: "saved", inspect: "pass" },
+  { id: "sk_sales_stats", name: "sales-data-stats", displayName: "销售数据统计", desc: "按周汇总销售额、订单量、回款额，并与上周、去年同期做对比。", category: "供应链", projectId: "workspace", personalInstalled: false, enterpriseStatus: "saved", inspect: "pass" },
+  { id: "sk_weekly_report", name: "weekly-report-gen", displayName: "周报生成", desc: "根据统计结果生成结构化销售周报，包含业绩概览、重点客户与下周计划。", category: "通用", projectId: "workspace", personalInstalled: false, enterpriseStatus: "saved" },
   { id: "sk_contract", name: "contract-smart-review", displayName: "合同智能审查", desc: "解析合同文本，识别风险条款与不利条款，逐条给出修改建议。", category: "财务", projectId: "workspace", personalInstalled: false, enterpriseStatus: "saved", inspect: "fail" },
 ]
 /** 发布过 = 已发布，或者显式标记（发布后的修改正在审核） */
@@ -188,6 +192,14 @@ const role = (name: string, duty: string, rules: string[]) =>
   `# 角色\n你是「${name}」，${duty}\n\n# 工作方式\n${rules.map((rule, i) => `${i + 1}. ${rule}`).join("\n")}\n\n# 边界\n- 不确定的制度条款先检索知识库，查不到就明确告知并建议联系对应负责人\n- 涉及提交、审批等写操作前，必须向用户复述关键信息并得到确认`
 
 export const agents: Agent[] = [
+  {
+    id: "sales-weekly-expert", projectId: "workspace", name: "销售周报专家", desc: "自动汇总本周销售订单与业绩数据，生成可直接发送的销售周报。", avatar: "/preset-agent-avatar-1.png",
+    status: "saved", domain: "sales", createdAt: "2026-11-16T02:00:00Z", defaultModelLevel: "auto",
+    role: role("销售周报专家", "帮助销售经理按周汇总订单与业绩，生成销售周报。", ["先确认统计周期与组织范围", "数据结论附上对比口径（环比 / 同比）", "周报按「业绩概览 / 重点客户 / 风险与下周计划」组织"]),
+    skills: [skillRef("sk_sales_order_query"), skillRef("sk_sales_stats"), skillRef("sk_weekly_report")],
+    knowledge: [catalog("kc_sales_policy", "销售管理制度", "销售制度/销售管理制度")],
+    changelog: { pending: [{ createdAt: "2026-11-16T02:00:00Z", operator: "梁平贤", summary: "创建智能体" }], versions: [] },
+  },
   { id: "inventory-review", projectId: "scm-skills", name: "库存核对助手", desc: "查询可用库存并导出明细，供仓库人员逐项核对。", avatar: "/avatar-agent-1.png", status: "saved", domain: "supply-chain", createdAt: "2026-11-11T02:00:00Z", role: "按物料和仓库查询库存，并生成可核对的明细。", skills: [skillRef("sk_stock")], knowledge: [], changelog: { pending: [], versions: [] } },
   {
     id: "scm-collab-assistant", projectId: "scm-skills", name: "供应链协同助手", desc: "覆盖采购、库存、发货全链路的问答与单据处理，能够跨单据追溯上下游关系。", avatar: "/preset-agent-avatar-1.png",
