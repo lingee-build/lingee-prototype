@@ -3209,6 +3209,8 @@ export const dict = {
   "kcode.skillPreview.check.failHighRiskOnly": ", all high-risk",
   "kcode.skillPreview.check.failMediumRiskOnly": ", all medium-risk",
   "kcode.skillPreview.check.summary": "Passed {{ok}}/{{total}}, {{status}}",
+  "kcode.skillPreview.check.passCount": "Passed {{ok}}/{{total}}",
+  "kcode.skillPreview.check.failCount": "Failed {{ok}}/{{total}}",
   "kcode.skillPreview.check.severity.block": "Required",
   "kcode.skillPreview.check.severity.warn": "Suggested",
   "kcode.skillPreview.check.viewReason": "View details",

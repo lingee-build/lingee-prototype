@@ -148,8 +148,8 @@ export function SkillDevPage() {
   const toggle = (id: string) => setSelected((current) => (current.includes(id) ? current.filter((x) => x !== id) : [...current, id]))
   const selectedSkills = data.list.filter((x) => selected.includes(x.id))
   const openDetail = (skill: Skill) => {
-    // 详情「检查」页签单规则去修复：与向导的去修复同机制，进修复会话（不再带 prompt 进编辑会话）
-    const open = () =>     dialog.show(() => <SkillDetailDialog skill={skill} onEdit={() => handlers.onEdit(skill)} onFix={(ruleId, message, severity) => void startFixSessions([{ skill, items: [{ checkId: ruleId, reason: message, status: severity === "warn" ? "warn" : "fail" }] }])} />)
+    // 详情「检查」页签去修复：单规则只带该条；检查不通过时工具栏整单入口带全部失败明细与提示项，同向导的去修复机制
+    const open = () =>     dialog.show(() => <SkillDetailDialog skill={skill} onEdit={() => handlers.onEdit(skill)} onFix={(ruleId, message, severity) => void startFixSessions([{ skill, items: [{ checkId: ruleId, reason: message, status: severity === "warn" ? "warn" : "fail" }] }])} onFixAll={(items) => void startFixSessions([{ skill, items }])} />)
     if (!guardUpgrade([skill.id], open)) open()
   }
 

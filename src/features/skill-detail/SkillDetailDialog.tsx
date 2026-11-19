@@ -36,7 +36,7 @@ const Divider = () => <div className="w-[0.5px] h-[50px] bg-[var(--neutral-100)]
  * 检查页签里点某条规则的「去修复」，会关掉弹窗并进修复会话（与提交向导的去修复同机制，见 SkillDevPage）。
  * 结构对齐原工程 pages/host-modal/skill-detail.tsx。
  */
-export function SkillDetailDialog(props: { skill: Skill; initialTab?: DetailTab; onEdit: () => void; onFix: (ruleId: string, message: string, severity?: ValidationRule["severity"]) => void }) {
+export function SkillDetailDialog(props: { skill: Skill; initialTab?: DetailTab; onEdit: () => void; onFix: (ruleId: string, message: string, severity?: ValidationRule["severity"]) => void; /** 检查不通过时工具栏整单「去修复」：带全部失败明细与提示项（fix-prompt 按 status 分层） */ onFixAll?: (items: Array<{ checkId: string; reason: string; status: "fail" | "warn" }>) => void }) {
   const t = useT()
   const dialog = useDialog()
   const navigate = useNavigate()
@@ -187,6 +187,10 @@ export function SkillDetailDialog(props: { skill: Skill; initialTab?: DetailTab;
                 onFixPrompt={(ruleId, message, severity) => {
                   dialog.close()
                   props.onFix(ruleId, message, severity)
+                }}
+                onFixAll={(items) => {
+                  dialog.close()
+                  props.onFixAll?.(items)
                 }}
               />
             )}
