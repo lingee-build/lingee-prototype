@@ -71,7 +71,7 @@ const GROUP_TITLES = (route: BatchRoute): Record<SubmitKind, string> =>
     : { same: "内容与已有版本一致，将重新进入审核", cover: "有新内容或驳回重提，将提交最新内容", first: "首次提交" }
 
 /** 组内排序（第 1 步与确认页共用）：企业分发按通道状态紧急度排——审核中 → 已驳回 → 已发布（saved 不会出现在一致 / 覆盖组，兜底排最后）；个人自用通道组内只有「已提交」一种状态，保持列表原序 */
-const STATUS_RANK: Record<Skill["enterpriseStatus"], number> = { submitted: 0, rejected: 1, published: 2, saved: 3 }
+const STATUS_RANK: Record<Skill["enterpriseStatus"], number> = { submitted: 0, rejected: 1, withdrawn: 2, published: 3, saved: 4 }
 const byChannelStatus = (route: BatchRoute) => (a: BatchItem, b: BatchItem) =>
   route === "enterprise" ? STATUS_RANK[a.skill.enterpriseStatus] - STATUS_RANK[b.skill.enterpriseStatus] : 0
 

@@ -27,7 +27,7 @@ function TruncatedTooltip(props: { value?: string; children: ReactNode; triggerC
   )
 }
 
-export type TileStatus = "saved" | "published" | "submitted" | "rejected" | "developing" | "pending" | "completed"
+export type TileStatus = "saved" | "published" | "submitted" | "rejected" | "withdrawn" | "developing" | "pending" | "completed"
 
 export interface TileProps extends HTMLAttributes<HTMLDivElement> {
   icon?: ReactNode

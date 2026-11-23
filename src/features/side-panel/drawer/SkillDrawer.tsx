@@ -139,7 +139,7 @@ export function SkillDrawer(props: { id: string; working: boolean }) {
         onConfirm={async () => {
           setBusy("withdraw")
           await sleep(700)
-          await patch(skill.everPublished ? { enterpriseStatus: "published", entChanged: true } : { enterpriseStatus: "saved", entChanged: false })
+          await patch({ enterpriseStatus: "withdrawn", entChanged: false })
           setBusy(undefined)
         }}
       />

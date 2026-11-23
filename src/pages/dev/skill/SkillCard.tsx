@@ -12,6 +12,7 @@ const ENTERPRISE_COLOR: Record<Skill["enterpriseStatus"], string> = {
   published: "text-[var(--success-600)]",
   submitted: "text-[var(--primary-600)]",
   rejected: "text-[var(--danger-600)]",
+  withdrawn: "text-[var(--orange-600)]",
   saved: MUTED,
 }
 

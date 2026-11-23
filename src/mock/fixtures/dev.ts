@@ -1,4 +1,4 @@
-export type ReviewStatus = "saved" | "submitted" | "published" | "rejected"
+export type ReviewStatus = "saved" | "submitted" | "published" | "rejected" | "withdrawn"
 
 /**
  * 发布范围：两个独立开关。Build 不存这份数据，展示时都从 Console 取（见 services/console-scope.ts）；
@@ -146,6 +146,8 @@ const rawSkills: Skill[] = [
   { id: "sk_stock", name: "realtime-stock-query", displayName: "即时库存查询", desc: "按物料、仓库、仓位查询即时库存与可用量，支持批号与辅助属性维度展开。", category: "供应链", projectId: "scm-skills", personalInstalled: true, enterpriseStatus: "submitted", everPublished: true, entChanged: true },
   { id: "sk_purchase", name: "purchase-order-push", displayName: "采购订单下推入库", desc: "校验采购订单可入库数量后下推生成采购入库单，超收时给出明确提示并阻止提交。", category: "供应链", projectId: "scm-skills", personalInstalled: false, enterpriseStatus: "rejected", reason: "缺少超收场景的处理说明，请补充后重新提交。", inspect: "fail", entChanged: true },
   { id: "sk_leave", name: "leave-request", displayName: "办理请假申请", desc: "通过对话收集假期类型、起止日期、事由与代理人，自动校验剩余假期天数，生成请假单草稿并在确认后提交。", category: "人力资源", projectId: "hr-assistant", personalInstalled: true, enterpriseStatus: "submitted", inspect: "fail", entChanged: false, perChanged: true },
+  // 撤回态演示：审核中撤回后、内容未再编辑（entChanged=false → 较撤回时版本无变化）
+  { id: "sk_withdrawn", name: "contract-review", displayName: "合同条款审查", desc: "解析合同文本，识别风险条款并标注修改建议，支持按条款类型筛选与导出审查报告。", category: "财务", projectId: "workspace", personalInstalled: false, enterpriseStatus: "withdrawn", everPublished: true, entChanged: false },
   { id: "sk_expense", name: "expense-claim-submit", displayName: "费用报销提交", desc: "分步收集费用类型、金额、发生日期和票据附件，超过限额时提醒走额外审批流程。", category: "财务", projectId: "workspace", personalInstalled: false, enterpriseStatus: "saved", inspect: "fail" },
   { id: "sk_salary", name: "payslip-explain", displayName: "薪资条查询与解释", desc: "查询指定月份薪资条，并用通俗语言解释各项扣款与补贴的计算依据。", category: "人力资源", projectId: "hr-assistant", personalInstalled: true, enterpriseStatus: "submitted", everPublished: true },
   { id: "sk_supplier", name: "supplier-onboarding-check", displayName: "供应商准入核查", desc: "汇总供应商资质、历史交付与质量评分，输出准入建议和风险点清单。", category: "供应链", projectId: "scm-skills", personalInstalled: false, enterpriseStatus: "submitted" },

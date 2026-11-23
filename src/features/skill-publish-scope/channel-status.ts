@@ -6,7 +6,8 @@ import type { Skill } from "@/mock/fixtures/dev"
  */
 
 /** 企业分发通道是否出现「云」（有未同步修改） */
-export const entCloudOf = (skill: Pick<Skill, "entChanged" | "enterpriseStatus">) => skill.enterpriseStatus === "saved" || !!skill.entChanged
+export const entCloudOf = (skill: Pick<Skill, "entChanged" | "enterpriseStatus">) =>
+  skill.enterpriseStatus === "saved" || skill.enterpriseStatus === "withdrawn" || !!skill.entChanged
 
 /** 个人自用通道是否出现「云」（有未同步修改） */
 export const perCloudOf = (skill: Pick<Skill, "perChanged" | "personalInstalled">) => !skill.personalInstalled || !!skill.perChanged
@@ -33,12 +34,14 @@ const ENT_BASIS: Record<Exclude<Skill["enterpriseStatus"], "saved">, string> = {
   submitted: "上次提交",
   published: "已发布版本",
   rejected: "驳回版本",
+  withdrawn: "撤回时版本",
 }
 /** 企业通道各状态词（状态行统一词条用） */
 const ENT_DESC: Record<Exclude<Skill["enterpriseStatus"], "saved">, string> = {
   submitted: "审核中",
   published: "已发布",
   rejected: "已驳回",
+  withdrawn: "已撤回",
 }
 
 export type ChannelStatus = { text: string }

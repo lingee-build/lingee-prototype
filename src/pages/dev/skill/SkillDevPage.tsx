@@ -42,7 +42,7 @@ export function SkillDevPage() {
   const data = useDevList<Skill>({
     queryKey: "skills",
     fetch: skillService.list,
-    matchTab: (skill, tab) => skill.enterpriseStatus === TAB_STATUS[tab],
+    matchTab: (skill, tab) => tab === "unsubmitted" ? skill.enterpriseStatus === "saved" || skill.enterpriseStatus === "withdrawn" : skill.enterpriseStatus === TAB_STATUS[tab],
     searchText: (skill) => `${skill.displayName} ${skill.name} ${skill.desc}`,
   })
 
@@ -98,7 +98,7 @@ export function SkillDevPage() {
     onInstallPersonal: (skill) => dialog.show(() => <InstallPersonalSkillDialog source={{ kind: "project", skill }} />),
     onEdit: (skill) => {
       // 已提交 / 已发布的技能，编辑前需要二次确认
-      if (skill.enterpriseStatus === "saved" || skill.enterpriseStatus === "rejected") return edit(skill)
+      if (skill.enterpriseStatus === "saved" || skill.enterpriseStatus === "rejected" || skill.enterpriseStatus === "withdrawn") return edit(skill)
       dialog.show(() => (
         <ConfirmDialog
           title={t("kcode.skillDev.edit.confirmTitle")}
@@ -123,8 +123,8 @@ export function SkillDevPage() {
           cancelText={t("kcode.skillDev.action.cancel")}
           confirmText={t("kcode.skillPreview.withdraw.confirmBtn")}
           onConfirm={() => {
-            // 发布后的修改撤回：线上仍是已发布版本，本地修改保留
-            patch(skill.id, skill.everPublished ? { enterpriseStatus: "published", entChanged: true } : { enterpriseStatus: "saved", entChanged: false })
+            // 撤回后状态变为「已撤回」，云图标出现（PRD 需求项 3：已撤回是通道级状态）
+            patch(skill.id, { enterpriseStatus: "withdrawn", entChanged: false })
             showToast({ variant: "success", description: t("kcode.skillDev.withdraw.success") })
           }}
         />

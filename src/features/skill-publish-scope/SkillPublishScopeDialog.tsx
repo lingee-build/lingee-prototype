@@ -213,8 +213,9 @@ export type SkillReadiness = "ready" | "unpublished" | "changed" | "rejected" | 
 export const skillReadiness = (skill: Skill): SkillReadiness =>
   skill.enterpriseStatus === "submitted" ? "reviewing"
     : skill.enterpriseStatus === "rejected" ? "rejected"
-      : !skill.everPublished ? "unpublished"
-        : entCloudOf(skill) ? "changed" : "ready"
+      : skill.enterpriseStatus === "withdrawn" ? "changed"
+        : !skill.everPublished ? "unpublished"
+          : entCloudOf(skill) ? "changed" : "ready"
 
 const READINESS_TEXT: Record<Exclude<SkillReadiness, "ready">, { sub: string; action?: string }> = {
   unpublished: { sub: "未提交", action: "去提交" },
