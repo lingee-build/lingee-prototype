@@ -18,8 +18,9 @@ export const localChangedOf = (skill: Pick<Skill, "entChanged" | "perChanged" | 
 export type SubmitKind = "same" | "cover" | "first"
 
 /**
-  * 提交成分归属（穷举）：该通道远端无记录=first（首提）；有记录且内容一致=same（一致，重新进入审核）；
- * 有记录且有新内容（含驳回重提）=cover（覆盖，提交最新内容）。
+   * 提交成分归属（穷举）：该通道远端无记录=first（首提）；有记录且内容一致=same（一致，重新进入审核）；
+ * 有记录且有新内容（含驳回重提）=cover（覆盖，提交最新内容）；
+ * 已撤回始终归 cover（撤回后重提 ≠ 重复提交，即使内容未变也需重新进入审核）。
  */
 export function submitKindOf(skill: Skill, route: "enterprise" | "personal"): SubmitKind {
   if (route === "personal") {
@@ -27,6 +28,7 @@ export function submitKindOf(skill: Skill, route: "enterprise" | "personal"): Su
     return skill.perChanged ? "cover" : "same"
   }
   if (skill.enterpriseStatus === "saved") return "first"
+  if (skill.enterpriseStatus === "withdrawn") return "cover"
   return skill.entChanged ? "cover" : "same"
 }
 

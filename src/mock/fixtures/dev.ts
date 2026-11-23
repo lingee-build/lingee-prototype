@@ -138,6 +138,8 @@ export interface McpApp {
  * - 供应商准入核查：首次发布正在单独审核（审核锁）
  * - 价格表批量调价：已发布，下发 Build
  * - 客户信用评估：已发布、本地有修改 → 需先提交
+ * - 合同条款审查：审核中撤回、内容无变化（撤回态→覆盖组）
+ * - 资产盘点助手：审核中撤回、内容有修改（撤回态→覆盖组）
  */
 const rawSkills: Skill[] = [
   { id: "sale-order-management-eval-demo", name: "sale-order-management-eval-demo", displayName: "销售订单管理（评测演示）", desc: "查询销售订单及其商品明细。", category: "供应链", projectId: "workspace", personalInstalled: false, enterpriseStatus: "saved" },
@@ -148,6 +150,8 @@ const rawSkills: Skill[] = [
   { id: "sk_leave", name: "leave-request", displayName: "办理请假申请", desc: "通过对话收集假期类型、起止日期、事由与代理人，自动校验剩余假期天数，生成请假单草稿并在确认后提交。", category: "人力资源", projectId: "hr-assistant", personalInstalled: true, enterpriseStatus: "submitted", inspect: "fail", entChanged: false, perChanged: true },
   // 撤回态演示：审核中撤回后、内容未再编辑（entChanged=false → 较撤回时版本无变化）
   { id: "sk_withdrawn", name: "contract-review", displayName: "合同条款审查", desc: "解析合同文本，识别风险条款并标注修改建议，支持按条款类型筛选与导出审查报告。", category: "财务", projectId: "workspace", personalInstalled: false, enterpriseStatus: "withdrawn", everPublished: true, entChanged: false },
+  // 撤回态演示：撤回后内容有修改（entChanged=true → 较撤回时版本有变化）
+  { id: "sk_withdrawn_changed", name: "asset-inventory", displayName: "资产盘点助手", desc: "扫描固定资产标签自动生成盘点报告，支持折旧预测与异常预警。", category: "效率", projectId: "workspace", personalInstalled: false, enterpriseStatus: "withdrawn", everPublished: true, entChanged: true },
   { id: "sk_expense", name: "expense-claim-submit", displayName: "费用报销提交", desc: "分步收集费用类型、金额、发生日期和票据附件，超过限额时提醒走额外审批流程。", category: "财务", projectId: "workspace", personalInstalled: false, enterpriseStatus: "saved", inspect: "fail" },
   { id: "sk_salary", name: "payslip-explain", displayName: "薪资条查询与解释", desc: "查询指定月份薪资条，并用通俗语言解释各项扣款与补贴的计算依据。", category: "人力资源", projectId: "hr-assistant", personalInstalled: true, enterpriseStatus: "submitted", everPublished: true },
   { id: "sk_supplier", name: "supplier-onboarding-check", displayName: "供应商准入核查", desc: "汇总供应商资质、历史交付与质量评分，输出准入建议和风险点清单。", category: "供应链", projectId: "scm-skills", personalInstalled: false, enterpriseStatus: "submitted" },
