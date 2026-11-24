@@ -2446,7 +2446,6 @@ export const dict = {
   "kcode.mcpApp.action.localTest": "Local Test",
   "kcode.mcpApp.action.sandboxTest": "Test",
   "kcode.mcpApp.action.buildFirstLocalTest": "Please build the component before local testing",
-  "kcode.mcpApp.action.remoteOnlyLocalTest": "Component is on remote with no local project. Import the project or use Cloud Test",
   "kcode.mcpApp.action.testDropdown": "Test",
   "prompt.placeholder.localTestMcpApp": "Enter instructions to test the current business component",
   "kcode.mcpApp.localTest.mockReply": "[Harness not connected] Message received. Component rendering is simulated. Real interactions will be available after harness integration.",

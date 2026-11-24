@@ -68,11 +68,6 @@ export function useMcpAppActions(onChanged: () => void) {
     /** 本地测试：创建一个「测试 · 组件名」会话并跳转。未构建不拦截——进会话后展示错误态卡片引导构建 */
     localTest: (app: McpApp) =>
       run("localTest", async () => {
-        // remoteOnly：已发布但本地无工程（buildStatus 为 null 且已发布）
-        if (app.mcpStatus === "PUBLISHED" && !app.buildStatus) {
-          showToast({ variant: "warning", description: t("kcode.mcpApp.action.remoteOnlyLocalTest") })
-          return
-        }
         await startSession("", app.projectId, { objectId: `mcpapp:${app.appCode}`, name: app.appName })
       }),
 

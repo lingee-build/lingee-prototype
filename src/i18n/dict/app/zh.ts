@@ -2338,7 +2338,6 @@ export const dict = {
   "kcode.mcpApp.action.localTest": "本地测试",
   "kcode.mcpApp.action.sandboxTest": "测试",
   "kcode.mcpApp.action.buildFirstLocalTest": "请先构建打包再进行本地测试",
-  "kcode.mcpApp.action.remoteOnlyLocalTest": "组件已发布到远端，本地无工程。请导入工程或使用云端测试",
   "kcode.mcpApp.action.testDropdown": "测试",
   "prompt.placeholder.localTestMcpApp": "请输入指令测试当前业务组件的运行效果",
   "kcode.mcpApp.localTest.mockReply": "[ harness 未对接 ] 消息已收到，本地组件渲染为模拟效果。对接 harness 后将返回真实组件交互。",
