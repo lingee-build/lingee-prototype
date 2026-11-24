@@ -13,8 +13,9 @@ import { uid } from "../latency"
  * - 有关联工具的组件：先展示 MCP 工具调用，再渲染组件
  *
  * 对应 PRD 功能点 5「会话内错误态卡片」：
- * - 仅运行时错误（sandboxUnavailable / capacityFull / contentUpdated）会出现在直测会话中
- * - notBuilt / notFound / remoteOnly 在入口校验阶段已被 toast 拦截，不会进入会话
+ * - notBuilt / sandboxUnavailable / capacityFull / contentUpdated 可能出现在直测会话中
+ * - notFound 在直测路径不可能发生（不存在的组件没有按钮可点）
+ * - remoteOnly 在入口已拦截（已发布但本地无工程），不会进入会话
  */
 
 /** 从 session.localTest.objectId 解析出 appCode */
@@ -65,9 +66,11 @@ export function mcpAppLocalTestScenario(sessionId: string, prompt: string): Scen
   const withTools = hasMcpTools(app)
   const tools = toolNamesOf(app)
 
-  // 运行时错误态触发：仅 sandboxUnavailable / capacityFull / contentUpdated
-  // notBuilt / notFound / remoteOnly 在入口校验阶段已被 toast 拦截，不会进入直测会话
+  // 会话内错误态触发：notBuilt / sandboxUnavailable / capacityFull / contentUpdated
+  // notFound 在直测路径不可能发生（不存在的组件没有按钮可点）
+  // remoteOnly 在入口已拦截（已发布但本地无工程），不会进入会话
   const errorMap: Record<string, string> = {
+    "kdcloud_hr_leave_form": "notBuilt",
     "kdcloud_err_sandbox": "sandboxUnavailable",
     "kdcloud_err_capacity": "capacityFull",
     "kdcloud_err_stale": "contentUpdated",
