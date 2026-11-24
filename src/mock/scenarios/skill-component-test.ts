@@ -127,7 +127,7 @@ export function skillComponentTestScenario(sessionId: string): Scenario | undefi
         {
           todo: agentName ? 3 : 2,
           reasoning: `技能关联了组件 appCode=${appCode}，尝试加载…本地和远端均未找到该组件：notFound`,
-          text: `${chainPrefix}关联的组件（appCode: ${appCode}）不存在，请检查技能的组件引用配置。`,
+          text: `${chainPrefix}关联的组件不存在，请检查技能的组件引用配置。`,
           card: () => ({ kind: "kdapp-local-test", config: { appCode, errorKind: "notFound" } }),
         },
       ],
@@ -210,7 +210,7 @@ export function skillComponentTestScenario(sessionId: string): Scenario | undefi
       {
         todo: agentName ? 3 : 2,
         reasoning: `技能关联了组件「${app.appName}」，从本地构建产物加载 appCode=${appCode}，正在渲染…`,
-        text: `${chainPrefix}调用完成，组件「${app.appName}」已加载。\n\n${withTools ? "组件关联的 MCP 工具已就绪，模型可在需要时调用。" : "这是一个纯展示组件，不关联 MCP 工具。"}`,
+        text: `${chainPrefix}调用完成，组件「${app.appName}」已加载，你可以在下方区域内与组件交互。`,
         card: () => ({ kind: "kdapp-local-test", config: { appCode } }),
       },
     ],

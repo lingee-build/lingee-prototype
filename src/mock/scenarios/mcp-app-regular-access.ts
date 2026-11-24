@@ -120,7 +120,7 @@ export function mcpAppRegularAccessScenario(sessionId: string, prompt: string): 
         {
           todo: 1,
           reasoning: `组件未在沙箱中找到。组件「${app.appName}」尚未上传沙箱，无法在普通会话中渲染。`,
-          text: `组件「${app.appName}」尚未上传到沙箱环境，无法在当前会话中渲染。\n\n你可以：\n- 在业务组件开发页点击「测试 → 云端测试」上传到沙箱\n- 或点击「测试 → 本地测试」直接从本地构建产物加载`,
+          text: `组件「${app.appName}」尚未上传到沙箱，无法在当前会话中渲染。\n\n你可以：\n- 点击「测试 → 云端测试」上传到沙箱\n- 或点击「测试 → 本地测试」直接从本地加载`,
           card: () => ({ kind: "kdapp-artifact", config: { appCode: app.appCode, title: app.appName, desc: "组件未上传沙箱", autoOpenDrawer: "true" } }),
         },
       ],

@@ -129,7 +129,7 @@ export function mcpAppLocalTestScenario(sessionId: string, prompt: string): Scen
       {
         todo: withTools ? 2 : 1,
         reasoning: `组件 ${appCode} 已从本地构建产物加载，正在渲染…`,
-        text: `已打开组件「${app.appName}」，你可以在下方区域内与组件交互。\n\n${withTools ? "组件关联的 MCP 工具已就绪，模型可在需要时调用。" : "这是一个纯展示组件，不关联 MCP 工具。"}`,
+        text: `已打开组件「${app.appName}」，你可以在下方区域内与组件交互。`,
         card: () => ({ kind: "kdapp-local-test", config: { appCode } }),
       },
     ],
