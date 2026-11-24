@@ -115,13 +115,14 @@ export function mcpAppRegularAccessScenario(sessionId: string, prompt: string): 
       steps: [
         {
           todo: 0,
-          reasoning: `正在解析组件请求…在沙箱中查找 appCode=${app.appCode}…`,
+          reasoning: `正在解析组件请求…查找组件「${app.appName}」是否已通过云端测试上传…`,
+          reasoningDisplay: "scroll",
         },
         {
-          todo: 1,
-          reasoning: `组件未在沙箱中找到。组件「${app.appName}」尚未上传沙箱，无法在普通会话中渲染。`,
-          text: `组件「${app.appName}」尚未上传到沙箱，无法在当前会话中渲染。\n\n你可以：\n- 点击「测试 → 云端测试」上传到沙箱\n- 或点击「测试 → 本地测试」直接从本地加载`,
-          card: () => ({ kind: "kdapp-artifact", config: { appCode: app.appCode, title: app.appName, desc: "组件未上传沙箱", autoOpenDrawer: "true" } }),
+          todo: 2,
+          reasoning: `组件「${app.appName}」未通过云端测试上传，无法在普通会话中渲染。`,
+          text: `组件「${app.appName}」尚未通过云端测试上传，无法在当前会话中渲染。\n\n你可以：\n- 点击「测试 → 云端测试」上传\n- 或点击「测试 → 本地测试」直接从本地加载`,
+          card: () => ({ kind: "kdapp-artifact", config: { appCode: app.appCode, title: app.appName, desc: "组件未上传", autoOpenDrawer: "true" } }),
         },
       ],
     }
@@ -134,7 +135,7 @@ export function mcpAppRegularAccessScenario(sessionId: string, prompt: string): 
       steps: [
         {
           todo: 0,
-          reasoning: `正在解析组件请求…从沙箱加载 appCode=${app.appCode}…`,
+          reasoning: `正在解析组件请求…加载组件「${app.appName}」…`,
         },
         {
           todo: 1,
@@ -165,7 +166,7 @@ export function mcpAppRegularAccessScenario(sessionId: string, prompt: string): 
     steps: [
       {
         todo: 0,
-        reasoning: `正在解析组件请求…从沙箱加载 appCode=${app.appCode}…`,
+        reasoning: `正在解析组件请求…加载组件「${app.appName}」…`,
       },
       {
         todo: 1,
