@@ -2451,7 +2451,7 @@ export const dict = {
   "prompt.placeholder.localTestMcpApp": "Enter instructions to test the current business component",
   "kcode.mcpApp.localTest.mockReply": "[Harness not connected] Message received. Component rendering is simulated. Real interactions will be available after harness integration.",
   "kcode.mcpApp.error.notFound.title": "Component Not Found",
-  "kcode.mcpApp.error.notFound.desc": "No component with code \"{{appCode}}\" was found. Please check the skill's allowed tools configuration to ensure the tool name matches the component code.",
+  "kcode.mcpApp.error.notFound.desc": "No component with appCode or appName \"{{appCode}}\" was found.",
   "kcode.mcpApp.error.remoteOnly.title": "Component on Remote",
   "kcode.mcpApp.error.remoteOnly.desc": "Component \"{{appName}}\" is published, but no local project source exists. Rendering is not supported.",
   "kcode.mcpApp.error.notBuilt.title": "Component Not Built",

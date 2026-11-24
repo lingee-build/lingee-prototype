@@ -2343,7 +2343,7 @@ export const dict = {
   "prompt.placeholder.localTestMcpApp": "请输入指令测试当前业务组件的运行效果",
   "kcode.mcpApp.localTest.mockReply": "[ harness 未对接 ] 消息已收到，本地组件渲染为模拟效果。对接 harness 后将返回真实组件交互。",
   "kcode.mcpApp.error.notFound.title": "组件不存在",
-  "kcode.mcpApp.error.notFound.desc": "未找到组件编码为 {{appCode}} 的组件。请检查技能的允许工具配置，确认工具名与组件编码一致。",
+  "kcode.mcpApp.error.notFound.desc": "未找到 appCode 或 appName 为 {{appCode}} 的组件。",
   "kcode.mcpApp.error.remoteOnly.title": "组件在远端",
   "kcode.mcpApp.error.remoteOnly.desc": "组件「{{appName}}」已发布，但本机没有工程源码，暂不支持渲染打开。",
   "kcode.mcpApp.error.notBuilt.title": "组件未构建",
