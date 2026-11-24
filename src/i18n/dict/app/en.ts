@@ -2453,7 +2453,7 @@ export const dict = {
   "kcode.mcpApp.error.notFound.title": "Component Not Found",
   "kcode.mcpApp.error.notFound.desc": "No component with code \"{{appCode}}\" was found. Please check the skill's allowed tools configuration to ensure the tool name matches the component code.",
   "kcode.mcpApp.error.remoteOnly.title": "Component on Remote",
-  "kcode.mcpApp.error.remoteOnly.desc": "Component \"{{appName}}\" is published to remote, but no local project or build artifacts exist. To test locally, import the component project in Build; or use Cloud Test.",
+  "kcode.mcpApp.error.remoteOnly.desc": "Component \"{{appName}}\" is published, but no local project source exists. Rendering is not supported.",
   "kcode.mcpApp.error.notBuilt.title": "Component Not Built",
   "kcode.mcpApp.error.notBuilt.desc": "Component \"{{appName}}\" has not been built yet and cannot be loaded. Please build it and try again.",
   "kcode.mcpApp.error.sandboxUnavailable.title": "Service Startup Failed",

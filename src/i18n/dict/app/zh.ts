@@ -2345,7 +2345,7 @@ export const dict = {
   "kcode.mcpApp.error.notFound.title": "组件不存在",
   "kcode.mcpApp.error.notFound.desc": "未找到组件编码为 {{appCode}} 的组件。请检查技能的允许工具配置，确认工具名与组件编码一致。",
   "kcode.mcpApp.error.remoteOnly.title": "组件在远端",
-  "kcode.mcpApp.error.remoteOnly.desc": "组件「{{appName}}」已发布到远端，但本地没有工程或构建产物。如需本地测试，请在 Build 中导入组件工程；或使用云端测试。",
+  "kcode.mcpApp.error.remoteOnly.desc": "组件「{{appName}}」已发布，但本机没有工程源码，暂不支持渲染打开。",
   "kcode.mcpApp.error.notBuilt.title": "组件未构建",
   "kcode.mcpApp.error.notBuilt.desc": "组件「{{appName}}」尚未构建，无法加载。请先构建后再重新调用。",
   "kcode.mcpApp.error.sandboxUnavailable.title": "服务启动失败",

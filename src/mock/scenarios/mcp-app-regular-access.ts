@@ -80,11 +80,11 @@ export function mcpAppRegularAccessScenario(sessionId: string, prompt: string): 
     return {
       todos: ["解析组件请求", "查找组件资源"],
       steps: [
-        { todo: 0, reasoning: `正在解析组件请求…查找「${app.appName}」…组件已发布到云端，本地无工程文件。` },
+        { todo: 0, reasoning: `正在解析组件请求…查找「${app.appName}」…组件已发布，但本机没有工程源码。` },
         {
           todo: 1,
           reasoning: `组件「${app.appName}」在远端，无法本地渲染：remoteOnly`,
-          text: `组件「${app.appName}」已发布到云端，本地无工程文件，无法在此渲染。`,
+          text: `组件「${app.appName}」已发布，但本机没有工程源码，暂不支持渲染打开。`,
           card: () => ({ kind: "kdapp-local-test", config: { appCode: app.appCode, errorKind: "remoteOnly" } }),
         },
       ],
