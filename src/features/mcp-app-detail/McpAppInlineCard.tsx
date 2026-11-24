@@ -217,10 +217,10 @@ interface ErrorConfig {
   actionIcon?: string
 }
 
-const SEVERITY_STYLE: Record<ErrorSeverity, { bg: string; fg: string; border: string }> = {
-  error: { bg: "var(--danger-50)", fg: "var(--danger-500)", border: "var(--danger-100)" },
-  warning: { bg: "var(--warning-50)", fg: "var(--warning-500)", border: "var(--warning-100)" },
-  info: { bg: "var(--blue-50)", fg: "var(--blue-500)", border: "var(--blue-100)" },
+const SEVERITY_STYLE: Record<ErrorSeverity, { bg: string; fg: string }> = {
+  error: { bg: "var(--danger-50)", fg: "var(--danger-500)" },
+  warning: { bg: "var(--warning-50)", fg: "var(--warning-500)" },
+  info: { bg: "var(--blue-50)", fg: "var(--blue-500)" },
 }
 
 const ERROR_CONFIG: Record<McpAppErrorKind, ErrorConfig> = {
@@ -294,8 +294,8 @@ export function McpAppErrorCard(props: { kind: McpAppErrorKind; app?: McpApp; ap
 
   return (
     <div
-      className="my-2 rounded-[12px] border overflow-hidden bg-surface-base"
-      style={{ borderColor: style.border }}
+      className="my-2 rounded-[16px] overflow-hidden"
+      style={{ background: "color-mix(in srgb, var(--neutral-0) 82%, transparent)", boxShadow: "0 1px 6px 0 var(--neutral-50)" }}
     >
       <div className="flex items-start gap-3 p-3">
         {/* 图标：按严重级别着色 */}
