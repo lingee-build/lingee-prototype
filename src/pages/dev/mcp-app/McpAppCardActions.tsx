@@ -70,7 +70,35 @@ export function McpAppCardActions(props: { app: McpApp; onChanged: () => void })
               item("archive", t(app.buildStatus === "success" ? "kcode.mcpApp.action.repackage" : "kcode.mcpApp.action.package"), () => void actions.package(app), "package", dist),
               "kcode.mcpApp.action.packageTooltipDist",
             )}
-            {item("test-flask", t("kcode.mcpApp.action.test"), () => void actions.test(app), "test")}
+            <DropdownMenu.Sub>
+              <DropdownMenu.SubTrigger className="flex items-center cursor-pointer gap-1">
+                <Icon name="test-flask" size="small" />
+                <span>{t("kcode.mcpApp.action.testDropdown")}</span>
+                <Icon name="chevron-right-16" size="small" className="ml-auto" />
+              </DropdownMenu.SubTrigger>
+              <DropdownMenu.Portal>
+                <DropdownMenu.SubContent style={{ minWidth: 120 }}>
+                  <DropdownMenu.Item
+                    disabled={!!busy}
+                    className="flex items-center cursor-pointer gap-1"
+                    onSelect={() => void actions.localTest(app)}
+                  >
+                    <Icon name="monitor" size="small" />
+                    <span>{t("kcode.mcpApp.action.localTest")}</span>
+                    {busy === "localTest" && <Spinner />}
+                  </DropdownMenu.Item>
+                  <DropdownMenu.Item
+                    disabled={!!busy}
+                    className="flex items-center cursor-pointer gap-1"
+                    onSelect={() => void actions.sandboxTest(app)}
+                  >
+                    <Icon name="cloud-test" size="small" />
+                    <span>{t("kcode.mcpApp.action.test")}</span>
+                    {busy === "test" && <Spinner />}
+                  </DropdownMenu.Item>
+                </DropdownMenu.SubContent>
+              </DropdownMenu.Portal>
+            </DropdownMenu.Sub>
             {item("submit-upload", t("kcode.mcpApp.action.submit"), () => actions.submit(app))}
             <DropdownMenu.Item disabled={!!busy} onSelect={() => actions.remove(app)} className="group/delete flex items-center cursor-pointer gap-1" variant="destructive">
               <Icon name="trash-16" size="small" className="group-hover/delete:text-[var(--text-on-error-base)]" />

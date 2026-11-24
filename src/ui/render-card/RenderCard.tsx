@@ -10,7 +10,7 @@ export type { Segment }
  * 原型新增的产物类型。线上解析器（vendor，同步文件不能改）只认白名单里的 kind，
  * 这里先切出原型类型的卡片，其余文本仍交给线上解析器。
  */
-const PROTO_CARD = /:::render:(kd-workflow-change|kd-workflow)\s*(\{[^{}]*\})\s*:::/g
+const PROTO_CARD = /:::render:(kd-workflow-change|kd-workflow|kdapp-local-test)\s*(\{[^{}]*\})\s*:::/g
 
 export function splitRenderBlocks(text: string): Segment[] {
   const segments: Segment[] = []

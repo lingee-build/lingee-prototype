@@ -9,10 +9,10 @@ import { useEditSession } from "@/features/dev-page/use-edit-session"
 import { useStartSession } from "@/features/dev-page/use-start-session"
 import { missingRequired, submitConfirmKey } from "./status"
 
-export type McpAppBusy = "preview" | "edit" | "package" | "test" | "submit"
+export type McpAppBusy = "preview" | "edit" | "package" | "test" | "localTest" | "submit"
 
 /**
- * 业务组件的各种操作：预览、编辑、构建打包、测试、提交、删除。
+ * 业务组件的各种操作：预览、编辑、构建打包、本地测试、测试（沙箱上传）、提交、删除。
  * 卡片菜单与会话里的详情抽屉共用。测试 / 提交前会校验「已构建」和 info.json 必填项。
  */
 export function useMcpAppActions(onChanged: () => void) {
@@ -65,6 +65,22 @@ export function useMcpAppActions(onChanged: () => void) {
         onChanged()
       }),
 
+    /** 本地测试：校验已构建后，创建一个「测试 · 组件名」会话并跳转 */
+    localTest: (app: McpApp) =>
+      run("localTest", async () => {
+        if (app.buildStatus !== "success") {
+          // remoteOnly：已发布但本地无工程（buildStatus 为 null 且已发布）
+          if (app.mcpStatus === "PUBLISHED" && !app.buildStatus) {
+            showToast({ variant: "warning", description: t("kcode.mcpApp.action.remoteOnlyLocalTest") })
+            return
+          }
+          // notBuilt：有本地工程但未构建
+          showToast({ variant: "warning", description: t("kcode.mcpApp.action.buildFirstLocalTest") })
+          return
+        }
+        await startSession("", app.projectId, { objectId: `mcpapp:${app.appCode}`, name: app.appName })
+      }),
+
     submit(app: McpApp) {
       dialog.show(() => (
         <ConfirmDialog
@@ -104,6 +120,8 @@ export function useMcpAppActions(onChanged: () => void) {
   return { ...actions,
     preview: (app: McpApp) => { if (!guardArtifactConfig("mcpapp", app.appCode)) return actions.preview(app) },
     test: (app: McpApp) => { if (!guardArtifactConfig("mcpapp", app.appCode)) return actions.test(app) },
+    localTest: actions.localTest,
+    sandboxTest: (app: McpApp) => { if (!guardArtifactConfig("mcpapp", app.appCode)) return actions.test(app) },
     submit: (app: McpApp) => { if (!guardArtifactConfig("mcpapp", app.appCode)) return actions.submit(app) },
   }
 }

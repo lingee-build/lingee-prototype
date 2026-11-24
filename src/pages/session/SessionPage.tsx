@@ -215,7 +215,9 @@ export function Component() {
                 <Composer
                   defaultSkill={repairTarget?.objectType === "skill" ? "skill-builder" : repairTarget?.objectType === "agent" ? "agent-builder" : undefined}
                   placeholder={repairTarget ? "分析失败原因，或补充你的修复要求…" : session?.localTest
-                    ? t(session.localTest.objectId.startsWith("skill:") ? "prompt.placeholder.localTestSkill" : "prompt.placeholder.localTestAgent")
+                    ? t(session.localTest.objectId.startsWith("skill:") ? "prompt.placeholder.localTestSkill"
+                      : session.localTest.objectId.startsWith("mcpapp:") ? "prompt.placeholder.localTestMcpApp"
+                      : "prompt.placeholder.localTestAgent")
                     : undefined}
                   projectId={projectId}
                   sessionId={sessionId}

@@ -10,7 +10,7 @@ export interface ScenarioStep {
   reasoningUnit?: "sentence"
   reasoningDelayMs?: number
   reasoningDisplay?: "scroll"
-  tools?: Array<Pick<ToolPart, "tool" | "title" | "detail" | "output" | "stageGroup">>
+  tools?: Array<Pick<ToolPart, "tool" | "title" | "detail" | "output" | "stageGroup"> & { error?: boolean }>
   /** 向用户提问，回放暂停直到用户回答或跳过。目前三套开发剧本都不提问，一路做到底；需要演示提问时再加 */
   question?: QuestionInfo[]
   /** 申请权限，回放暂停直到用户允许或拒绝。同上，默认剧本不用 */

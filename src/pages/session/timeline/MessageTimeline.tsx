@@ -96,7 +96,7 @@ export function MessageTimeline(props: { session: Session; messages: Message[]; 
                   </h1>
                 </div>
                 {props.session.localTest && <span className="session-title-local-test-badge ml-2 inline-flex h-[18px] shrink-0 items-center gap-1 rounded px-1 text-[12px] leading-[18px]">
-                  <Icon name="link" size="xs" />Console沙箱
+                  <Icon name="link" size="xs" />{props.session.localTest.objectId.startsWith("mcpapp:") ? "本地测试" : "Console沙箱"}
                 </span>}
               </div>
             </div>

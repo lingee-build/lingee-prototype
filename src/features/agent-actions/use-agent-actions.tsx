@@ -66,7 +66,7 @@ export function useAgentActions(onChanged: () => void) {
         const projects = useSync.getState().projects
         const projectId = projects.find((x) => x.id === agent.projectId)?.id ?? projects[0]?.id
         if (!projectId) return
-        const session = await sessionService.create(projectId, `${t("kcode.localTest.sessionTitlePrefix")}${agent.name}`)
+        const session = await sessionService.create(projectId, `${t("kcode.localTest.sessionTitlePrefix")}${agent.name}`, { objectId: `agent:${agent.id}` })
         useSync.getState().apply({ type: "session.updated", session })
         useSync.setState((s) => ({ messages: { ...s.messages, [session.id]: [] } }))
         navigate(`/p/${projectId}/session/${session.id}`)

@@ -131,7 +131,7 @@ export async function runAssistantStream(sessionId: string, prompt: string, emit
       push({ ...part, detail: undefined, output: undefined })
       await pause(pacing?.toolDelayMs ?? (600 + Math.random() * 500))
       if (aborted()) break
-      push({ ...part, state: "completed" })
+      push({ ...part, state: tool.error ? "error" : "completed" })
     }
     if (step.text && !aborted()) {
       await typewrite({ id: uid("prt"), type: "text", text: "" }, step.text, pacing?.textChunk ?? 4, pacing?.textDelayMs ?? 24)

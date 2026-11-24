@@ -33,6 +33,8 @@ export interface Skill {
   inspect?: "pass" | "fail"
   /** 引用工具不存在（N3）已在修复会话里确认过处理方式（移除 / 保留），再次检查不再算不通过 */
   n3Resolved?: boolean
+  /** 引用的业务组件 appCode：技能本地测试时，模型通过技能调用此组件渲染 */
+  componentRef?: string
 }
 
 export type ModelLevel = "auto" | "fast" | "expert" | "ultra"
@@ -145,9 +147,9 @@ const rawSkills: Skill[] = [
   { id: "sale-order-management-eval-demo", name: "sale-order-management-eval-demo", displayName: "销售订单管理（评测演示）", desc: "查询销售订单及其商品明细。", category: "供应链", projectId: "workspace", personalInstalled: false, enterpriseStatus: "saved" },
   { id: "sk_roll_dice", name: "roll-dice", displayName: "掷骰子", desc: "掷一颗六面骰；遇到含糊要求时先询问，确认后再掷。", category: "通用", projectId: "workspace", personalInstalled: false, enterpriseStatus: "saved" },
   { id: "sk_delivery", name: "delivery-notice-query", displayName: "发货通知单查询", desc: "按单据编号、状态和通知日期组合筛选发货通知单，返回分页列表或物料行明细，查询为空时提示调整条件。", category: "供应链", projectId: "scm-skills", personalInstalled: true, enterpriseStatus: "published", inspect: "pass", entChanged: true, perChanged: false },
-  { id: "sk_stock", name: "realtime-stock-query", displayName: "即时库存查询", desc: "按物料、仓库、仓位查询即时库存与可用量，支持批号与辅助属性维度展开。", category: "供应链", projectId: "scm-skills", personalInstalled: true, enterpriseStatus: "submitted", everPublished: true, entChanged: true },
+  { id: "sk_stock", name: "realtime-stock-query", displayName: "即时库存查询", desc: "按物料、仓库、仓位查询即时库存与可用量，支持批号与辅助属性维度展开。", category: "供应链", projectId: "scm-skills", personalInstalled: true, enterpriseStatus: "submitted", everPublished: true, entChanged: true, componentRef: "kdcloud_scm_stock_table" },
   { id: "sk_purchase", name: "purchase-order-push", displayName: "采购订单下推入库", desc: "校验采购订单可入库数量后下推生成采购入库单，超收时给出明确提示并阻止提交。", category: "供应链", projectId: "scm-skills", personalInstalled: false, enterpriseStatus: "rejected", reason: "缺少超收场景的处理说明，请补充后重新提交。", inspect: "fail", entChanged: true },
-  { id: "sk_leave", name: "leave-request", displayName: "办理请假申请", desc: "通过对话收集假期类型、起止日期、事由与代理人，自动校验剩余假期天数，生成请假单草稿并在确认后提交。", category: "人力资源", projectId: "hr-assistant", personalInstalled: true, enterpriseStatus: "submitted", inspect: "fail", entChanged: false, perChanged: true },
+  { id: "sk_leave", name: "leave-request", displayName: "办理请假申请", desc: "通过对话收集假期类型、起止日期、事由与代理人，自动校验剩余假期天数，生成请假单草稿并在确认后提交。", category: "人力资源", projectId: "hr-assistant", personalInstalled: true, enterpriseStatus: "submitted", inspect: "fail", entChanged: false, perChanged: true, componentRef: "kdcloud_hr_leave_form" },
   // 撤回态演示：审核中撤回后、内容未再编辑（entChanged=false → 较撤回时版本无变化）
   { id: "sk_withdrawn", name: "contract-review", displayName: "合同条款审查", desc: "解析合同文本，识别风险条款并标注修改建议，支持按条款类型筛选与导出审查报告。", category: "财务", projectId: "workspace", personalInstalled: false, enterpriseStatus: "withdrawn", everPublished: true, entChanged: false },
   // 撤回态演示：撤回后内容有修改（entChanged=true → 较撤回时版本有变化）
@@ -158,7 +160,7 @@ const rawSkills: Skill[] = [
   { id: "sk_price", name: "price-batch-adjust", displayName: "价格表批量调价", desc: "按物料分组或供应商批量调整采购价格表，支持按百分比或固定金额调价，调价前先给出影响范围预览。", category: "供应链", projectId: "scm-skills", personalInstalled: false, enterpriseStatus: "published" },
   { id: "sk_ar", name: "ar-aging-analysis", displayName: "应收账龄分析", desc: "按客户与账期区间统计应收余额，标记逾期重点客户并给出催收优先级。", category: "财务", projectId: "workspace", personalInstalled: false, enterpriseStatus: "saved" },
   { id: "sk_credit", name: "customer-credit-check", displayName: "客户信用评估", desc: "结合历史回款、逾期次数与授信额度评估客户信用等级，给出是否放单的建议。", category: "财务", projectId: "workspace", personalInstalled: false, enterpriseStatus: "published", entChanged: true, inspect: "pass" },
-  { id: "sk_invoice", name: "invoice-auto-recognize", displayName: "发票自动识别", desc: "识别增值税发票的关键字段并结构化输出，自动校验发票代码与号码一致性。", category: "财务", projectId: "workspace", personalInstalled: false, enterpriseStatus: "saved", inspect: "fail" },
+  { id: "sk_invoice", name: "invoice-auto-recognize", displayName: "发票自动识别", desc: "识别增值税发票的关键字段并结构化输出，自动校验发票代码与号码一致性。", category: "财务", projectId: "workspace", personalInstalled: false, enterpriseStatus: "saved", inspect: "fail", componentRef: "kdcloud_deleted_invoice_card" },
   // 智能体个人安装演示：「销售周报专家」关联的三个技能
   { id: "sk_sales_order_query", name: "sales-order-query", displayName: "销售订单查询", desc: "按客户、销售员和日期区间查询销售订单及执行进度，返回订单明细。", category: "供应链", projectId: "workspace", personalInstalled: false, enterpriseStatus: "saved", inspect: "pass" },
   { id: "sk_sales_stats", name: "sales-data-stats", displayName: "销售数据统计", desc: "按周汇总销售额、订单量、回款额，并与上周、去年同期做对比。", category: "供应链", projectId: "workspace", personalInstalled: false, enterpriseStatus: "saved", inspect: "pass" },
@@ -352,5 +354,30 @@ export const mcpApps: McpApp[] = [
     mcpStatus: "", buildStatus: "success", tested: false, packageKind: "source", version: "1.0.0",
     artifacts: [{ version: "1.0.0", createdAt: "2026-10-02T05:00:00Z", changeDesc: "首次构建" }],
     info: info("kdcloud_sal_order_summary_card", "订单摘要卡片", "销售订单摘要", { domain: "sal" }),
+  },
+  // —— 本地测试错误态演示组件 ——
+  {
+    appCode: "kdcloud_err_remote", appName: "远端组件演示", appDescription: "已发布到远端但本地无构建产物的组件，本地测试时展示「组件在远端」错误态。", projectId: "workspace",
+    mcpStatus: "PUBLISHED", buildStatus: null, tested: false, packageKind: "source", version: "1.0.0",
+    artifacts: [{ version: "1.0.0", createdAt: "2026-11-20T03:00:00Z", changeDesc: "首次构建" }],
+    info: info("kdcloud_err_remote", "远端组件演示", "触发 remoteOnly 错误态", { domain: "demo" }),
+  },
+  {
+    appCode: "kdcloud_err_sandbox", appName: "沙箱异常演示", appDescription: "触发沙箱服务器启动失败错误态的演示组件。", projectId: "workspace",
+    mcpStatus: "", buildStatus: "success", tested: false, packageKind: "source", version: "1.0.0",
+    artifacts: [{ version: "1.0.0", createdAt: "2026-11-20T03:00:00Z", changeDesc: "首次构建" }],
+    info: info("kdcloud_err_sandbox", "沙箱异常演示", "触发 sandboxUnavailable 错误态", { domain: "demo" }),
+  },
+  {
+    appCode: "kdcloud_err_capacity", appName: "容量上限演示", appDescription: "触发同时活跃组件数达上限错误态的演示组件。", projectId: "workspace",
+    mcpStatus: "", buildStatus: "success", tested: false, packageKind: "source", version: "1.0.0",
+    artifacts: [{ version: "1.0.0", createdAt: "2026-11-20T03:00:00Z", changeDesc: "首次构建" }],
+    info: info("kdcloud_err_capacity", "容量上限演示", "触发 capacityFull 错误态", { domain: "demo" }),
+  },
+  {
+    appCode: "kdcloud_err_stale", appName: "内容更新演示", appDescription: "触发组件内容已更新错误态的演示组件。", projectId: "workspace",
+    mcpStatus: "", buildStatus: "success", tested: false, packageKind: "source", version: "1.0.0",
+    artifacts: [{ version: "1.0.0", createdAt: "2026-11-20T03:00:00Z", changeDesc: "首次构建" }],
+    info: info("kdcloud_err_stale", "内容更新演示", "触发 contentUpdated 错误态", { domain: "demo" }),
   },
 ]

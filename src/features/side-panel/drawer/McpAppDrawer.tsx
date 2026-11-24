@@ -1,7 +1,7 @@
 import { useState } from "react"
 import { useParams } from "react-router"
 import { useQuery } from "@tanstack/react-query"
-import { BrandButton, Icon, SegmentedControl, Tooltip } from "@/ui"
+import { BrandButton, DropdownMenu, Icon, SegmentedControl, Tooltip } from "@/ui"
 import { useT } from "@/i18n"
 import { mcpAppService } from "@/services"
 import { usePrompt } from "@/stores/prompt"
@@ -76,10 +76,37 @@ export function McpAppDrawer(props: { id: string; working: boolean }) {
             {busy === "package" && <Spinner />}
             {t("kcode.mcpApp.action.package")}
           </BrandButton>
-          <BrandButton variant="secondary" size="normal" disabled={busy === "test" || busy === "submit" || props.working} onClick={() => guarded(() => void actions.test(app))}>
-            {busy === "test" && <Spinner />}
-            {t("kcode.mcpApp.action.test")}
-          </BrandButton>
+          <DropdownMenu placement="bottom-end" gutter={4}>
+            <DropdownMenu.Trigger
+              className="agent-config-test-action"
+              disabled={!!busy || props.working}
+              data-component="brand-button"
+              data-variant="secondary"
+              data-size="normal"
+            >
+              {(busy === "test" || busy === "localTest") ? <Spinner /> : <Icon name="test-flask" size="small" />}
+              {t("kcode.mcpApp.action.testDropdown")}
+              <Icon name="chevron-down-16" size="small" />
+            </DropdownMenu.Trigger>
+            <DropdownMenu.Portal>
+              <DropdownMenu.Content className="test-dropdown-menu">
+                <DropdownMenu.Item
+                  className="flex items-center gap-2 cursor-pointer"
+                  onSelect={() => guarded(() => void actions.localTest(app))}
+                >
+                  <Icon name="monitor" size="small" />
+                  <DropdownMenu.ItemLabel>{t("kcode.mcpApp.action.localTest")}</DropdownMenu.ItemLabel>
+                </DropdownMenu.Item>
+                <DropdownMenu.Item
+                  className="flex items-center gap-2 cursor-pointer"
+                  onSelect={() => guarded(() => void actions.sandboxTest(app))}
+                  >
+                    <Icon name="cloud-test" size="small" />
+                    <DropdownMenu.ItemLabel>{t("kcode.mcpApp.action.test")}</DropdownMenu.ItemLabel>
+                </DropdownMenu.Item>
+              </DropdownMenu.Content>
+            </DropdownMenu.Portal>
+          </DropdownMenu>
           <BrandButton
             variant="primary"
             size="normal"

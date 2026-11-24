@@ -9,7 +9,7 @@ export const useArtifactConfig = create<{
   sessions: Record<string, ConfigTarget>
 }>(() => ({ completed: [], sessions: {} }))
 const demoMissing: Record<ArtifactKind, string[]> = {
-  skill: ["sk_stock"], agent: ["supplier-access-review"], mcpapp: ["kdcloud_fin_expense_claim_card"],
+  skill: ["sk_purchase"], agent: ["supplier-access-review"], mcpapp: ["kdcloud_fin_expense_claim_card"],
 }
 export function configTarget(kind: ArtifactKind, id: string): ConfigTarget | undefined {
   if (kind === "skill") {
