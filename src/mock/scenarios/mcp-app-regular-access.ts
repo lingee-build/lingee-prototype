@@ -1,27 +1,26 @@
 import type { Scenario } from "./types"
 import { db } from "../db"
 import { devStore } from "../dev-store"
-import { uid } from "../latency"
 
 /**
  * 普通会话（非本地测试会话）中访问业务组件的 mock 场景。
  *
  * 用户在普通会话中说「打开XX组件」时：
- * - 纯展示组件已上传沙箱 → 正常渲染（沙箱预览，无工具问题）
- * - 有关联工具的组件已上传沙箱 → 渲染组件 + 工具调用失败 + 警告横幅
- * - 未上传沙箱 → 错误提示「组件未上传沙箱」
+ * - 有本地工程 + 已构建 → 直接加载
+ * - 有本地工程 + 未构建 → 先触发构建，再加载
+ * - 已发布但本地无工程（remoteOnly）→ 提醒用户组件在远端，无法本地渲染
+ * - 加载后：纯展示组件直接渲染；有关联工具的渲染 + 预览模式提醒
+ * - 输入了不存在的组件名 → notFound 错误卡片
  *
  * 关键产品逻辑：
  * - 普通会话中 MCP 工具未连接，需主动告知用户使用本地测试
- * - 所有三种情况都自动打开右侧抽屉，展示组件详情和测试入口（方案 A）
+ * - 所有情况都自动打开右侧抽屉，展示组件详情和测试入口
  * - 同一会话提到多个组件时，最后一个自动打开；用户可手动点卡片切换
- * - 输入了不存在的组件名 → 渲染 notFound 错误卡片（不自动打开抽屉，因为组件不存在）
  */
 
 /** 从用户消息中匹配组件名 */
 function matchApp(prompt: string) {
   const text = prompt.replace(/^\/\S+\s*/, "").trim()
-  // 遍历所有组件，找名字或 appCode 出现在消息中的
   return devStore.mcpApps.find((app) => {
     if (app.appName && text.includes(app.appName)) return true
     if (app.appCode && text.includes(app.appCode)) return true
@@ -33,7 +32,7 @@ function matchApp(prompt: string) {
 function looksLikeComponentRequest(prompt: string): boolean {
   const text = prompt.replace(/^\/\S+\s*/, "").trim()
   const hasComponentNoun = /组件|卡片|看板|面板|仪表盘/.test(text)
-  const hasActionVerb = /打开|展示|查看|加载|渲染|打开/.test(text)
+  const hasActionVerb = /打开|展示|查看|加载|渲染/.test(text)
   return hasComponentNoun && hasActionVerb
 }
 
@@ -42,12 +41,6 @@ function extractComponentName(prompt: string): string {
   const text = prompt.replace(/^\/\S+\s*/, "").trim()
   const cleaned = text.replace(/打开|展示|查看|加载|渲染|组件|卡片|看板|面板|仪表盘/g, "").trim()
   return cleaned || text
-}
-
-/** 判断组件是否已上传沙箱（提交过审核或已发布都算） */
-function isInSandbox(app: ReturnType<typeof matchApp>): boolean {
-  if (!app) return false
-  return app.tested === true || ["DRAFT", "PENDING_REVIEW", "PUBLISHED", "OFFLINE"].includes(app.mcpStatus ?? "")
 }
 
 /** 判断组件是否有关联工具 */
@@ -104,42 +97,45 @@ export function mcpAppRegularAccessScenario(sessionId: string, prompt: string): 
     return undefined
   }
 
-  const inSandbox = isInSandbox(app)
-  const withTools = hasMcpTools(app)
-  const tools = toolNamesOf(app)
-
-  // 未上传沙箱：无法渲染
-  if (!inSandbox) {
+  // 已发布但本地无工程：无法本地渲染，提醒用户组件在远端
+  const isRemoteOnly = app.mcpStatus === "PUBLISHED" && !app.buildStatus
+  if (isRemoteOnly) {
     return {
       todos: ["解析组件请求", "查找组件资源"],
       steps: [
+        { todo: 0, reasoning: `正在解析组件请求…查找「${app.appName}」…组件已发布到云端，本地无工程文件。` },
         {
-          todo: 0,
-          reasoning: `正在解析组件请求…查找组件「${app.appName}」是否已通过云端测试上传…`,
-          reasoningDisplay: "scroll",
-        },
-        {
-          todo: 2,
-          reasoning: `组件「${app.appName}」未通过云端测试上传，无法在普通会话中渲染。`,
-          text: `组件「${app.appName}」尚未通过云端测试上传，无法在当前会话中渲染。\n\n你可以：\n- 点击「测试 → 云端测试」上传\n- 或点击「测试 → 本地测试」直接从本地加载`,
-          card: () => ({ kind: "kdapp-artifact", config: { appCode: app.appCode, title: app.appName, desc: "组件未上传", autoOpenDrawer: "true" } }),
+          todo: 1,
+          reasoning: `组件「${app.appName}」在远端，无法本地渲染：remoteOnly`,
+          text: `组件「${app.appName}」已发布到云端，本地无工程文件，无法在此渲染。`,
+          card: () => ({ kind: "kdapp-local-test", config: { appCode: app.appCode, errorKind: "remoteOnly" } }),
         },
       ],
     }
   }
 
-  // 已上传沙箱 + 有关联工具：渲染组件但工具调不通
+  const withTools = hasMcpTools(app)
+  const tools = toolNamesOf(app)
+  const notBuilt = app.buildStatus !== "success"
+
+  // 构建步骤：未构建时插入一步"构建组件"
+  const buildStep = notBuilt
+    ? [{ todo: 1, reasoning: `组件「${app.appName}」尚未构建，正在触发构建…构建完成，准备加载组件。` }]
+    : []
+
+  // 有关联工具：渲染组件 + 预览模式（工具未连接）
   if (withTools && tools.length > 0) {
+    const toolTodo = notBuilt ? 2 : 1
+    const renderTodo = notBuilt ? 3 : 2
     return {
-      todos: ["解析组件请求", "调用关联工具", "渲染组件"],
+      todos: notBuilt
+        ? ["解析组件请求", "构建组件", "调用关联工具", "渲染组件"]
+        : ["解析组件请求", "调用关联工具", "渲染组件"],
       steps: [
+        { todo: 0, reasoning: `正在解析组件请求…加载组件「${app.appName}」…` },
+        ...buildStep,
         {
-          todo: 0,
-          reasoning: `正在解析组件请求…加载组件「${app.appName}」…`,
-        },
-        {
-          todo: 1,
-          // 工具调用失败
+          todo: toolTodo,
           tools: [
             {
               tool: "mcp" as const,
@@ -151,7 +147,7 @@ export function mcpAppRegularAccessScenario(sessionId: string, prompt: string): 
           ],
         },
         {
-          todo: 2,
+          todo: renderTodo,
           reasoning: `组件已加载并渲染。但 MCP 工具未连接，用户如需完整功能应使用本地测试。`,
           text: `已加载组件「${app.appName}」。\n\n当前为预览模式，组件关联的 MCP 工具（${tools.join("、")}）未连接，工具调用会失败。如需测试完整功能（包括工具调用），请使用本地测试。`,
           card: () => ({ kind: "kdapp-artifact", config: { appCode: app.appCode, title: app.appName, desc: "预览模式 · 工具未连接", phase: "preview", autoOpenDrawer: "true" } }),
@@ -160,18 +156,17 @@ export function mcpAppRegularAccessScenario(sessionId: string, prompt: string): 
     }
   }
 
-  // 已上传沙箱 + 纯展示：正常渲染
+  // 纯展示：正常渲染（未构建时先触发构建）
+  const renderTodo = notBuilt ? 2 : 1
   return {
-    todos: ["解析组件请求", "渲染组件"],
+    todos: notBuilt ? ["解析组件请求", "构建组件", "渲染组件"] : ["解析组件请求", "渲染组件"],
     steps: [
+      { todo: 0, reasoning: `正在解析组件请求…加载组件「${app.appName}」…` },
+      ...buildStep,
       {
-        todo: 0,
-        reasoning: `正在解析组件请求…加载组件「${app.appName}」…`,
-      },
-      {
-        todo: 1,
-          reasoning: `组件已加载，正在渲染…`,
-          text: `已加载组件「${app.appName}」，你可以在下方区域内与组件交互。`,
+        todo: renderTodo,
+        reasoning: `组件已加载，正在渲染…`,
+        text: `已加载组件「${app.appName}」，你可以在下方区域内与组件交互。`,
         card: () => ({ kind: "kdapp-artifact", config: { appCode: app.appCode, title: app.appName, desc: "已加载组件", phase: "preview", autoOpenDrawer: "true" } }),
       },
     ],
