@@ -13,7 +13,8 @@ import { uid } from "../latency"
  * - 有关联工具的组件：先展示 MCP 工具调用，再渲染组件
  *
  * 对应 PRD 功能点 5「会话内错误态卡片」：
- * - notBuilt / sandboxUnavailable / capacityFull / contentUpdated 可能出现在直测会话中
+ * - sandboxUnavailable / capacityFull / contentUpdated 可能出现在直测会话中
+ * - notBuilt 系统自动触发构建，不展示错误卡片
  * - notFound 在直测路径不可能发生（不存在的组件没有按钮可点）
  * - remoteOnly 在入口已拦截（已发布但本地无工程），不会进入会话
  */
@@ -66,11 +67,11 @@ export function mcpAppLocalTestScenario(sessionId: string, prompt: string): Scen
   const withTools = hasMcpTools(app)
   const tools = toolNamesOf(app)
 
-  // 会话内错误态触发：notBuilt / sandboxUnavailable / capacityFull / contentUpdated
+  // 会话内错误态触发：sandboxUnavailable / capacityFull / contentUpdated
+  // notBuilt 系统自动触发构建，不展示错误卡片
   // notFound 在直测路径不可能发生（不存在的组件没有按钮可点）
   // remoteOnly 在入口已拦截（已发布但本地无工程），不会进入会话
   const errorMap: Record<string, string> = {
-    "kdcloud_hr_leave_form": "notBuilt",
     "kdcloud_err_sandbox": "sandboxUnavailable",
     "kdcloud_err_capacity": "capacityFull",
     "kdcloud_err_stale": "contentUpdated",
@@ -110,30 +111,33 @@ export function mcpAppLocalTestScenario(sessionId: string, prompt: string): Scen
     }
   }
 
-  // 正常 mock 回复
-  return {
-    todos: ["解析组件请求", withTools ? "调用关联工具" : "加载组件资源", "渲染组件"].filter(Boolean),
-    steps: [
-      {
-        todo: 0,
-        reasoning: `正在解析 appCode=${appCode} 的组件请求…`,
-      },
-      ...(toolSteps.length > 0
-        ? [
-            {
-              todo: 1,
-              tools: toolSteps,
-            },
-          ]
-        : []),
-      {
-        todo: withTools ? 2 : 1,
-        reasoning: `组件 ${appCode} 已从本地构建产物加载，正在渲染…`,
-        text: `已打开组件「${app.appName}」，你可以在下方区域内与组件交互。`,
-        card: () => ({ kind: "kdapp-local-test", config: { appCode } }),
-      },
-    ],
+  // 正常 mock 回复（notBuilt 时自动插入构建步骤）
+  const notBuilt = app.buildStatus !== "success"
+  const todoLabels = ["解析组件请求"]
+  if (notBuilt) todoLabels.push("构建组件")
+  if (withTools) todoLabels.push("调用关联工具")
+  todoLabels.push("渲染组件")
+
+  const steps: Scenario["steps"] = [
+    { todo: 0, reasoning: `正在解析 appCode=${appCode} 的组件请求…` },
+  ]
+  let next = 1
+  if (notBuilt) {
+    steps.push({ todo: next, reasoning: `组件「${app.appName}」尚未构建，正在触发构建…构建完成，准备加载组件。` })
+    next++
   }
+  if (toolSteps.length > 0) {
+    steps.push({ todo: next, tools: toolSteps })
+    next++
+  }
+  steps.push({
+    todo: next,
+    reasoning: `组件 ${appCode} 已加载，正在渲染…`,
+    text: `已打开组件「${app.appName}」，你可以在下方区域内与组件交互。`,
+    card: () => ({ kind: "kdapp-local-test", config: { appCode } }),
+  })
+
+  return { todos: todoLabels, steps }
 }
 
 /**

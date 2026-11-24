@@ -138,19 +138,22 @@ export function skillComponentTestScenario(sessionId: string): Scenario | undefi
   const tools = toolNamesOf(appCode)
 
   // 错误态映射（与 mcp-app-local-test.ts 保持一致，notFound 由组件不存在时自动触发）
+  // notBuilt 系统自动触发构建，不展示错误卡片
   const errorMap: Record<string, string> = {
-    kdcloud_hr_leave_form: "notBuilt",
     kdcloud_err_remote: "remoteOnly",
     kdcloud_err_sandbox: "sandboxUnavailable",
     kdcloud_err_capacity: "capacityFull",
     kdcloud_err_stale: "contentUpdated",
   }
   const errorKind = errorMap[appCode]
+  const notBuilt = app.buildStatus !== "success"
 
   // 智能体→技能→组件：多一步「选择技能」
+  const loadOrBuild = notBuilt && !errorKind ? "构建组件" : "加载组件"
+  const renderOrFail = errorKind ? "渲染失败" : "渲染组件"
   const todos = agentName
-    ? ["理解用户请求", `选择技能「${skillDisplayName}」`, "调用技能工具", "加载组件", errorKind ? "渲染失败" : "渲染组件"]
-    : ["理解用户请求", "调用技能工具", "加载组件", errorKind ? "渲染失败" : "渲染组件"]
+    ? ["理解用户请求", `选择技能「${skillDisplayName}」`, "调用技能工具", loadOrBuild, renderOrFail]
+    : ["理解用户请求", "调用技能工具", loadOrBuild, renderOrFail]
 
   const chainPrefix = agentName
     ? `通过智能体「${agentName}」→ 技能「${skillDisplayName}」`
@@ -195,7 +198,12 @@ export function skillComponentTestScenario(sessionId: string): Scenario | undefi
     }
   }
 
-  // 正常场景
+  // 正常场景（notBuilt 时插入构建步骤）
+  const buildStep = notBuilt
+    ? [{ todo: agentName ? 3 : 2, reasoning: `组件「${app.appName}」尚未构建，正在触发构建…构建完成，准备加载组件。` }]
+    : []
+  const renderTodo = notBuilt ? (agentName ? 4 : 3) : (agentName ? 3 : 2)
+
   return {
     todos,
     steps: [
@@ -207,9 +215,10 @@ export function skillComponentTestScenario(sessionId: string): Scenario | undefi
         ? [{ todo: 1, reasoning: `匹配到技能「${skillDisplayName}」处理此请求。` }]
         : []),
       toolStep,
+      ...buildStep,
       {
-        todo: agentName ? 3 : 2,
-        reasoning: `技能关联了组件「${app.appName}」，从本地构建产物加载 appCode=${appCode}，正在渲染…`,
+        todo: renderTodo,
+        reasoning: `技能关联了组件「${app.appName}」，已加载 appCode=${appCode}，正在渲染…`,
         text: `${chainPrefix}调用完成，组件「${app.appName}」已加载，你可以在下方区域内与组件交互。`,
         card: () => ({ kind: "kdapp-local-test", config: { appCode } }),
       },
