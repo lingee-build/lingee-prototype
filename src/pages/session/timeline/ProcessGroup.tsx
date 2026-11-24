@@ -79,7 +79,7 @@ export function TurnProcessGroup({ messages, working, children }: { messages: Me
   const end = completed ? Math.max(...messages.map(m => m.time.completed ?? now)) : now
   const seconds = Math.max(0, Math.round((end-start)/1000))
   const duration = seconds < 60 ? t('ui.message.duration.seconds',{count:seconds}) : t('ui.message.duration.minutesSeconds',{minutes:Math.floor(seconds/60),seconds:seconds%60})
-  const aborted = messages.some(m => m.parts.some(p => p.type === 'tool' && (p.state === 'error' || p.state === 'running'))) && completed
+  const aborted = messages.some(m => m.parts.some(p => p.type === 'tool' && p.state === 'running')) && completed
   return <div data-component="collapsible" data-variant="ghost" className="tool-collapsible turn-process-collapsible" data-expanded={open ? '' : undefined} data-closed={!open ? '' : undefined}>
     <button type="button" data-slot="collapsible-trigger" data-disabled={!completed ? '' : undefined} aria-expanded={open} onClick={() => { if(completed) setOpen(!open) }}><div data-slot="turn-process-header" data-status={completed ? 'completed' : 'running'}><span data-slot="turn-process-label"><TextShimmer text={t(!completed ? 'ui.process.working' : aborted ? 'ui.process.aborted' : 'ui.process.completed')} active={working}/></span>{completed && <span data-slot="turn-process-chevron"><ProcessChevron open={false}/></span>}<span data-slot="turn-process-summary" title={duration}>{duration}</span></div></button>
     <div data-slot="turn-process-divider" aria-hidden="true"/>

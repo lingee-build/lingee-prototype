@@ -363,7 +363,7 @@ export const mcpApps: McpApp[] = [
     info: info("kdcloud_err_remote", "远端组件演示", "触发 remoteOnly 错误态", { domain: "demo" }),
   },
   {
-    appCode: "kdcloud_err_sandbox", appName: "沙箱异常演示", appDescription: "触发沙箱服务器启动失败错误态的演示组件。", projectId: "workspace",
+    appCode: "kdcloud_err_sandbox", appName: "沙箱异常演示", appDescription: "触发服务启动失败错误态的演示组件。", projectId: "workspace",
     mcpStatus: "", buildStatus: "success", tested: false, packageKind: "source", version: "1.0.0",
     artifacts: [{ version: "1.0.0", createdAt: "2026-11-20T03:00:00Z", changeDesc: "首次构建" }],
     info: info("kdcloud_err_sandbox", "沙箱异常演示", "触发 sandboxUnavailable 错误态", { domain: "demo" }),

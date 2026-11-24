@@ -121,7 +121,7 @@ export function mcpAppRegularAccessScenario(sessionId: string, prompt: string): 
           todo: 1,
           reasoning: `组件未在沙箱中找到。组件「${app.appName}」尚未上传沙箱，无法在普通会话中渲染。`,
           text: `组件「${app.appName}」尚未上传到沙箱环境，无法在当前会话中渲染。\n\n你可以：\n- 在业务组件开发页点击「测试 → 云端测试」上传到沙箱\n- 或点击「测试 → 本地测试」直接从本地构建产物加载`,
-          card: () => ({ kind: "kdapp-artifact", config: { appCode: app.appCode, title: app.appName, autoOpenDrawer: "true" } }),
+          card: () => ({ kind: "kdapp-artifact", config: { appCode: app.appCode, title: app.appName, desc: "组件未上传沙箱", autoOpenDrawer: "true" } }),
         },
       ],
     }
@@ -152,8 +152,8 @@ export function mcpAppRegularAccessScenario(sessionId: string, prompt: string): 
         {
           todo: 2,
           reasoning: `组件已加载并渲染。但 MCP 工具未连接，用户如需完整功能应使用本地测试。`,
-          text: `已加载组件「${app.appName}」。\n\n⚠️ 当前为预览模式，组件关联的 MCP 工具（${tools.join("、")}）未连接，工具调用会失败。如需测试完整功能（包括工具调用），请使用本地测试。`,
-          card: () => ({ kind: "kdapp-artifact", config: { appCode: app.appCode, title: app.appName, phase: "preview", autoOpenDrawer: "true" } }),
+          text: `已加载组件「${app.appName}」。\n\n当前为预览模式，组件关联的 MCP 工具（${tools.join("、")}）未连接，工具调用会失败。如需测试完整功能（包括工具调用），请使用本地测试。`,
+          card: () => ({ kind: "kdapp-artifact", config: { appCode: app.appCode, title: app.appName, desc: "预览模式 · 工具未连接", phase: "preview", autoOpenDrawer: "true" } }),
         },
       ],
     }
@@ -171,7 +171,7 @@ export function mcpAppRegularAccessScenario(sessionId: string, prompt: string): 
         todo: 1,
           reasoning: `组件已加载，正在渲染…`,
           text: `已加载组件「${app.appName}」，你可以在下方区域内与组件交互。`,
-        card: () => ({ kind: "kdapp-artifact", config: { appCode: app.appCode, title: app.appName, phase: "preview", autoOpenDrawer: "true" } }),
+        card: () => ({ kind: "kdapp-artifact", config: { appCode: app.appCode, title: app.appName, desc: "已加载组件", phase: "preview", autoOpenDrawer: "true" } }),
       },
     ],
   }
