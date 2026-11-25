@@ -173,9 +173,9 @@ export function SkillDevPage() {
             {t(batchMode ? "kcode.skillDev.batch.cancelSelect" : "kcode.skillDev.batch.enter")}
           </BrandButton>
           <BrandButton
-            variant="auxiliary"
+            variant="secondary"
             size="normal"
-            icon="submit-upload"
+            icon="import-24"
             iconSize="xs"
             className={HEADER_ICON}
             onClick={() =>

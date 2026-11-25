@@ -36,6 +36,21 @@ export function OverviewTab(props: { skill: Skill; detail: SkillDetail }) {
           <SkillScopeInfo skill={skill} />
         </div>
       </section>
+      {detail.location && (
+        <section className="flex flex-col gap-3">
+          <h3 className="agent-config-section-title">{t("kcode.skillPreview.section.directory")}</h3>
+          <div className="agent-config-surface text-[14px] leading-[22px] text-text-base">
+            <button
+              type="button"
+              className="font-mono text-[13px] text-primary-base break-all hover:underline cursor-pointer inline-flex items-center gap-1"
+              title="点击打开文件夹"
+              onClick={() => window.alert(`打开文件夹：${detail.location}`)}
+            >
+              {detail.location}
+            </button>
+          </div>
+        </section>
+      )}
       <ChangelogSection changelog={changelog} pendingLabel="未提交修改" publishedLabel="发布版本" />
     </div>
   )

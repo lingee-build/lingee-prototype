@@ -1,4 +1,3 @@
-import { evaluationDeletionNotice } from "@/services/evaluation-deletion"
 import { useState, type ReactNode } from "react"
 import { Icon } from "@/ui"
 import type { Skill, SkillScope } from "@/mock/fixtures/dev"
@@ -8,6 +7,7 @@ import { cx } from "@/lib/cx"
 import { useT } from "@/i18n"
 import { CHECK_CATEGORIES, SUBMIT_CATEGORIES } from "@/mock/fixtures/skill-check"
 import { DynamicSkillIcon } from "@/features/dev-page/DynamicSkillIcon"
+import { skillDetailOf } from "@/mock/fixtures/skill-detail"
 import { BATCH_MAX, type BatchItem, type BatchMode, type BatchRoute, type BatchRun } from "./use-batch-run"
 
 export const LIST_BOX = "max-h-[220px] min-h-0 overflow-y-auto rounded-[10px] border border-[var(--border-weak-base)]"
@@ -186,35 +186,92 @@ export function SelectStep({ run, mode, route, scopePicker }: StepProps & { scop
   )
 }
 
-/** 删除确认：弹窗内二次勾选（默认全选）+ 本地删除不可恢复的警告 */
+/** 删除确认：顶部橙色警告条 + 技能列表表格（复选框 / 技能 / 技能类型 / 状态）*/
 export function DeleteConfirmStep({ run }: StepProps) {
   const t = useT()
+  const allSelected = run.items.every((x) => x.selected)
+  const toggleAll = (checked: boolean) => run.items.forEach((x) => run.toggleSelect(x.skill.id, checked))
+  const statusKey = (skill: Skill): string => {
+    const key = skill.enterpriseStatus
+    if (key === "saved") return "none"
+    return key
+  }
+  const statusLabel = (skill: Skill) => t(`kcode.skillDev.channelStatus.enterprise.${statusKey(skill)}`)
+  const statusTone: Record<string, string> = {
+    submitted: "bg-[var(--blue-50)] text-[var(--blue-600)]",
+    published: "bg-[var(--green-50)] text-[var(--green-600)]",
+    rejected: "bg-[var(--red-50)] text-[var(--red-600)]",
+    withdrawn: "bg-[var(--neutral-100)] text-text-weak",
+    saved: "bg-[var(--neutral-100)] text-text-weak",
+  }
   return (
     <div className="flex flex-col gap-3 flex-1 min-h-0">
-      <span className="text-[13px] text-text-base">{t("kcode.skillDev.batch.dialog.deleteConfirmBody", { count: run.items.filter((x) => x.selected).length })}</span>
-      <div className="flex flex-col gap-1 max-h-[220px] min-h-0 overflow-y-auto">
-        {run.items.map((item) => {
-          return (
-            <label
-              key={item.skill.id}
-              className="flex items-center gap-2 px-3 py-2 rounded-[8px] bg-[var(--neutral-50)] cursor-pointer"
-            >
-              <input
-                type="checkbox"
-                className="size-4 accent-[var(--danger-500)]"
-                checked={item.selected}
-                onChange={(e) => run.toggleSelect(item.skill.id, e.currentTarget.checked)}
-              />
-              <span className="text-[13px] text-text-strong truncate" title={item.skill.displayName}>
-                {item.skill.displayName}
-              </span>
-            </label>
-          )
-        })}
+      {/* 橙色警告条 */}
+      <div className="flex items-center gap-2 px-3.5 py-2.5 rounded-[8px] bg-[var(--orange-50)] shrink-0">
+        <Icon name="warning-circle" size="small" className="size-4 text-[var(--orange-600)] shrink-0" />
+        <span className="text-[12px] leading-[1.5] text-[var(--orange-600)]">{t("kcode.skillDev.batch.dialog.deleteLocalWarn")}</span>
       </div>
-      <div className="flex items-start gap-2 px-3 py-2.5 rounded-[8px] bg-[var(--danger-50)] border border-[rgba(241,34,52,0.25)]">
-        <Icon name="warning-circle" size="small" className="size-4 text-[var(--danger-500)] shrink-0 mt-0.5" />
-        <span className="text-[12px] leading-[1.5] text-[var(--danger-600)]">{t("kcode.skillDev.batch.dialog.deleteLocalWarn")} {evaluationDeletionNotice}</span>
+      {/* 技能列表表格 */}
+      <div className="flex flex-col flex-1 min-h-0 overflow-hidden rounded-[8px] border border-[var(--neutral-100)]">
+        {/* 表头 */}
+        <div className="grid grid-cols-[40px_minmax(0,1.6fr)_minmax(0,1fr)_minmax(0,1fr)] items-center shrink-0 bg-[var(--neutral-50)] px-2 py-2">
+          <span className="flex justify-center">
+            <input
+              type="checkbox"
+              className="size-4 accent-[var(--primary-600)] cursor-pointer"
+              checked={allSelected}
+              onChange={(e) => toggleAll(e.currentTarget.checked)}
+            />
+          </span>
+          <span className="text-[12px] leading-[18px] text-text-weak">{t("kcode.skillDev.batch.dialog.colSkill")}</span>
+          <span className="text-[12px] leading-[18px] text-text-weak">{t("kcode.skillDev.batch.dialog.colType")}</span>
+          <span className="text-[12px] leading-[18px] text-text-weak">{t("kcode.skillDev.batch.dialog.colStatus")}</span>
+        </div>
+        {/* 表格内容 */}
+        <div className="flex-1 min-h-0 overflow-y-auto">
+          {run.items.map((item) => {
+            const detail = skillDetailOf(item.skill)
+            return (
+              <div key={item.skill.id} className="grid grid-cols-[40px_minmax(0,1.6fr)_minmax(0,1fr)_minmax(0,1fr)] items-center px-2 py-2.5 border-t border-[var(--neutral-100)]">
+                <span className="flex justify-center">
+                  <input
+                    type="checkbox"
+                    className="size-4 accent-[var(--primary-600)] cursor-pointer"
+                    checked={item.selected}
+                    onChange={(e) => run.toggleSelect(item.skill.id, e.currentTarget.checked)}
+                  />
+                </span>
+                <span className="flex min-w-0 flex-col gap-0.5 pr-2">
+                  <span className="flex items-center gap-2">
+                    <DynamicSkillIcon name={item.skill.displayName} size={30} />
+                    <span className="truncate text-[13px] leading-[20px] text-text-strong" title={item.skill.displayName}>
+                      {item.skill.displayName}
+                    </span>
+                  </span>
+                  {detail.location && (
+                    <span className="truncate font-mono text-[11px] leading-[16px] text-text-weak pl-8" title={detail.location}>
+                      {detail.location}
+                    </span>
+                  )}
+                </span>
+                <span className="min-w-0 pr-2">
+                  {item.skill.category ? (
+                    <span className="inline-block rounded-[4px] bg-[var(--neutral-100)] px-1.5 py-0.5 text-[12px] leading-[16px] text-text-weak truncate max-w-full">
+                      {item.skill.category}
+                    </span>
+                  ) : (
+                    <span className="text-[12px] leading-[18px] text-text-weak">—</span>
+                  )}
+                </span>
+                <span>
+                  <span className={`inline-block rounded-[4px] px-1.5 py-0.5 text-[12px] leading-[16px] ${statusTone[item.skill.enterpriseStatus] ?? statusTone.saved}`}>
+                    {statusLabel(item.skill)}
+                  </span>
+                </span>
+              </div>
+            )
+          })}
+        </div>
       </div>
     </div>
   )

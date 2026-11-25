@@ -83,8 +83,8 @@ export function BatchDialog(props: BatchDialogProps) {
   }
 
   return (
-    <Dialog fit className="w-[560px] !self-center !rounded-[24px] overflow-hidden shadow-[0px_6px_16px_0px_rgba(0,0,0,0.12)]">
-      <div className="relative flex flex-col w-full px-5 pt-5 pb-5">
+    <Dialog fit className="w-[560px] !self-center !rounded-[24px] overflow-hidden shadow-[0px_6px_16px_0px_rgba(0,0,0,0.12)]" style={{ maxHeight: "min(520px, calc(100vh - 32px))" }}>
+      <div className="relative flex flex-col min-h-0 w-full px-5 pt-5 pb-5">
         <button
           type="button"
           className="absolute top-4 right-4 z-[2] size-8 flex items-center justify-center rounded-[8px] cursor-pointer border-none bg-transparent hover:bg-[var(--surface-base)]"

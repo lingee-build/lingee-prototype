@@ -17,6 +17,8 @@ export interface SkillDetail {
   tools: ManifestToolEntry[]
   features: string[]
   changelog: Array<{ version: string; date: string; items: string[] }>
+  /** 技能所在目录的相对路径（跨工具技能有值，Lingee Build 原生技能为 undefined） */
+  location?: string
 }
 
 /** 新技能的 manifest 条目：来源 / 供应商 / 服务都按线上字段名写 */
@@ -73,6 +75,11 @@ const LEGACY_TOOLS: Record<string, ManifestToolEntry[]> = {
 
 /** 技能详情的 mock：由卡片数据推导，保证同一个技能每次打开内容一致 */
 export function skillDetailOf(skill: Skill): SkillDetail {
+  // 跨工具技能有自己的 location；其他技能按来源补默认产物路径
+  const defaultLocation = skill.location
+    ?? (skill.personalInstalled
+      ? `/Users/demo/.lingeebuild/skills/${skill.name}`
+      : `/Users/demo/projects/supply-chain/skills/${skill.name}`)
   const artifact = procurementArtifacts.get(skill.name)
   if (artifact) return {
     developer: "Build", version: "1.0.0", updateTime: "2026.10.15", connector: "DC 企业上下文",
@@ -88,6 +95,7 @@ export function skillDetailOf(skill: Skill): SkillDetail {
     })),
     features: ["业务对象及工具发现", `按已确认规则预警：最近 ${artifact.rules.days} 天，上涨阈值 ${artifact.rules.threshold}%`, "价格比较口径统一与缺失数据处理"],
     changelog: [{ version: "v1.0.0", date: "2026.10.15", items: ["根据企业上下文发现结果与用户确认规则创建"] }],
+    location: defaultLocation,
   }
   const seed = Array.from(skill.id).reduce((sum, ch) => sum + ch.charCodeAt(0), 0)
   const real = fileContent(`${skill.name}/SKILL.md`)
@@ -105,5 +113,6 @@ export function skillDetailOf(skill: Skill): SkillDetail {
       { version: `v1.${seed % 4}.${seed % 7}`, date: "2026.10.08", items: ["优化空结果时的提示话术", "补充字段说明"] },
       { version: "v1.0.0", date: "2026.09.12", items: ["首次创建"] },
     ],
+    location: defaultLocation,
   }
 }

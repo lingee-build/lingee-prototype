@@ -99,7 +99,6 @@ export function UploadDialog(props: { defaultProjectId?: string; onUploaded: (fi
               "group flex h-[140px] cursor-pointer flex-col items-center justify-center gap-1.5 rounded-[16px] border-2 border-dotted transition-colors hover:border-[var(--primary-200)] hover:bg-[var(--primary-50)]",
               dragOver ? "border-[var(--primary-200)] bg-[var(--primary-50)]" : "border-[var(--border-weak-base)]",
             )}
-            onClick={() => input.current?.click()}
             onDragOver={(e) => {
               e.preventDefault()
               setDragOver(true)
@@ -121,12 +120,21 @@ export function UploadDialog(props: { defaultProjectId?: string; onUploaded: (fi
               style={{ fontSize: 14, fontWeight: 400 }}
             >
               {t("kcode.skillDev.upload.dropzone.title")}
-            </span>
-            <span
-              className={cx("transition-colors", dragOver ? "text-[var(--primary-300)]" : "text-[var(--neutral-500)] group-hover:text-[var(--primary-300)]")}
-              style={{ fontSize: 12, fontWeight: 400, lineHeight: "18px" }}
-            >
-              {t("kcode.skillDev.upload.dropzone.hint")}
+              <button
+                type="button"
+                className="ml-1 cursor-pointer border-none bg-transparent p-0 text-[inherit] font-[inherit] text-[var(--primary-600)] hover:underline"
+                onClick={(e) => { e.stopPropagation(); window.alert("选择文件夹：模拟打开文件夹选择器") }}
+              >
+                {t("kcode.skillDev.upload.dropzone.selectFolder")}
+              </button>
+              <span className="mx-1">/</span>
+              <button
+                type="button"
+                className="cursor-pointer border-none bg-transparent p-0 text-[inherit] font-[inherit] text-[var(--primary-600)] hover:underline"
+                onClick={(e) => { e.stopPropagation(); input.current?.click() }}
+              >
+                {t("kcode.skillDev.upload.dropzone.selectFile")}
+              </button>
             </span>
           </div>
         )}
@@ -136,6 +144,7 @@ export function UploadDialog(props: { defaultProjectId?: string; onUploaded: (fi
           <ul className="flex flex-col gap-1 pl-5 text-13-regular text-text-weak list-disc">
             <li>{t("kcode.skillDev.upload.requirements.item1")}</li>
             <li>{t("kcode.skillDev.upload.requirements.item2")}</li>
+            <li>{t("kcode.skillDev.upload.requirements.item3")}</li>
           </ul>
         </div>
 
@@ -149,7 +158,7 @@ export function UploadDialog(props: { defaultProjectId?: string; onUploaded: (fi
             {t("kcode.skillDev.action.cancel")}
           </button>
           <BrandButton className="px-2" variant="primary" size="normal" disabled={!file || loading} onClick={() => void upload()}>
-            {t("kcode.skillDev.upload.uploadAndDetect")}
+            {t("kcode.skillDev.upload.upload")}
           </BrandButton>
         </div>
       </div>

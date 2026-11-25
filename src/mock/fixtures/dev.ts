@@ -35,6 +35,8 @@ export interface Skill {
   n3Resolved?: boolean
   /** 引用的业务组件 appCode：技能本地测试时，模型通过技能调用此组件渲染 */
   componentRef?: string
+  /** 技能所在目录的相对路径（如 skills/my-skill 或 .claude/skills/code-reviewer），用于详情和删除确认展示 */
+  location?: string
 }
 
 export type ModelLevel = "auto" | "fast" | "expert" | "ultra"
@@ -166,6 +168,12 @@ const rawSkills: Skill[] = [
   { id: "sk_sales_stats", name: "sales-data-stats", displayName: "销售数据统计", desc: "按周汇总销售额、订单量、回款额，并与上周、去年同期做对比。", category: "供应链", projectId: "workspace", personalInstalled: false, enterpriseStatus: "saved", inspect: "pass" },
   { id: "sk_weekly_report", name: "weekly-report-gen", displayName: "周报生成", desc: "根据统计结果生成结构化销售周报，包含业绩概览、重点客户与下周计划。", category: "通用", projectId: "workspace", personalInstalled: false, enterpriseStatus: "saved" },
   { id: "sk_contract", name: "contract-smart-review", displayName: "合同智能审查", desc: "解析合同文本，识别风险条款与不利条款，逐条给出修改建议。", category: "财务", projectId: "workspace", personalInstalled: false, enterpriseStatus: "saved", inspect: "fail" },
+  // ── 跨工具技能：从其他 AI 工具目录扫描进来，只有 SKILL.md，缺 Lingee Build 规范文件 ──
+  { id: "sk_claude_code_review", name: "code-reviewer", displayName: "代码审查", desc: "审查 Git diff 中的代码变更，识别潜在问题、风格违规和安全隐患，给出逐条修改建议。", category: "通用", projectId: "workspace", personalInstalled: false, enterpriseStatus: "saved", location: "/Users/demo/projects/supply-chain/.claude/skills/code-reviewer" },
+  { id: "sk_claude_commit", name: "commit-helper", displayName: "提交信息生成", desc: "根据 Git diff 自动生成符合 Conventional Commits 规范的提交信息，支持中英文。", category: "通用", projectId: "workspace", personalInstalled: false, enterpriseStatus: "saved", location: "/Users/demo/projects/supply-chain/.claude/skills/commit-helper" },
+  { id: "sk_kiro_test", name: "test-generator", displayName: "测试用例生成", desc: "分析源码函数签名与业务逻辑，自动生成边界用例和异常用例的测试代码。", category: "通用", projectId: "workspace", personalInstalled: false, enterpriseStatus: "saved", location: "/Users/demo/projects/supply-chain/.kiro/skills/test-generator" },
+  { id: "sk_cursor_refactor", name: "refactor-assist", displayName: "重构助手", desc: "识别代码中的坏味道（长函数、重复代码、过深嵌套），给出重构建议和步骤。", category: "通用", projectId: "workspace", personalInstalled: false, enterpriseStatus: "saved", location: "/Users/demo/projects/supply-chain/.cursor/skills/refactor-assist" },
+  { id: "sk_qoder_db_query", name: "eb-db-query", displayName: "数据库查询助手", desc: "将自然语言转换为 SQL 查询，支持多表关联和聚合，执行后以表格形式返回结果。", category: "通用", projectId: "workspace", personalInstalled: false, enterpriseStatus: "saved", location: "/Users/demo/projects/supply-chain/.qoder/skills/eb-db-query" },
 ]
 /** 发布过 = 已发布，或者显式标记（发布后的修改正在审核） */
 export const skills: Skill[] = rawSkills.map((skill) => ({ ...skill, everPublished: skill.everPublished ?? skill.enterpriseStatus === "published" }))

@@ -1,12 +1,14 @@
 import { BrandButton, Empty, Icon, useDialog } from "@/ui"
 import { useT } from "@/i18n"
 import { useQuery } from "@tanstack/react-query"
-import { skillService } from "@/services"
-import { marketLocalState, type MarketLocalState } from "@/features/skill-publish-scope/SkillPublishScopeDialog"
-import type { AgentSkill } from "@/mock/fixtures/dev"
+import { consoleScopeService, skillService } from "@/services"
+import { marketLocalState, isFirstSubmission, type MarketLocalState } from "@/features/skill-publish-scope/SkillPublishScopeDialog"
+import { guardArtifactConfig } from "@/features/artifact-config/config-state"
+import type { AgentSkill, Skill } from "@/mock/fixtures/dev"
 import { DynamicSkillIcon } from "@/features/dev-page/DynamicSkillIcon"
 import { AddSkillDialog } from "./AddSkillDialog"
 import { SkillDetailDialog } from "@/features/skill-detail/SkillDetailDialog"
+import { BatchDialog } from "@/features/skill-batch/BatchDialog"
 import { useEditSession } from "@/features/dev-page/use-edit-session"
 import type { TabProps } from "./form"
 
@@ -53,6 +55,27 @@ export function SkillConfigTab(props: TabProps & { projectId: string }) {
   const all = useQuery({ queryKey: ["skills"], queryFn: skillService.list, staleTime: 0 })
   const localOf = (name: string) => all.data?.find((x) => x.name === name)
   const editSession = useEditSession()
+  /** 提交：走和技能开发页/抽屉同一个向导（发布范围 → 检查 → 提交），跳过选择技能那一步 */
+  const submitSkill = (skill: Skill) => {
+    if (guardArtifactConfig("skill", skill.id)) return
+    dialog.show(
+      () => (
+        <BatchDialog
+          mode="submit"
+          route="enterprise"
+          skills={[skill]}
+          skipSelect
+          onSubmitted={(_, __, scopes) => {
+            const scope = scopes?.[skill.name]
+            if (scope && isFirstSubmission(skill)) void consoleScopeService.submitFirst(skill.name, scope)
+            void skillService.patch(skill.id, { enterpriseStatus: "submitted", entChanged: false, reason: undefined })
+          }}
+        />
+      ),
+      undefined,
+      { closeOnOverlayClick: false },
+    )
+  }
   const openDetail = (name: string) => {
     const skill = localOf(name)
     if (!skill) return
@@ -60,7 +83,7 @@ export function SkillConfigTab(props: TabProps & { projectId: string }) {
       const draft = t("kcode.skillDev.edit.draft", { name: skill.displayName })
       void editSession({ title: draft.replace(/[:：]\s*$/, ""), draft: `/kingdee-skill-creator ${draft}${extra}`, projectId: skill.projectId, target: { kdskill: skill.id } })
     }
-    dialog.show(() => <SkillDetailDialog skill={skill} onEdit={() => editDraft()} onFix={(prompt) => editDraft(prompt)} />)
+    dialog.show(() => <SkillDetailDialog skill={skill} onEdit={() => editDraft()} onFix={(prompt) => editDraft(prompt)} onSubmit={() => submitSkill(skill)} />)
   }
 
   return (

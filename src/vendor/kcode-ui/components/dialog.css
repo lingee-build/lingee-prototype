@@ -141,9 +141,11 @@
   &[data-fit] {
     [data-slot="dialog-container"] {
       height: auto;
+      max-height: calc(100vh - 32px);
 
       [data-slot="dialog-content"] {
         min-height: 0;
+        max-height: calc(100vh - 32px);
       }
     }
   }
