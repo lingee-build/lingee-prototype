@@ -2,9 +2,33 @@ import { procurementArtifacts } from "../procurement-artifacts"
 import { procurementService } from "@/services/procurement"
 import type { Skill } from "./dev"
 import { fileContent } from "./files"
+import { currentDisplayName } from "@/stores/auth"
 
 /** manifest tool_access.tools 的单个条目：线上解析器只认一层「键: 值」 */
 export type ManifestToolEntry = Record<string, string>
+
+/** 技能变更记录（PRD-技能版本记录与变更优化）：本地未发布的改动，逐条展示在待发布区，发布后归属版本号 */
+export interface SkillChangeRecord {
+  createdAt: string
+  /** 操作人取当前登录人（本地服务规则） */
+  operator: string
+  /** 事件类型标签（create/meta/tools/steps/files），前端按类型渲染文案 */
+  kind: "create" | "meta" | "tools" | "steps" | "files"
+  summary: string
+}
+
+/** 技能版本记录：每次发布产生一条（版本号 + 发布时间 + 操作人 + 版本摘要 + 发布通道 + 状态） */
+export interface SkillVersionRecord {
+  version: string
+  releasedAt: string
+  operator: string
+  /** 版本摘要：发布时由本轮变更记录合并生成，不逐条复述 */
+  summary: string[]
+  channel: "personal" | "enterprise"
+  status: "submitted" | "published" | "rejected"
+  /** 撤回动作时间：撤回时追加标注（不作为独立状态），该轮变更记录回到本地修改 */
+  withdrawnAt?: string
+}
 
 export interface SkillDetail {
   developer: string
@@ -16,7 +40,7 @@ export interface SkillDetail {
   /** tool_access.tools 原样条目：分组与第二行徽标由 features/skill-detail/tool-groups.ts 推导 */
   tools: ManifestToolEntry[]
   features: string[]
-  changelog: Array<{ version: string; date: string; items: string[] }>
+  changelog: { pending: SkillChangeRecord[]; versions: SkillVersionRecord[] }
   /** 技能所在目录的相对路径（跨工具技能有值，Lingee Build 原生技能为 undefined） */
   location?: string
 }
@@ -73,6 +97,69 @@ const LEGACY_TOOLS: Record<string, ManifestToolEntry[]> = {
   ],
 }
 
+/** 即时库存查询的更新日志：集中演示全部记录场景（PRD-技能版本记录与变更优化 功能点4）——
+ * 本地修改多 kind、审核中、撤回留痕（不标独立状态）、驳回删除线、双通道（个人安装→企业提交）、多版本倒序。
+ * 故事线：个人自用两版 → 首次提交企业发布 → 一版被驳回（变更回本地）→ 重新提交后撤回（变更回本地）→
+ * 再提交进入审核中（当前）→ 审核期间继续本地修改。 */
+const demoChangelog = (): SkillDetail["changelog"] => {
+  const operator = currentDisplayName() || "梁平贤"
+  return {
+    pending: [
+      { createdAt: "2026-11-20T21:12:00+08:00", operator, kind: "tools", summary: "新增工具：发货单批量导出" },
+      { createdAt: "2026-11-20T20:56:00+08:00", operator, kind: "meta", summary: "所属领域调整为「人力资源」" },
+      { createdAt: "2026-11-19T18:40:00+08:00", operator, kind: "steps", summary: "重写步骤 1-3：增加附件上传分支" },
+      { createdAt: "2026-11-19T16:05:00+08:00", operator, kind: "files", summary: "新增参考文件：仓位对照表.csv" },
+    ],
+    versions: [
+      { version: "1.0.0", releasedAt: "2026-08-12T09:30:00+08:00", operator: "梁平先", summary: ["初始版本"], channel: "personal", status: "published" },
+      { version: "1.1.0", releasedAt: "2026-09-02T14:00:00+08:00", operator: "梁平先", summary: ["按物料 + 仓库组合查询，输出可用量"], channel: "personal", status: "published" },
+      { version: "1.2.0", releasedAt: "2026-09-25T10:00:00+08:00", operator: "梁平先", summary: ["首次提交企业分发", "接入批次与辅助属性维度"], channel: "enterprise", status: "published" },
+      { version: "1.3.0", releasedAt: "2026-10-11T16:20:00+08:00", operator: "梁平贤", summary: ["仓位维度查询", "空结果时给出调整建议"], channel: "enterprise", status: "rejected" },
+      { version: "1.4.0", releasedAt: "2026-10-19T20:16:00+08:00", operator: "梁平贤", summary: ["修复仓位维度与批号组合查询的结果偏差"], channel: "enterprise", status: "submitted", withdrawnAt: "2026-10-21T17:00:00+08:00" },
+      { version: "1.5.0", releasedAt: "2026-11-18T15:40:00+08:00", operator: "梁平贤", summary: ["调整空结果提示话术", "补充字段说明"], channel: "enterprise", status: "submitted" },
+    ],
+  }
+}
+
+/** 更新日志 mock：按渠道状态推导——本地修改置顶（撤回/驳回后变更记录回到本地修改），版本记录含通道与状态 */
+const changelogOf = (skill: Skill): SkillDetail["changelog"] => {
+  if (skill.id === "sk_stock") return demoChangelog()
+  const published = !!skill.everPublished || !!skill.personalInstalled
+  const operator = currentDisplayName() || "梁平先"
+  const seed = Array.from(skill.id).reduce((sum, ch) => sum + ch.charCodeAt(0), 0)
+  const pending: SkillChangeRecord[] = []
+  if (skill.entChanged || skill.perChanged) {
+    // 发布后再次编辑，或撤回/驳回后回到本地修改的变更记录
+    pending.push(
+      { createdAt: "2026-10-19T20:56:00+08:00", operator, kind: "meta", summary: "所属领域调整为「人力资源」" },
+      { createdAt: "2026-10-19T21:12:00+08:00", operator, kind: "tools", summary: "新增工具：发货单批量导出" },
+    )
+  } else if (!published && skill.enterpriseStatus === "saved") {
+    pending.push({ createdAt: "2026-10-19T20:56:00+08:00", operator, kind: "create", summary: "创建技能，待提交发布" })
+  }
+  const versions: SkillVersionRecord[] = []
+  // 初始版本：先个人自用（个人安装），后企业提交
+  if (skill.personalInstalled) {
+    versions.push({ version: "1.0.0", releasedAt: "2026-09-12T09:30:00+08:00", operator: "梁平先", summary: ["初始版本"], channel: "personal", status: "published" })
+  } else if (skill.everPublished && skill.enterpriseStatus !== "published") {
+    versions.push({ version: "1.0.0", releasedAt: "2026-09-12T09:30:00+08:00", operator: "梁平先", summary: ["初始版本"], channel: "enterprise", status: "published" })
+  }
+  // 企业通道最新版本：审核中 / 已发布 / 已驳回；撤回留痕不标独立状态
+  const entStatus = skill.enterpriseStatus
+  if (entStatus === "submitted" || entStatus === "published" || entStatus === "rejected" || entStatus === "withdrawn") {
+    versions.push({
+      version: `1.${(seed % 3) + 1}.${seed % 5}`,
+      releasedAt: "2026-10-19T20:16:00+08:00",
+      operator: "梁平先",
+      summary: ["完善空结果时的提示话术", "补充字段说明"],
+      channel: "enterprise",
+      status: entStatus === "published" ? "published" : entStatus === "rejected" ? "rejected" : "submitted",
+      withdrawnAt: entStatus === "withdrawn" ? "2026-10-21T17:00:00+08:00" : undefined,
+    })
+  }
+  return { pending, versions }
+}
+
 /** 技能详情的 mock：由卡片数据推导，保证同一个技能每次打开内容一致 */
 export function skillDetailOf(skill: Skill): SkillDetail {
   // 跨工具技能有自己的 location；其他技能按来源补默认产物路径
@@ -94,7 +181,10 @@ export function skillDetailOf(skill: Skill): SkillDetail {
       service_name: "采购云",
     })),
     features: ["业务对象及工具发现", `按已确认规则预警：最近 ${artifact.rules.days} 天，上涨阈值 ${artifact.rules.threshold}%`, "价格比较口径统一与缺失数据处理"],
-    changelog: [{ version: "v1.0.0", date: "2026.10.15", items: ["根据企业上下文发现结果与用户确认规则创建"] }],
+    changelog: {
+      pending: [],
+      versions: [{ version: "1.0.0", releasedAt: "2026-10-15T10:00:00+08:00", operator: "Build", summary: ["根据企业上下文发现结果与用户确认规则创建"], channel: "enterprise", status: "published" }],
+    },
     location: defaultLocation,
   }
   const seed = Array.from(skill.id).reduce((sum, ch) => sum + ch.charCodeAt(0), 0)
@@ -109,10 +199,7 @@ export function skillDetailOf(skill: Skill): SkillDetail {
       : `---\nname: ${skill.name}\ndescription: ${skill.desc}\n---\n\n# ${skill.displayName}\n\n## 何时使用\n\n${skill.desc}\n\n## 步骤\n\n1. 确认用户意图与必填信息\n2. 调用对应工具完成查询或提交\n3. 以表格或卡片形式返回结果，并给出下一步建议\n`,
     tools: LEGACY_TOOLS[skill.id] ?? TOOLS[skill.category] ?? [],
     features: ["支持多条件组合筛选", "结果为空时给出调整建议", "关键操作前向用户二次确认"],
-    changelog: [
-      { version: `v1.${seed % 4}.${seed % 7}`, date: "2026.10.08", items: ["优化空结果时的提示话术", "补充字段说明"] },
-      { version: "v1.0.0", date: "2026.09.12", items: ["首次创建"] },
-    ],
+    changelog: changelogOf(skill),
     location: defaultLocation,
   }
 }

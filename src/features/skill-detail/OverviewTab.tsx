@@ -5,23 +5,21 @@ import { SkillScopeInfo } from "@/features/skill-publish-scope/SkillPublishScope
 import { ChangelogSection } from "@/features/agent-config/ChangelogSection"
 import "@/features/agent-config/agent-config.css"
 
-const dateOf = (date: string) => `${date.replaceAll(".", "-")}T00:00:00+08:00`
-
 /** 技能概述与智能体详情共用区块卡片和版本时间线。 */
 export function OverviewTab(props: { skill: Skill; detail: SkillDetail }) {
   const t = useT()
   const { skill, detail } = props
-  const published = !!skill.everPublished || skill.personalInstalled
   const changelog: Agent["changelog"] = {
-    pending: skill.entChanged || skill.perChanged || (!published && skill.enterpriseStatus === "saved")
-      ? [{ createdAt: dateOf(detail.updateTime), operator: detail.developer, summary: published ? "技能内容已修改，待提交发布" : "创建技能，待提交发布" }]
-      : [],
-    versions: published ? [...detail.changelog].reverse().map(entry => ({
+    pending: detail.changelog.pending,
+    versions: detail.changelog.versions.map(entry => ({
       version: entry.version.replace(/^v/i, ""),
-      releasedAt: dateOf(entry.date),
-      operator: detail.developer,
-      lines: entry.items,
-    })) : [],
+      releasedAt: entry.releasedAt,
+      operator: entry.operator,
+      lines: entry.summary,
+      channel: entry.channel,
+      status: entry.status,
+      withdrawnAt: entry.withdrawnAt,
+    })),
   }
 
   return (
@@ -51,7 +49,7 @@ export function OverviewTab(props: { skill: Skill; detail: SkillDetail }) {
           </div>
         </section>
       )}
-      <ChangelogSection changelog={changelog} pendingLabel="未提交修改" publishedLabel="发布版本" />
+      <ChangelogSection changelog={changelog} pendingLabel="本地修改" />
     </div>
   )
 }

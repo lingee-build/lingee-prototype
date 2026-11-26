@@ -71,6 +71,8 @@ export interface AgentChangeRecord {
   createdAt: string
   operator: string
   summary: string
+  /** 技能变更记录的事件类型标签（按变更对象分类）；智能体记录不带 */
+  kind?: "create" | "meta" | "tools" | "steps" | "files"
 }
 
 export interface AgentVersion {
@@ -79,6 +81,12 @@ export interface AgentVersion {
   operator: string
   summary?: string
   lines: string[]
+  /** 版本发布渠道（技能：企业提交 / 个人安装）；不传则不显示渠道标签 */
+  channel?: "enterprise" | "personal"
+  /** 技能版本状态（审核中 / 已发布 / 已驳回）；智能体版本不带 */
+  status?: "submitted" | "published" | "rejected"
+  /** 撤回动作时间：撤回时版本记录留痕（不作为独立状态），变更记录回到本地修改 */
+  withdrawnAt?: string
 }
 
 export interface AgentDisplayInfo {
