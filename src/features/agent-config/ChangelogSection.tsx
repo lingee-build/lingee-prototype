@@ -36,7 +36,7 @@ function VersionEntry(props: { entry: Version; latest?: boolean }) {
         </span>
         <span className="flex flex-none items-center gap-2">
           <span className="text-[12px] leading-[18px] text-text-weak">
-            {formatTime(entry.releasedAt)}{entry.channel || entry.status ? "" : ` · ${entry.operator}`}
+            {formatTime(entry.releasedAt)} · {entry.operator}
           </span>
           <Chevron />
         </span>
